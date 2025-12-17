@@ -29,7 +29,7 @@ export default function HomePage() {
 
           {/* Copy block second on mobile, first on desktop */}
           <div className="order-2 space-y-6 sm:order-1">
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
               <Badge variant="secondary">Fast booking</Badge>
               <Badge variant="secondary">Clean equipment</Badge>
               <Badge variant="secondary">Delivery and setup</Badge>
@@ -37,8 +37,9 @@ export default function HomePage() {
 
             <div className="space-y-3">
               <h1 className="text-center text-3xl font-semibold tracking-tight sm:text-left sm:text-5xl">
-                Pop and Drop
+                Pop, Drop, Party.
               </h1>
+
               <p className="mx-auto max-w-prose text-center text-sm leading-relaxed opacity-80 sm:mx-0 sm:text-left sm:text-base">
                 Bounce houses and inflatable party rentals with a smooth, mobile-first booking experience.
                 Reserve your date in minutes.
