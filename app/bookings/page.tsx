@@ -4,12 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-type Props = {
-  searchParams?: { r?: string };
-};
+type SearchParams = Record<string, string | string[] | undefined>;
+type Props = { searchParams?: Promise<SearchParams> };
 
-export default function BookingsPage({ searchParams }: Props) {
-  const selected = rentals.find((x) => x.id === searchParams?.r);
+export default async function BookingsPage({ searchParams }: Props) {
+  const sp = (await searchParams) ?? {};
+  const r = sp.r;
+  const rentalId = Array.isArray(r) ? r[0] : r;
+
+  const selected = rentalId ? rentals.find((x) => x.id === rentalId) : undefined;
 
   return (
     <main className="mx-auto max-w-5xl px-4 pb-24 pt-8 sm:pt-12">
@@ -28,12 +31,11 @@ export default function BookingsPage({ searchParams }: Props) {
           <CardContent>
             <div className="overflow-hidden rounded-2xl border bg-background/40">
               <iframe
-                src="PASTE_YOUR_BOOQABLE_URL_HERE"
+                src="about:blank"
                 className="h-[80vh] w-full"
                 loading="lazy"
               />
             </div>
-
             <div className="mt-3 text-xs opacity-70">
               If the booking window does not load, refresh the page or contact us.
             </div>
@@ -66,9 +68,7 @@ export default function BookingsPage({ searchParams }: Props) {
                 </>
               ) : (
                 <>
-                  <div className="opacity-80">
-                    Tip: pick a rental first for faster booking.
-                  </div>
+                  <div className="opacity-80">Tip: pick a rental first for faster booking.</div>
                   <Button asChild className="w-full">
                     <Link href="/rentals">Browse rentals</Link>
                   </Button>
@@ -82,9 +82,7 @@ export default function BookingsPage({ searchParams }: Props) {
               <CardTitle className="text-base">Need help fast?</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <div className="opacity-80">
-                Call or text and we will help you lock in the right rental.
-              </div>
+              <div className="opacity-80">Call or text and we will help you lock in the right rental.</div>
               <Button asChild className="w-full">
                 <a href="tel:3524453723">Call 352-445-3723</a>
               </Button>
