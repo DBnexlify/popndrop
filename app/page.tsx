@@ -12,8 +12,23 @@ export default function HomePage() {
           <div className="h-full w-full bg-gradient-to-br from-fuchsia-500 via-purple-500 to-cyan-400" />
         </div>
 
-        <div className="relative grid gap-10 p-6 sm:grid-cols-2 sm:p-12">
-          <div className="space-y-6">
+        <div className="relative grid gap-10 p-6 sm:grid-cols-2 sm:items-center sm:p-12">
+          {/* Logo block first on mobile, second on desktop */}
+          <div className="order-1 flex items-center justify-center sm:order-2">
+            <div className="w-full max-w-sm rounded-3xl border bg-background/40 p-6 backdrop-blur-xl">
+              <Image
+                src="/brand/logo.png"
+                alt="Pop and Drop Party Rentals"
+                width={520}
+                height={520}
+                priority
+                className="h-auto w-full"
+              />
+            </div>
+          </div>
+
+          {/* Copy block second on mobile, first on desktop */}
+          <div className="order-2 space-y-6 sm:order-1">
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary">Fast booking</Badge>
               <Badge variant="secondary">Clean equipment</Badge>
@@ -21,43 +36,32 @@ export default function HomePage() {
             </div>
 
             <div className="space-y-3">
-              <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">
-                Pop, drop, party.
+              <h1 className="text-center text-3xl font-semibold tracking-tight sm:text-left sm:text-5xl">
+                Pop and Drop
               </h1>
-              <p className="max-w-prose text-sm leading-relaxed opacity-80 sm:text-base">
-                Bounce houses and inflatable party rentals with a smooth, mobile-first booking
-                experience. Reserve your date in minutes.
+              <p className="mx-auto max-w-prose text-center text-sm leading-relaxed opacity-80 sm:mx-0 sm:text-left sm:text-base">
+                Bounce houses and inflatable party rentals with a smooth, mobile-first booking experience.
+                Reserve your date in minutes.
               </p>
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg">
+              <Button asChild size="lg" className="w-full sm:w-auto">
                 <Link href="/bookings">Book now</Link>
               </Button>
-              <Button asChild size="lg" variant="outline">
+              <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
                 <Link href="/rentals">View rentals</Link>
               </Button>
             </div>
 
-            <div className="text-sm">
-              <a className="underline" href="tel:3524453723">352-445-3723</a>
+            <div className="text-center text-sm sm:text-left">
+              <a className="underline" href="tel:3524453723">
+                352-445-3723
+              </a>
               <span className="opacity-70"> · </span>
               <a className="underline" href="mailto:bookings@popndroprentals.com">
                 bookings@popndroprentals.com
               </a>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-center">
-            <div className="rounded-3xl border bg-background/40 p-6 backdrop-blur-xl">
-              <Image
-                src="/brand/logo.png"
-                alt="Pop N Drop logo"
-                width={420}
-                height={420}
-                priority
-                className="h-auto w-full max-w-[320px] sm:max-w-[380px]"
-              />
             </div>
           </div>
         </div>
