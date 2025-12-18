@@ -5,84 +5,58 @@ import * as React from "react";
 type Props = {
   children: React.ReactNode;
   videoSrc?: string;
-  posterSrc?: string;
-  maxPlayMs?: number;
+  posterSrc?: string; // still used as the <video poster>, but we do not render an <img> fallback
+  maxPlayMs?: number; // how long to show AFTER the fg video actually starts
   holdAfterEndMs?: number;
   exitFadeMs?: number;
   minimumMs?: number;
   showEveryLoad?: boolean;
+
+  // NEW: give the video a moment to start before we begin counting
+  videoStartGraceMs?: number;
+
+  // NEW: extra buffer so we do not cut early on slower devices
+  forceBufferMs?: number;
 };
 
 export function SplashGate({
   children,
   videoSrc = "/brand/intro2.mp4",
   posterSrc = "/brand/logo.png",
-  maxPlayMs = 3000,
+  maxPlayMs = 3200,
   holdAfterEndMs = 650,
   exitFadeMs = 500,
-  minimumMs = 900,
+  minimumMs = 1100,
   showEveryLoad = true,
+  videoStartGraceMs = 220,
+  forceBufferMs = 500,
 }: Props) {
   const fgRef = React.useRef<HTMLVideoElement | null>(null);
   const bgRef = React.useRef<HTMLVideoElement | null>(null);
 
   const [phase, setPhase] = React.useState<"show" | "exit" | "done">("show");
   const [dots, setDots] = React.useState("");
-  const startMsRef = React.useRef<number>(0);
+  const [fgVisible, setFgVisible] = React.useState(false);
+
   const exitingRef = React.useRef(false);
+  const startMsRef = React.useRef<number>(0);
+  const playStartedRef = React.useRef(false);
 
-  React.useEffect(() => {
-    if (!showEveryLoad) {
-      const key = "pnd_splash_seen";
-      const seen = localStorage.getItem(key);
-      if (seen) {
-        setPhase("done");
-        return;
-      }
-      localStorage.setItem(key, "1");
-    }
+  const forceTimerRef = React.useRef<number | null>(null);
+  const playTimerRef = React.useRef<number | null>(null);
 
-    setPhase("show");
-    exitingRef.current = false;
-    startMsRef.current = Date.now();
+  const clearTimers = () => {
+    if (forceTimerRef.current) window.clearTimeout(forceTimerRef.current);
+    if (playTimerRef.current) window.clearTimeout(playTimerRef.current);
+    forceTimerRef.current = null;
+    playTimerRef.current = null;
+  };
 
-    const playSafe = async (v: HTMLVideoElement | null) => {
-      if (!v) return;
-      try {
-        const p = v.play();
-        if (p && typeof p.then === "function") await p;
-      } catch {
-        // Autoplay blocked is ok. Poster will show.
-      }
-    };
-
-    const tPlay = window.setTimeout(() => {
-      playSafe(bgRef.current);
-      playSafe(fgRef.current);
-    }, 0);
-
-    const tForce = window.setTimeout(() => {
-      freezeAndExit();
-    }, maxPlayMs + 350);
-
-    return () => {
-      window.clearTimeout(tPlay);
-      window.clearTimeout(tForce);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoSrc, maxPlayMs, showEveryLoad]);
-
-  React.useEffect(() => {
-    if (phase === "done") return;
-    const id = window.setInterval(() => {
-      setDots((d) => (d.length >= 3 ? "" : d + "."));
-    }, 420);
-    return () => window.clearInterval(id);
-  }, [phase]);
-
-  const freezeAndExit = () => {
+  const freezeAndExit = React.useCallback(() => {
     if (exitingRef.current) return;
     exitingRef.current = true;
+
+    clearTimers();
 
     if (fgRef.current && !fgRef.current.paused) fgRef.current.pause();
     if (bgRef.current && !bgRef.current.paused) bgRef.current.pause();
@@ -96,6 +70,71 @@ export function SplashGate({
         window.setTimeout(() => setPhase("done"), exitFadeMs);
       }, holdAfterEndMs);
     }, waitForMinimum);
+  }, [exitFadeMs, holdAfterEndMs, minimumMs]);
+
+  React.useEffect(() => {
+    if (!showEveryLoad) {
+      const key = "pnd_splash_seen";
+      const seen = localStorage.getItem(key);
+      if (seen) {
+        setPhase("done");
+        return;
+      }
+      localStorage.setItem(key, "1");
+    }
+
+    setPhase("show");
+    setFgVisible(false);
+    exitingRef.current = false;
+    playStartedRef.current = false;
+    startMsRef.current = Date.now();
+    clearTimers();
+
+    const playSafe = async (v: HTMLVideoElement | null) => {
+      if (!v) return;
+      try {
+        const p = v.play();
+        if (p && typeof p.then === "function") await p;
+      } catch {
+        // Autoplay blocked is ok. We will still wait briefly and then force exit.
+      }
+    };
+
+    // try to start both immediately
+    playTimerRef.current = window.setTimeout(() => {
+      playSafe(bgRef.current);
+      playSafe(fgRef.current);
+
+      // If autoplay is blocked, do not hang forever.
+      // Give it a moment, then just exit gracefully.
+      window.setTimeout(() => {
+        if (!playStartedRef.current) freezeAndExit();
+      }, 2200);
+    }, 0);
+
+    return () => clearTimers();
+  }, [videoSrc, maxPlayMs, showEveryLoad, freezeAndExit]);
+
+  React.useEffect(() => {
+    if (phase === "done") return;
+    const id = window.setInterval(() => {
+      setDots((d) => (d.length >= 3 ? "" : d + "."));
+    }, 420);
+    return () => window.clearInterval(id);
+  }, [phase]);
+
+  const onFgPlay = () => {
+    if (playStartedRef.current) return;
+    playStartedRef.current = true;
+
+    // small grace so the first decoded frame is stable
+    window.setTimeout(() => setFgVisible(true), videoStartGraceMs);
+
+    // start the forced exit timer only after playback actually begins
+    clearTimers();
+    forceTimerRef.current = window.setTimeout(() => {
+      freezeAndExit();
+    }, maxPlayMs + forceBufferMs);
   };
 
   return (
@@ -130,7 +169,7 @@ export function SplashGate({
           {/* Glass panel */}
           <div className="relative mx-auto w-[min(92vw,720px)] px-6">
             <div className="relative overflow-hidden rounded-[44px] border border-white/12 bg-white/[0.035] backdrop-blur-lg shadow-[0_35px_110px_rgba(0,0,0,0.55)]">
-              {/* Underlay inside glass (makes stars feel like they continue) */}
+              {/* Underlay inside glass */}
               <div className="absolute inset-0">
                 <video
                   src={videoSrc}
@@ -146,10 +185,9 @@ export function SplashGate({
               </div>
 
               <div className="relative p-6 sm:p-8">
-                {/* Foreground video container */}
                 <div className="relative w-full overflow-hidden rounded-[32px]">
-                  <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[32px]">
-                    {/* Extra tight "bleed" behind the crisp video so edges feel continuous */}
+                  <div className="relative aspect-[4/3] w-full">
+                    {/* Bleed behind crisp video */}
                     <video
                       src={videoSrc}
                       poster={posterSrc}
@@ -161,7 +199,7 @@ export function SplashGate({
                       className="absolute -inset-6 h-[calc(100%+3rem)] w-[calc(100%+3rem)] object-cover blur-lg opacity-55"
                     />
 
-                    {/* Crisp video on top */}
+                    {/* Crisp video (no photo fallback) */}
                     <video
                       ref={fgRef}
                       src={videoSrc}
@@ -170,29 +208,22 @@ export function SplashGate({
                       muted
                       playsInline
                       preload="auto"
+                      onPlay={onFgPlay}
                       onEnded={freezeAndExit}
                       onError={freezeAndExit}
                       className="absolute inset-0 h-full w-full object-cover"
-                      style={{ transform: "translateZ(0)" }}
+                      style={{
+                        opacity: fgVisible ? 1 : 0,
+                        transition: "opacity 220ms ease",
+                      }}
                     />
 
-                    {/* Seam hider ring to remove thin black edge lines */}
-                    <div className="pointer-events-none absolute inset-0 rounded-[32px] ring-1 ring-white/10" />
-
-                    {/* Apple-style edge feather (subtle, clipped, smooth) */}
-                    <div
-                      className="
-                        pointer-events-none absolute inset-0 rounded-[32px]
-                        shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]
-                        before:absolute before:inset-0 before:rounded-[32px]
-                        before:bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0)_60%,rgba(0,0,0,0.18)_100%)]
-                        before:content-['']
-                      "
-                    />
+                    {/* Feather */}
+                    <div className="pointer-events-none absolute inset-0 rounded-[32px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]" />
+                    <div className="pointer-events-none absolute inset-0 rounded-[32px] [mask-image:radial-gradient(ellipse_at_center,black_55%,transparent_100%)] bg-black/20" />
                   </div>
                 </div>
 
-                {/* Loading centered with animated dots (no shifting) */}
                 <div className="mt-5 flex items-center justify-center text-sm text-white/70">
                   <span className="inline-flex items-baseline">
                     <span>Loading</span>

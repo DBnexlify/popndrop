@@ -199,16 +199,16 @@ export default function HomePage() {
               {/* Call / Text */}
               <a
                 href="tel:352-445-3723"
-                className="group relative flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.03] p-4 transition-colors hover:bg-white/[0.06]"
+                className="group relative flex flex-col items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-5 text-center transition-colors hover:bg-white/[0.06] sm:flex-row sm:items-center sm:gap-4 sm:p-4 sm:text-left"
               >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-fuchsia-500/10">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-fuchsia-500/10 sm:h-11 sm:w-11">
                   <Phone className="h-5 w-5 text-fuchsia-400" />
                 </div>
                 <div className="min-w-0">
                   <div className="text-[11px] font-medium uppercase tracking-wide text-foreground/45">
                     Call or text
                   </div>
-                  <div className="truncate font-semibold transition-colors group-hover:text-fuchsia-400">
+                  <div className="font-semibold transition-colors group-hover:text-fuchsia-400">
                     352-445-3723
                   </div>
                 </div>
@@ -218,16 +218,16 @@ export default function HomePage() {
               {/* Email */}
               <a
                 href="mailto:bookings@popndroprentals.com"
-                className="group relative flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.03] p-4 transition-colors hover:bg-white/[0.06]"
+                className="group relative flex flex-col items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-5 text-center transition-colors hover:bg-white/[0.06] sm:flex-row sm:items-center sm:gap-4 sm:p-4 sm:text-left"
               >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-500/10">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 sm:h-11 sm:w-11">
                   <Mail className="h-5 w-5 text-cyan-400" />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 w-full sm:w-auto">
                   <div className="text-[11px] font-medium uppercase tracking-wide text-foreground/45">
                     Email us
                   </div>
-                  <div className="truncate font-semibold transition-colors group-hover:text-cyan-400">
+                  <div className="font-semibold transition-colors group-hover:text-cyan-400 text-sm sm:text-base sm:truncate">
                     bookings@popndroprentals.com
                   </div>
                 </div>
@@ -235,15 +235,15 @@ export default function HomePage() {
               </a>
 
               {/* Service Area */}
-              <div className="relative flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.03] p-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-purple-500/10">
+              <div className="relative flex flex-col items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-5 text-center sm:flex-row sm:items-center sm:gap-4 sm:p-4 sm:text-left">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-purple-500/10 sm:h-11 sm:w-11">
                   <MapPin className="h-5 w-5 text-purple-400" />
                 </div>
                 <div className="min-w-0">
                   <div className="text-[11px] font-medium uppercase tracking-wide text-foreground/45">
                     Service area
                   </div>
-                  <div className="truncate font-semibold">Central Florida</div>
+                  <div className="font-semibold">Central Florida</div>
                 </div>
                 <div className="pointer-events-none absolute inset-0 rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_40px_rgba(0,0,0,0.15)]" />
               </div>
