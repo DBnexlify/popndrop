@@ -19,7 +19,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ThemeProvider>
-          <SplashGate minimumMs={900}>
+          <SplashGate
+            videoSrc="/brand/intro2.mp4"
+            maxPlayMs={3000}
+            holdAfterEndMs={650}
+            exitFadeMs={500}
+            showEveryLoad
+          >
             <SiteHeader />
             {children}
             <MobileBottomNav />
