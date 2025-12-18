@@ -44,6 +44,9 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  /* Logo bounce animation - GPU accelerated */
+  --animate-logo-pop: logo-bounce 3s ease-out forwards;
 }
 
 :root {
@@ -121,5 +124,107 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Logo bounce animation - GPU accelerated, buttery smooth */
+@keyframes logo-bounce {
+  /* 
+   * PHASE 1: THE FALL (0-42%)
+   * Fewer keyframes here - let CSS interpolation do the work
+   * Using transform3d for GPU compositing
+   */
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -2500px, 0) scaleX(0.97) scaleY(1.03);
+  }
+  20% {
+    opacity: 0.4;
+    transform: translate3d(0, -400px, 0) scaleX(0.96) scaleY(1.04);
+  }
+  35% {
+    opacity: 0.9;
+    transform: translate3d(0, -80px, 0) scaleX(0.96) scaleY(1.04);
+  }
+  42% {
+    opacity: 1;
+    transform: translate3d(0, -12px, 0) scaleX(0.98) scaleY(1.02);
+  }
+
+  /*
+   * PHASE 2: FIRST IMPACT & BOUNCE (42-68%)
+   * More keyframes here for precise squash/stretch physics
+   */
+  45% {
+    transform: translate3d(0, 0, 0) scaleX(1.12) scaleY(0.88);
+  }
+  47% {
+    transform: translate3d(0, 0, 0) scaleX(1.15) scaleY(0.85);
+  }
+  49% {
+    transform: translate3d(0, 0, 0) scaleX(1.12) scaleY(0.88);
+  }
+  51% {
+    transform: translate3d(0, -8px, 0) scaleX(1.04) scaleY(0.96);
+  }
+  54% {
+    transform: translate3d(0, -25px, 0) scaleX(0.96) scaleY(1.04);
+  }
+  58% {
+    transform: translate3d(0, -42px, 0) scaleX(0.94) scaleY(1.06);
+  }
+  61% {
+    transform: translate3d(0, -48px, 0) scaleX(0.93) scaleY(1.07);
+  }
+  63% {
+    transform: translate3d(0, -46px, 0) scaleX(0.94) scaleY(1.06);
+  }
+  66% {
+    transform: translate3d(0, -35px, 0) scaleX(0.96) scaleY(1.04);
+  }
+  68% {
+    transform: translate3d(0, -20px, 0) scaleX(0.97) scaleY(1.03);
+  }
+
+  /*
+   * PHASE 3: SECOND IMPACT & BOUNCE (68-85%)
+   */
+  72% {
+    transform: translate3d(0, -5px, 0) scaleX(0.99) scaleY(1.01);
+  }
+  75% {
+    transform: translate3d(0, 0, 0) scaleX(1.08) scaleY(0.92);
+  }
+  77% {
+    transform: translate3d(0, 0, 0) scaleX(1.06) scaleY(0.94);
+  }
+  80% {
+    transform: translate3d(0, -10px, 0) scaleX(0.98) scaleY(1.02);
+  }
+  83% {
+    transform: translate3d(0, -15px, 0) scaleX(0.97) scaleY(1.03);
+  }
+  85% {
+    transform: translate3d(0, -12px, 0) scaleX(0.98) scaleY(1.02);
+  }
+
+  /*
+   * PHASE 4: FINAL SETTLE (85-100%)
+   */
+  88% {
+    transform: translate3d(0, -5px, 0) scaleX(0.99) scaleY(1.01);
+  }
+  91% {
+    transform: translate3d(0, 0, 0) scaleX(1.03) scaleY(0.97);
+  }
+  94% {
+    transform: translate3d(0, -3px, 0) scaleX(0.995) scaleY(1.005);
+  }
+  97% {
+    transform: translate3d(0, 0, 0) scaleX(1.01) scaleY(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scaleX(1) scaleY(1);
   }
 }
