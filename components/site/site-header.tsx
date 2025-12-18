@@ -37,16 +37,10 @@ export function SiteHeader() {
               Rentals
             </Link>
             <Link
-              href="/gallery"
+              href="/contact"
               className="rounded-lg px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-white/5 hover:text-foreground"
             >
-              Gallery
-            </Link>
-            <Link
-              href="/about"
-              className="rounded-lg px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-white/5 hover:text-foreground"
-            >
-              About
+              Contact
             </Link>
             <Link
               href="/bookings"
