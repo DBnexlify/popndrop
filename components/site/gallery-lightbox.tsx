@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
@@ -14,12 +14,10 @@ interface GalleryLightboxProps {
   alt?: string;
 }
 
-// Gesture thresholds
 const SWIPE_THRESHOLD = 50;
 const VELOCITY_THRESHOLD = 0.3;
 const DISMISS_THRESHOLD = 120;
 const DOUBLE_TAP_DELAY = 300;
-const ZOOM_MAX = 3;
 
 export function GalleryLightbox({
   images,
@@ -28,48 +26,61 @@ export function GalleryLightbox({
   onClose,
   alt = "Gallery image",
 }: GalleryLightboxProps) {
-  // Use key to force clean remount on each open
-  const [instanceKey, setInstanceKey] = useState(0);
-  
-  // Track if we should render
-  const [shouldRender, setShouldRender] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const [animationPhase, setAnimationPhase] = useState<"closed" | "opening" | "open" | "closing">("closed");
+  const openInstanceRef = useRef(0);
 
-  // Handle open/close lifecycle
+  // Handle portal mounting
   useEffect(() => {
-    if (isOpen) {
-      // Opening - increment key to force fresh state, then render
-      setInstanceKey((k) => k + 1);
-      setShouldRender(true);
-      setIsClosing(false);
+    setMounted(true);
+  }, []);
+
+  // Handle open/close transitions
+  useEffect(() => {
+    if (isOpen && animationPhase === "closed") {
+      // Opening
+      openInstanceRef.current += 1;
+      setVisible(true);
+      setAnimationPhase("opening");
       document.body.style.overflow = "hidden";
-    } else if (shouldRender) {
-      // Closing - animate out then unmount
-      setIsClosing(true);
+      
+      // Transition to open after animation
       const timer = setTimeout(() => {
-        setShouldRender(false);
-        setIsClosing(false);
+        setAnimationPhase("open");
+      }, 300);
+      return () => clearTimeout(timer);
+    } 
+    
+    if (!isOpen && (animationPhase === "open" || animationPhase === "opening")) {
+      // Closing
+      setAnimationPhase("closing");
+      
+      // Unmount after animation
+      const timer = setTimeout(() => {
+        setVisible(false);
+        setAnimationPhase("closed");
         document.body.style.overflow = "";
-      }, 250);
+      }, 200);
       return () => clearTimeout(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, animationPhase]);
 
-  // Cleanup on unmount
+  // Cleanup
   useEffect(() => {
     return () => {
       document.body.style.overflow = "";
     };
   }, []);
 
-  if (!shouldRender) return null;
+  if (!mounted || !visible) return null;
 
   return createPortal(
     <LightboxContent
-      key={instanceKey}
+      key={openInstanceRef.current}
       images={images}
       initialIndex={initialIndex}
-      isClosing={isClosing}
+      animationPhase={animationPhase}
       onClose={onClose}
       alt={alt}
     />,
@@ -77,30 +88,27 @@ export function GalleryLightbox({
   );
 }
 
-// Separated content component - gets fresh state on each open via key
 function LightboxContent({
   images,
   initialIndex,
-  isClosing,
+  animationPhase,
   onClose,
   alt,
 }: {
   images: string[];
   initialIndex: number;
-  isClosing: boolean;
+  animationPhase: "closed" | "opening" | "open" | "closing";
   onClose: () => void;
   alt: string;
 }) {
-  // Initialize with correct index immediately - no useEffect delay
+  // State - initialized with correct values immediately
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [showControls, setShowControls] = useState(true);
-  
-  // Gesture state
   const [slideOffset, setSlideOffset] = useState(0);
   const [dismissOffset, setDismissOffset] = useState(0);
   const [scale, setScale] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
-  
+
   // Refs
   const touchStartRef = useRef({ x: 0, y: 0, time: 0 });
   const lastTapRef = useRef(0);
@@ -126,32 +134,26 @@ function LightboxContent({
     }
   }, [canGoPrev]);
 
-  // Close handler
-  const handleClose = useCallback(() => {
-    onClose();
-  }, [onClose]);
-
-  // Keyboard navigation
+  // Keyboard
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
+      if (e.key === "Escape") onClose();
       if (e.key === "ArrowRight") goToNext();
       if (e.key === "ArrowLeft") goToPrev();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [handleClose, goToNext, goToPrev]);
+  }, [onClose, goToNext, goToPrev]);
 
-  // Preload adjacent images
+  // Preload adjacent
   useEffect(() => {
-    const preload = (index: number) => {
-      if (index >= 0 && index < images.length) {
+    [-1, 1].forEach((offset) => {
+      const idx = currentIndex + offset;
+      if (idx >= 0 && idx < images.length) {
         const img = new window.Image();
-        img.src = images[index];
+        img.src = images[idx];
       }
-    };
-    preload(currentIndex - 1);
-    preload(currentIndex + 1);
+    });
   }, [currentIndex, images]);
 
   // Touch handlers
@@ -179,12 +181,11 @@ function LightboxContent({
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     const touches = e.touches;
     
-    // Pinch zoom
     if (touches.length === 2 && gestureRef.current === "pinch") {
       const dx = touches[0].clientX - touches[1].clientX;
       const dy = touches[0].clientY - touches[1].clientY;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      const newScale = Math.min(ZOOM_MAX, Math.max(1, initialScaleRef.current * (distance / initialPinchRef.current)));
+      const newScale = Math.min(3, Math.max(1, initialScaleRef.current * (distance / initialPinchRef.current)));
       setScale(newScale);
       return;
     }
@@ -194,16 +195,13 @@ function LightboxContent({
     const deltaX = touches[0].clientX - touchStartRef.current.x;
     const deltaY = touches[0].clientY - touchStartRef.current.y;
     
-    // Lock direction
     if (gestureRef.current === "none" && (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10)) {
       gestureRef.current = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
     }
     
-    // When zoomed, don't allow swipe navigation
     if (scale > 1) return;
     
     if (gestureRef.current === "horizontal") {
-      // Rubber band at edges
       let offset = deltaX;
       if ((deltaX > 0 && !canGoPrev) || (deltaX < 0 && !canGoNext)) {
         offset = deltaX * 0.25;
@@ -219,7 +217,6 @@ function LightboxContent({
     const velocityX = Math.abs(slideOffset) / elapsed;
     const velocityY = Math.abs(dismissOffset) / elapsed;
     
-    // Pinch end
     if (gestureRef.current === "pinch") {
       if (scale < 1.1) setScale(1);
       gestureRef.current = "none";
@@ -227,7 +224,6 @@ function LightboxContent({
       return;
     }
     
-    // Swipe navigation
     if (gestureRef.current === "horizontal") {
       if (Math.abs(slideOffset) > SWIPE_THRESHOLD || velocityX > VELOCITY_THRESHOLD) {
         if (slideOffset > 0) goToPrev();
@@ -235,19 +231,16 @@ function LightboxContent({
       }
     }
     
-    // Dismiss
     if (gestureRef.current === "vertical") {
       if (dismissOffset > DISMISS_THRESHOLD || velocityY > VELOCITY_THRESHOLD) {
-        handleClose();
+        onClose();
         return;
       }
     }
     
-    // Tap detection
     if (Math.abs(slideOffset) < 5 && Math.abs(dismissOffset) < 5 && gestureRef.current === "none") {
       const now = Date.now();
       if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-        // Double tap - toggle zoom
         setScale((s) => (s > 1 ? 1 : 2));
         lastTapRef.current = 0;
       } else {
@@ -264,37 +257,35 @@ function LightboxContent({
     setDismissOffset(0);
     setIsDragging(false);
     gestureRef.current = "none";
-  }, [slideOffset, dismissOffset, scale, goToNext, goToPrev, handleClose]);
+  }, [slideOffset, dismissOffset, scale, goToNext, goToPrev, onClose]);
 
-  // Calculate styles
+  // Computed styles
+  const isClosing = animationPhase === "closing";
+  const isOpening = animationPhase === "opening";
   const backdropOpacity = dismissOffset > 0 ? Math.max(0, 1 - dismissOffset / 300) : 1;
   const imageScale = dismissOffset > 0 ? Math.max(0.85, 1 - dismissOffset / 400) : 1;
 
   return (
     <div
-      className={cn(
-        "fixed inset-0 z-[100] touch-none select-none",
-        "flex items-center justify-center"
-      )}
+      className="fixed inset-0 z-[100] touch-none select-none flex items-center justify-center"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       {/* Backdrop */}
       <div
-        className={cn(
-          "absolute inset-0 bg-black",
-          isClosing ? "animate-out fade-out duration-200" : "animate-in fade-in duration-200"
-        )}
-        style={{ opacity: isClosing ? undefined : backdropOpacity }}
-        onClick={handleClose}
+        className="absolute inset-0 bg-black transition-opacity duration-200"
+        style={{ 
+          opacity: isClosing ? 0 : isOpening ? backdropOpacity : backdropOpacity 
+        }}
+        onClick={onClose}
       />
 
       {/* Top controls */}
       <div
         className={cn(
           "absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4",
-          "transition-opacity duration-200",
+          "transition-opacity duration-150",
           showControls && !isClosing ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
       >
@@ -302,7 +293,7 @@ function LightboxContent({
           {currentIndex + 1} / {images.length}
         </div>
         <button
-          onClick={handleClose}
+          onClick={onClose}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition-transform active:scale-95"
           aria-label="Close"
         >
@@ -310,7 +301,7 @@ function LightboxContent({
         </button>
       </div>
 
-      {/* Desktop nav arrows */}
+      {/* Desktop arrows */}
       {images.length > 1 && (
         <>
           <button
@@ -344,10 +335,11 @@ function LightboxContent({
 
       {/* Image carousel */}
       <div
-        className={cn(
-          "relative z-10 h-full w-full overflow-hidden",
-          isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200"
-        )}
+        className="relative z-10 h-full w-full overflow-hidden transition-all duration-200"
+        style={{
+          opacity: isClosing ? 0 : 1,
+          transform: isClosing ? "scale(0.95)" : isOpening ? "scale(1)" : "scale(1)",
+        }}
       >
         <div
           className="flex h-full"
@@ -364,11 +356,12 @@ function LightboxContent({
               style={{ width: `${100 / images.length}%` }}
             >
               <div
-                className="relative h-[85vh] w-[90vw] max-w-4xl transition-transform duration-200"
+                className="relative h-[85vh] w-[90vw] max-w-4xl"
                 style={{
-                  transform: i === currentIndex 
-                    ? `translateY(${dismissOffset}px) scale(${imageScale * scale})` 
+                  transform: i === currentIndex
+                    ? `translateY(${dismissOffset}px) scale(${imageScale * scale})`
                     : "scale(1)",
+                  transition: isDragging ? "none" : "transform 0.2s ease-out",
                 }}
               >
                 <Image
@@ -391,7 +384,7 @@ function LightboxContent({
         <div
           className={cn(
             "absolute bottom-8 left-1/2 z-20 flex -translate-x-1/2 gap-1.5",
-            "transition-opacity duration-200",
+            "transition-opacity duration-150",
             showControls && !isClosing ? "opacity-100" : "opacity-0"
           )}
         >
