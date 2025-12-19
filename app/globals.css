@@ -47,6 +47,9 @@
 
   /* Logo bounce animation - GPU accelerated */
   --animate-logo-pop: logo-bounce 3s ease-out forwards;
+
+  /* Checkmark draw animation */
+  --animate-check-draw: check-draw 0.5s ease-out 0.3s forwards;
 }
 
 :root {
@@ -128,7 +131,20 @@
   }
 }
 
-/* Logo bounce animation - GPU accelerated, buttery smooth */
+/* ==========================================================================
+ * CHECKMARK DRAW ANIMATION
+ * Used on booking success page
+ * ========================================================================== */
+@keyframes check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ==========================================================================
+ * LOGO BOUNCE ANIMATION
+ * GPU accelerated, buttery smooth
+ * ========================================================================== */
 @keyframes logo-bounce {
   0% {
     opacity: 0;

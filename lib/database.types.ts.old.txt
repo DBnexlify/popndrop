@@ -16,7 +16,7 @@ export interface Database {
           rental_id: string;
           rental_name: string;
           event_date: string;
-          booking_type: 'daily' | 'weekend' | 'sunday';
+          booking_type: 'daily' | 'weekend';
           pickup_date: string;
           customer_name: string;
           customer_email: string;
@@ -39,7 +39,7 @@ export interface Database {
           rental_id: string;
           rental_name: string;
           event_date: string;
-          booking_type: 'daily' | 'weekend' | 'sunday';
+          booking_type: 'daily' | 'weekend';
           pickup_date: string;
           customer_name: string;
           customer_email: string;
@@ -62,7 +62,7 @@ export interface Database {
           rental_id?: string;
           rental_name?: string;
           event_date?: string;
-          booking_type?: 'daily' | 'weekend' | 'sunday';
+          booking_type?: 'daily' | 'weekend';
           pickup_date?: string;
           customer_name?: string;
           customer_email?: string;

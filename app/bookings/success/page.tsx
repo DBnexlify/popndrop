@@ -1,80 +1,191 @@
+import { Suspense } from "react";
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
+import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, Calendar, Phone, Mail } from "lucide-react";
+import { Calendar, Phone, Mail, Check, MapPin, Clock } from "lucide-react";
+import { createServerClient } from "@/lib/supabase";
+import { SuccessContent } from "./success-content";
 
 export const metadata = {
   title: "Booking Confirmed | Pop and Drop Party Rentals",
+  description: "Your bounce house rental is confirmed! Check your email for details.",
 };
 
-export default function BookingSuccessPage() {
+/* ---------------------------------------------------------------------------
+ * Styles Object (Design System Compliant)
+ * --------------------------------------------------------------------------- */
+const styles = {
+  // Tier 1: Section Cards
+  sectionCard:
+    "relative overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-3xl",
+  sectionCardInner:
+    "pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_70px_rgba(0,0,0,0.2)]",
+
+  // Tier 3: Nested Cards
+  nestedCard:
+    "relative overflow-hidden rounded-lg border border-white/5 bg-white/[0.03] sm:rounded-xl",
+  nestedCardInner:
+    "pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]",
+
+  // Typography
+  pageTitle: "text-2xl font-semibold tracking-tight sm:text-3xl",
+  sectionHeading: "text-lg font-semibold sm:text-xl",
+  cardHeading: "text-sm font-semibold sm:text-base",
+  bodyText: "text-sm leading-relaxed text-foreground/70",
+  smallBody: "text-xs leading-relaxed text-foreground/70 sm:text-sm",
+  label: "text-[10px] font-medium uppercase tracking-wide text-foreground/50 sm:text-[11px]",
+  helperText: "text-xs text-foreground/50",
+
+  // Buttons
+  primaryButton:
+    "w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20 transition-all hover:shadow-xl hover:shadow-fuchsia-500/30 sm:w-auto",
+
+  // Icon Containers
+  iconCyan: "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-500/10",
+  iconFuchsia: "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fuchsia-500/10",
+  iconPurple: "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-500/10",
+} as const;
+
+/* ---------------------------------------------------------------------------
+ * Types
+ * --------------------------------------------------------------------------- */
+interface BookingData {
+  id: string;
+  rental_name: string;
+  event_date: string;
+  pickup_date: string;
+  booking_type: "daily" | "weekend";
+  delivery_time: string;
+  pickup_time: string;
+  address: string;
+  city: string;
+  customer_name: string;
+  customer_email: string;
+  total_price: number;
+  deposit_amount: number;
+  balance_due: number;
+}
+
+interface PageProps {
+  searchParams: Promise<{ booking_id?: string }>;
+}
+
+/* ---------------------------------------------------------------------------
+ * Data Fetching
+ * --------------------------------------------------------------------------- */
+async function getBooking(bookingId: string): Promise<BookingData | null> {
+  const supabase = createServerClient();
+
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(
+      `
+      id,
+      rental_name,
+      event_date,
+      pickup_date,
+      booking_type,
+      delivery_time,
+      pickup_time,
+      address,
+      city,
+      customer_name,
+      customer_email,
+      total_price,
+      deposit_amount,
+      balance_due
+    `
+    )
+    .eq("id", bookingId)
+    .single();
+
+  if (error || !data) {
+    console.error("Error fetching booking:", error);
+    return null;
+  }
+
+  return data as BookingData;
+}
+
+/* ---------------------------------------------------------------------------
+ * Loading State
+ * --------------------------------------------------------------------------- */
+function LoadingState() {
   return (
     <main className="mx-auto max-w-2xl px-4 pb-28 pt-6 sm:px-6 sm:pb-12 sm:pt-10">
-      <div className="text-center">
-        {/* Success Icon */}
-        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/20">
-          <CheckCircle className="h-10 w-10 text-green-400" />
-        </div>
-
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          Booking Confirmed!
-        </h1>
-        <p className="mt-2 text-foreground/70">
-          Your deposit has been received and your date is locked in.
-        </p>
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-cyan-400" />
+        <p className={`mt-4 ${styles.bodyText}`}>Loading your booking...</p>
       </div>
-
-      {/* Confirmation Card */}
-      <Card className="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-background/50 backdrop-blur-sm sm:rounded-3xl">
-        <CardContent className="p-5 sm:p-6">
-          <h2 className="font-semibold">What happens next?</h2>
-          <ul className="mt-4 space-y-3 text-sm text-foreground/80">
-            <li className="flex gap-3">
-              <Mail className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" />
-              <span>Check your email for a confirmation with all the details</span>
-            </li>
-            <li className="flex gap-3">
-              <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" />
-              <span>We&apos;ll text you the morning of delivery to confirm our arrival window</span>
-            </li>
-            <li className="flex gap-3">
-              <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" />
-              <span>Have the setup area clear and a power outlet ready</span>
-            </li>
-          </ul>
-
-          <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-sm text-foreground/70">
-              <strong className="text-foreground">Balance due on delivery:</strong> Pay the remaining balance when we arrive (cash or card accepted).
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Actions */}
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        <Button asChild className="w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white">
-          <Link href="/">Back to Home</Link>
-        </Button>
-        <Button asChild variant="outline" className="w-full border-white/10">
-          <a href="tel:3524453723" className="flex items-center justify-center gap-2">
-            <Phone className="h-4 w-4" />
-            Questions? Call Us
-          </a>
-        </Button>
-      </div>
-
-      {/* Contact Info */}
-      <p className="mt-8 text-center text-sm text-foreground/50">
-        Need to make changes? Contact us at{" "}
-        <a href="tel:3524453723" className="text-cyan-400 hover:underline">
-          352-445-3723
-        </a>{" "}
-        or{" "}
-        <a href="mailto:bookings@popndroprentals.com" className="text-cyan-400 hover:underline">
-          bookings@popndroprentals.com
-        </a>
-      </p>
     </main>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * No Booking Found State
+ * --------------------------------------------------------------------------- */
+function NoBookingState() {
+  return (
+    <main className="mx-auto max-w-2xl px-4 pb-28 pt-6 sm:px-6 sm:pb-12 sm:pt-10">
+      <div className={styles.sectionCard}>
+        <div className="p-6 text-center sm:p-8">
+          <h1 className={styles.pageTitle}>Booking Not Found</h1>
+          <p className={`mt-3 ${styles.bodyText}`}>
+            We couldn&apos;t find that booking. If you just completed a booking, please check your
+            email for confirmation.
+          </p>
+          <Button asChild className={`mt-6 ${styles.primaryButton}`}>
+            <Link href="/">Back to Home</Link>
+          </Button>
+        </div>
+        <div className={styles.sectionCardInner} />
+      </div>
+    </main>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * Main Page Component
+ * --------------------------------------------------------------------------- */
+export default async function BookingSuccessPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const bookingId = params.booking_id;
+
+  // No booking ID provided
+  if (!bookingId) {
+    return <NoBookingState />;
+  }
+
+  // Fetch booking data
+  const booking = await getBooking(bookingId);
+
+  // Booking not found
+  if (!booking) {
+    return <NoBookingState />;
+  }
+
+  // Format dates for display
+  const eventDate = new Date(booking.event_date).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  const pickupDate = new Date(booking.pickup_date).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  return (
+    <Suspense fallback={<LoadingState />}>
+      <SuccessContent
+        booking={booking}
+        eventDate={eventDate}
+        pickupDate={pickupDate}
+        styles={styles}
+      />
+    </Suspense>
   );
 }

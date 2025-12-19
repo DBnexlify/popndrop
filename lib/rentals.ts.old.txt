@@ -5,7 +5,6 @@
 export interface RentalPricing {
   daily: number;       // Any single day (Mon-Sat)
   weekend: number;     // Sat + Sun package (pickup Monday)
-  sunday: number;      // Sunday only (delivered Sat evening, pickup Monday)
 }
 
 export interface RentalSpecs {
@@ -37,25 +36,15 @@ export interface Rental {
 // BOOKING TYPES
 // ============================================
 
-export type BookingType = "daily" | "weekend" | "sunday";
-
-// Time window for delivery/pickup selection
-export type TimeWindow = {
-  label: string;
-  value: string;
-};
+export type BookingType = "daily" | "weekend";
 
 export interface PricingOption {
   type: BookingType;
   price: number;
   label: string;
   description: string;
-  deliveryDay: string;
-  deliveryWindows: readonly TimeWindow[];
   pickupDay: string;
-  pickupWindows: readonly TimeWindow[];
-  recommended?: boolean;
-  badge?: string;
+  pickupTimes: readonly string[];
 }
 
 export interface PricingResult {
@@ -70,37 +59,40 @@ export interface PricingResult {
 
 export const SCHEDULE = {
   // Days we deliver (0 = Sunday, 6 = Saturday)
-  // Note: Sunday (0) is allowed as an EVENT date, but delivery happens Saturday
-  deliveryDays: [1, 2, 3, 4, 5, 6], // Mon-Sat (actual delivery days)
-  eventDays: [0, 1, 2, 3, 4, 5, 6], // All days (Sun events get Sat delivery)
+  deliveryDays: [1, 2, 3, 4, 5, 6], // Mon-Sat
   
   // Days we pick up
   pickupDays: [1, 2, 3, 4, 5, 6], // Mon-Sat
   
-  // Delivery time windows
-  deliveryWindows: [
-    { label: "Morning (8–11 AM)", value: "morning" },
-    { label: "Midday (11 AM–2 PM)", value: "midday" },
-    { label: "Afternoon (2–5 PM)", value: "afternoon" },
+  // Delivery time slots
+  deliveryTimes: [
+    "7:00 AM",
+    "8:00 AM",
+    "9:00 AM",
+    "10:00 AM",
+    "11:00 AM",
+    "12:00 PM",
+    "1:00 PM",
+    "2:00 PM",
   ],
   
-  // Saturday evening delivery (for Sunday-only rentals)
-  saturdayEveningWindow: [
-    { label: "Saturday evening (5–7 PM)", value: "saturday-evening" },
+  // Pickup time slots for same-day
+  sameDayPickupTimes: [
+    "5:00 PM",
+    "6:00 PM",
+    "7:00 PM",
+    "8:00 PM",
   ],
   
-  // Pickup windows
-  sameDayPickupWindows: [
-    { label: "Evening (6–8 PM)", value: "evening" },
+  // Pickup time slots for next-morning
+  nextMorningPickupTimes: [
+    "Next morning (by 9 AM)",
   ],
   
-  nextMorningPickupWindows: [
-    { label: "Next morning (by 10 AM)", value: "next-morning" },
-  ],
-  
-  mondayPickupWindows: [
-    { label: "Monday morning (by 10 AM)", value: "monday-morning" },
-    { label: "Monday afternoon (2–5 PM)", value: "monday-afternoon" },
+  // Pickup time slots for Monday (weekend package)
+  mondayPickupTimes: [
+    "Monday morning (by 10 AM)",
+    "Monday evening (after 4 PM)",
   ],
 } as const;
 
@@ -121,7 +113,6 @@ export const rentals: Rental[] = [
     pricing: {
       daily: 350,
       weekend: 475,
-      sunday: 375,  // Slight premium for Sunday-only (Sat evening delivery)
     },
     specs: {
       dimensions: "28' L × 13' W × 15' H",
@@ -167,7 +158,6 @@ export const rentals: Rental[] = [
     pricing: {
       daily: 0,
       weekend: 0,
-      sunday: 0,
     },
     specs: {
       dimensions: "TBD",
@@ -215,25 +205,12 @@ export function getAvailableRentals(): Rental[] {
 // ============================================
 
 /**
- * Check if a specific date is available as an EVENT date
- * Note: Sunday is allowed as an event date (delivery happens Saturday)
+ * Check if a specific date is available for delivery
  */
-export function isEventDateAvailable(date: Date): boolean {
-  const dayOfWeek = date.getDay();
-  return (SCHEDULE.eventDays as readonly number[]).includes(dayOfWeek);
-}
-
-/**
- * Check if we can physically deliver on a given date
- * (Used internally - Sunday delivery is NOT available)
- */
-export function isDeliveryDayAvailable(date: Date): boolean {
+export function isDeliveryAvailable(date: Date): boolean {
   const dayOfWeek = date.getDay();
   return (SCHEDULE.deliveryDays as readonly number[]).includes(dayOfWeek);
 }
-
-// Keep old function name for backward compatibility
-export const isDeliveryAvailable = isEventDateAvailable;
 
 /**
  * Get the day name from a date
@@ -246,15 +223,22 @@ export function getDayName(date: Date): string {
  * Get pricing options for a rental on a specific date
  * 
  * BUSINESS LOGIC:
- * - Sunday (day 0): Offer weekend package (PREFERRED) or Sunday-only
- *   → Weekend: Delivered Saturday morning, pickup Monday
- *   → Sunday-only: Delivered Saturday evening, pickup Monday
+ * - Sunday (day 0): No delivery available
  * - Saturday (day 6): Offer daily OR weekend package
  * - Mon-Fri (days 1-5): Daily rate only
  */
 export function getPricingOptions(rental: Rental, date: Date): PricingResult {
   const dayOfWeek = date.getDay();
   const dayName = getDayName(date);
+  
+  // Sunday - no delivery
+  if (dayOfWeek === 0) {
+    return {
+      available: false,
+      reason: "Delivery is not available on Sundays. Please select another date.",
+      options: [],
+    };
+  }
   
   // Coming soon rentals
   if (rental.pricing.daily === 0) {
@@ -265,38 +249,7 @@ export function getPricingOptions(rental: Rental, date: Date): PricingResult {
     };
   }
   
-  // SUNDAY - offer weekend (preferred) or Sunday-only
-  if (dayOfWeek === 0) {
-    return {
-      available: true,
-      options: [
-        {
-          type: "weekend",
-          price: rental.pricing.weekend,
-          label: "Weekend package",
-          description: "Get the full weekend! Delivered Saturday morning, pickup Monday",
-          deliveryDay: "Saturday",
-          deliveryWindows: SCHEDULE.deliveryWindows,
-          pickupDay: "Monday",
-          pickupWindows: SCHEDULE.mondayPickupWindows,
-          recommended: true,
-          badge: "Best value",
-        },
-        {
-          type: "sunday",
-          price: rental.pricing.sunday,
-          label: "Sunday only",
-          description: "Delivered Saturday evening, pickup Monday",
-          deliveryDay: "Saturday",
-          deliveryWindows: SCHEDULE.saturdayEveningWindow,
-          pickupDay: "Monday",
-          pickupWindows: SCHEDULE.mondayPickupWindows,
-        },
-      ],
-    };
-  }
-  
-  // SATURDAY - offer daily or weekend options
+  // Saturday - offer both daily and weekend options
   if (dayOfWeek === 6) {
     return {
       available: true,
@@ -306,47 +259,23 @@ export function getPricingOptions(rental: Rental, date: Date): PricingResult {
           price: rental.pricing.daily,
           label: "Saturday only",
           description: "Single day rental, pickup Saturday evening",
-          deliveryDay: "Saturday",
-          deliveryWindows: SCHEDULE.deliveryWindows,
           pickupDay: "Saturday",
-          pickupWindows: SCHEDULE.sameDayPickupWindows,
+          // NO next morning option - that would be Sunday!
+          pickupTimes: SCHEDULE.sameDayPickupTimes,
         },
         {
           type: "weekend",
           price: rental.pricing.weekend,
           label: "Weekend package",
-          description: "Keep it Saturday & Sunday, pickup Monday",
-          deliveryDay: "Saturday",
-          deliveryWindows: SCHEDULE.deliveryWindows,
+          description: "Keep it Saturday & Sunday, we pick up Monday",
           pickupDay: "Monday",
-          pickupWindows: SCHEDULE.mondayPickupWindows,
-          recommended: true,
-          badge: "Best value",
+          pickupTimes: SCHEDULE.mondayPickupTimes,
         },
       ],
     };
   }
   
-  // FRIDAY - offer daily with next-morning option, or 3-day weekend
-  if (dayOfWeek === 5) {
-    return {
-      available: true,
-      options: [
-        {
-          type: "daily",
-          price: rental.pricing.daily,
-          label: `${dayName} rental`,
-          description: "Single day rental",
-          deliveryDay: dayName,
-          deliveryWindows: SCHEDULE.deliveryWindows,
-          pickupDay: dayName,
-          pickupWindows: [...SCHEDULE.sameDayPickupWindows, ...SCHEDULE.nextMorningPickupWindows],
-        },
-      ],
-    };
-  }
-  
-  // MONDAY-THURSDAY - daily rate only
+  // Monday-Friday - daily rate only
   return {
     available: true,
     options: [
@@ -355,10 +284,8 @@ export function getPricingOptions(rental: Rental, date: Date): PricingResult {
         price: rental.pricing.daily,
         label: `${dayName} rental`,
         description: "Single day rental",
-        deliveryDay: dayName,
-        deliveryWindows: SCHEDULE.deliveryWindows,
         pickupDay: dayName,
-        pickupWindows: [...SCHEDULE.sameDayPickupWindows, ...SCHEDULE.nextMorningPickupWindows],
+        pickupTimes: [...SCHEDULE.sameDayPickupTimes, ...SCHEDULE.nextMorningPickupTimes],
       },
     ],
   };
@@ -373,8 +300,6 @@ export function calculateTotal(rental: Rental, bookingType: BookingType): number
       return rental.pricing.daily;
     case "weekend":
       return rental.pricing.weekend;
-    case "sunday":
-      return rental.pricing.sunday;
     default:
       return 0;
   }
@@ -388,37 +313,18 @@ export function calculateBalance(rental: Rental, bookingType: BookingType): numb
 }
 
 /**
- * Get the pickup date based on booking type and event date
+ * Get the pickup date based on booking type
  */
-export function getPickupDate(eventDate: Date, bookingType: BookingType): Date {
-  const pickup = new Date(eventDate);
+export function getPickupDate(startDate: Date, bookingType: BookingType): Date {
+  const pickup = new Date(startDate);
   
   if (bookingType === "weekend") {
-    // Saturday event → Monday pickup (skip Sunday)
+    // Saturday → Monday (skip Sunday)
     pickup.setDate(pickup.getDate() + 2);
-  } else if (bookingType === "sunday") {
-    // Sunday event → Monday pickup
-    pickup.setDate(pickup.getDate() + 1);
   }
   // For daily, pickup is same day (time-based, not date-based)
   
   return pickup;
-}
-
-/**
- * Get the delivery date based on booking type and event date
- * (Sunday events get Saturday delivery)
- */
-export function getDeliveryDate(eventDate: Date, bookingType: BookingType): Date {
-  const delivery = new Date(eventDate);
-  
-  if (bookingType === "sunday") {
-    // Sunday event → Saturday delivery
-    delivery.setDate(delivery.getDate() - 1);
-  }
-  // For daily and weekend, delivery is on the event date
-  
-  return delivery;
 }
 
 /**
@@ -456,20 +362,13 @@ export function validateBooking(
   if (!date) {
     errors.push("Please select an event date");
   } else {
-    if (!isEventDateAvailable(date)) {
-      errors.push("This date is not available for events");
+    if (!isDeliveryAvailable(date)) {
+      errors.push("Delivery is not available on the selected date");
     }
     
-    const dayOfWeek = date.getDay();
-    
-    // Weekend package only valid on Saturday or Sunday
-    if (bookingType === "weekend" && dayOfWeek !== 6 && dayOfWeek !== 0) {
-      errors.push("Weekend package is only available for Saturday or Sunday events");
-    }
-    
-    // Sunday-only booking only valid on Sunday
-    if (bookingType === "sunday" && dayOfWeek !== 0) {
-      errors.push("Sunday-only booking is only available for Sunday events");
+    // Weekend package only valid on Saturday
+    if (bookingType === "weekend" && date.getDay() !== 6) {
+      errors.push("Weekend package is only available for Saturday bookings");
     }
   }
   

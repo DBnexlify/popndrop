@@ -36,15 +36,24 @@ export async function GET(request: NextRequest) {
 
   if (bookings) {
     for (const booking of bookings) {
+      const eventDate = new Date(booking.event_date + 'T12:00:00'); // Noon to avoid timezone issues
+      
+      // Always block the event date
       unavailableDates.push(booking.event_date);
       
-      // If weekend booking, also block the next day (Sunday)
       if (booking.booking_type === 'weekend') {
-        const eventDate = new Date(booking.event_date);
-        const nextDay = new Date(eventDate);
-        nextDay.setDate(nextDay.getDate() + 1);
-        unavailableDates.push(nextDay.toISOString().split('T')[0]);
+        // Weekend booking (Saturday start): block Saturday + Sunday
+        const sunday = new Date(eventDate);
+        sunday.setDate(sunday.getDate() + 1);
+        unavailableDates.push(sunday.toISOString().split('T')[0]);
+      } else if (booking.booking_type === 'sunday') {
+        // Sunday-only booking: also block the preceding Saturday
+        // (equipment is delivered Saturday evening)
+        const saturday = new Date(eventDate);
+        saturday.setDate(saturday.getDate() - 1);
+        unavailableDates.push(saturday.toISOString().split('T')[0]);
       }
+      // Daily bookings only block the event date itself (already added above)
     }
   }
 
