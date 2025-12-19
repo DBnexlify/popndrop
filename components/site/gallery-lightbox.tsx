@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
@@ -14,11 +14,6 @@ interface GalleryLightboxProps {
   alt?: string;
 }
 
-const SWIPE_THRESHOLD = 50;
-const VELOCITY_THRESHOLD = 0.3;
-const DISMISS_THRESHOLD = 120;
-const DOUBLE_TAP_DELAY = 300;
-
 export function GalleryLightbox({
   images,
   initialIndex = 0,
@@ -27,341 +22,168 @@ export function GalleryLightbox({
   alt = "Gallery image",
 }: GalleryLightboxProps) {
   const [mounted, setMounted] = useState(false);
-  const [visible, setVisible] = useState(false);
-  const [animationPhase, setAnimationPhase] = useState<"closed" | "opening" | "open" | "closing">("closed");
-  const openInstanceRef = useRef(0);
+  const [index, setIndex] = useState(initialIndex);
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  const [touchDelta, setTouchDelta] = useState({ x: 0, y: 0 });
+  const [isSwiping, setIsSwiping] = useState(false);
 
-  // Handle portal mounting
+  // Client-side only
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Handle open/close transitions
+  // Reset index when opening with new initialIndex
   useEffect(() => {
-    if (isOpen && animationPhase === "closed") {
-      // Opening
-      openInstanceRef.current += 1;
-      setVisible(true);
-      setAnimationPhase("opening");
-      document.body.style.overflow = "hidden";
-      
-      // Transition to open after animation
-      const timer = setTimeout(() => {
-        setAnimationPhase("open");
-      }, 300);
-      return () => clearTimeout(timer);
-    } 
-    
-    if (!isOpen && (animationPhase === "open" || animationPhase === "opening")) {
-      // Closing
-      setAnimationPhase("closing");
-      
-      // Unmount after animation
-      const timer = setTimeout(() => {
-        setVisible(false);
-        setAnimationPhase("closed");
-        document.body.style.overflow = "";
-      }, 200);
-      return () => clearTimeout(timer);
+    if (isOpen) {
+      setIndex(initialIndex);
     }
-  }, [isOpen, animationPhase]);
+  }, [isOpen, initialIndex]);
 
-  // Cleanup
+  // Lock/unlock body scroll
   useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    
+    // Cleanup on unmount
     return () => {
       document.body.style.overflow = "";
     };
-  }, []);
+  }, [isOpen]);
 
-  if (!mounted || !visible) return null;
-
-  return createPortal(
-    <LightboxContent
-      key={openInstanceRef.current}
-      images={images}
-      initialIndex={initialIndex}
-      animationPhase={animationPhase}
-      onClose={onClose}
-      alt={alt}
-    />,
-    document.body
-  );
-}
-
-function LightboxContent({
-  images,
-  initialIndex,
-  animationPhase,
-  onClose,
-  alt,
-}: {
-  images: string[];
-  initialIndex: number;
-  animationPhase: "closed" | "opening" | "open" | "closing";
-  onClose: () => void;
-  alt: string;
-}) {
-  // State - initialized with correct values immediately
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [showControls, setShowControls] = useState(true);
-  const [slideOffset, setSlideOffset] = useState(0);
-  const [dismissOffset, setDismissOffset] = useState(0);
-  const [scale, setScale] = useState(1);
-  const [isDragging, setIsDragging] = useState(false);
-
-  // Refs
-  const touchStartRef = useRef({ x: 0, y: 0, time: 0 });
-  const lastTapRef = useRef(0);
-  const gestureRef = useRef<"none" | "horizontal" | "vertical" | "pinch">("none");
-  const initialPinchRef = useRef(0);
-  const initialScaleRef = useRef(1);
-
-  // Navigation
-  const canGoNext = currentIndex < images.length - 1;
-  const canGoPrev = currentIndex > 0;
-
-  const goToNext = useCallback(() => {
-    if (canGoNext) {
-      setCurrentIndex((i) => i + 1);
-      setScale(1);
-    }
-  }, [canGoNext]);
-
-  const goToPrev = useCallback(() => {
-    if (canGoPrev) {
-      setCurrentIndex((i) => i - 1);
-      setScale(1);
-    }
-  }, [canGoPrev]);
-
-  // Keyboard
+  // Keyboard navigation
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
-      if (e.key === "ArrowRight") goToNext();
-      if (e.key === "ArrowLeft") goToPrev();
+      if (e.key === "ArrowLeft" && index > 0) setIndex(i => i - 1);
+      if (e.key === "ArrowRight" && index < images.length - 1) setIndex(i => i + 1);
     };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose, goToNext, goToPrev]);
 
-  // Preload adjacent
-  useEffect(() => {
-    [-1, 1].forEach((offset) => {
-      const idx = currentIndex + offset;
-      if (idx >= 0 && idx < images.length) {
-        const img = new window.Image();
-        img.src = images[idx];
-      }
-    });
-  }, [currentIndex, images]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, index, images.length, onClose]);
+
+  // Close handler - ensures cleanup
+  const handleClose = useCallback(() => {
+    document.body.style.overflow = "";
+    setTouchStart(null);
+    setTouchDelta({ x: 0, y: 0 });
+    setIsSwiping(false);
+    onClose();
+  }, [onClose]);
 
   // Touch handlers
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const touches = e.touches;
-    
-    if (touches.length === 2) {
-      gestureRef.current = "pinch";
-      const dx = touches[0].clientX - touches[1].clientX;
-      const dy = touches[0].clientY - touches[1].clientY;
-      initialPinchRef.current = Math.sqrt(dx * dx + dy * dy);
-      initialScaleRef.current = scale;
-      return;
-    }
-    
-    gestureRef.current = "none";
-    touchStartRef.current = {
-      x: touches[0].clientX,
-      y: touches[0].clientY,
-      time: Date.now(),
-    };
-    setIsDragging(true);
-  }, [scale]);
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    setIsSwiping(true);
+  };
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    const touches = e.touches;
-    
-    if (touches.length === 2 && gestureRef.current === "pinch") {
-      const dx = touches[0].clientX - touches[1].clientX;
-      const dy = touches[0].clientY - touches[1].clientY;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      const newScale = Math.min(3, Math.max(1, initialScaleRef.current * (distance / initialPinchRef.current)));
-      setScale(newScale);
-      return;
-    }
-    
-    if (touches.length !== 1 || !isDragging) return;
-    
-    const deltaX = touches[0].clientX - touchStartRef.current.x;
-    const deltaY = touches[0].clientY - touchStartRef.current.y;
-    
-    if (gestureRef.current === "none" && (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10)) {
-      gestureRef.current = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
-    }
-    
-    if (scale > 1) return;
-    
-    if (gestureRef.current === "horizontal") {
-      let offset = deltaX;
-      if ((deltaX > 0 && !canGoPrev) || (deltaX < 0 && !canGoNext)) {
-        offset = deltaX * 0.25;
-      }
-      setSlideOffset(offset);
-    } else if (gestureRef.current === "vertical" && deltaY > 0) {
-      setDismissOffset(deltaY);
-    }
-  }, [isDragging, scale, canGoNext, canGoPrev]);
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!touchStart) return;
+    const deltaX = e.touches[0].clientX - touchStart.x;
+    const deltaY = e.touches[0].clientY - touchStart.y;
+    setTouchDelta({ x: deltaX, y: deltaY });
+  };
 
-  const handleTouchEnd = useCallback(() => {
-    const elapsed = Date.now() - touchStartRef.current.time;
-    const velocityX = Math.abs(slideOffset) / elapsed;
-    const velocityY = Math.abs(dismissOffset) / elapsed;
-    
-    if (gestureRef.current === "pinch") {
-      if (scale < 1.1) setScale(1);
-      gestureRef.current = "none";
-      setIsDragging(false);
-      return;
-    }
-    
-    if (gestureRef.current === "horizontal") {
-      if (Math.abs(slideOffset) > SWIPE_THRESHOLD || velocityX > VELOCITY_THRESHOLD) {
-        if (slideOffset > 0) goToPrev();
-        else goToNext();
-      }
-    }
-    
-    if (gestureRef.current === "vertical") {
-      if (dismissOffset > DISMISS_THRESHOLD || velocityY > VELOCITY_THRESHOLD) {
-        onClose();
-        return;
-      }
-    }
-    
-    if (Math.abs(slideOffset) < 5 && Math.abs(dismissOffset) < 5 && gestureRef.current === "none") {
-      const now = Date.now();
-      if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-        setScale((s) => (s > 1 ? 1 : 2));
-        lastTapRef.current = 0;
-      } else {
-        lastTapRef.current = now;
-        setTimeout(() => {
-          if (Date.now() - lastTapRef.current >= DOUBLE_TAP_DELAY - 50) {
-            setShowControls((s) => !s);
-          }
-        }, DOUBLE_TAP_DELAY);
-      }
-    }
-    
-    setSlideOffset(0);
-    setDismissOffset(0);
-    setIsDragging(false);
-    gestureRef.current = "none";
-  }, [slideOffset, dismissOffset, scale, goToNext, goToPrev, onClose]);
+  const onTouchEnd = () => {
+    if (!touchStart) return;
 
-  // Computed styles
-  const isClosing = animationPhase === "closing";
-  const isOpening = animationPhase === "opening";
-  const backdropOpacity = dismissOffset > 0 ? Math.max(0, 1 - dismissOffset / 300) : 1;
-  const imageScale = dismissOffset > 0 ? Math.max(0.85, 1 - dismissOffset / 400) : 1;
+    const { x: deltaX, y: deltaY } = touchDelta;
+    const threshold = 80;
 
-  return (
-    <div
-      className="fixed inset-0 z-[100] touch-none select-none flex items-center justify-center"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+    // Swipe down to close
+    if (deltaY > threshold && Math.abs(deltaY) > Math.abs(deltaX)) {
+      handleClose();
+    }
+    // Swipe left - next image
+    else if (deltaX < -threshold && index < images.length - 1) {
+      setIndex(i => i + 1);
+    }
+    // Swipe right - previous image
+    else if (deltaX > threshold && index > 0) {
+      setIndex(i => i - 1);
+    }
+
+    // Reset
+    setTouchStart(null);
+    setTouchDelta({ x: 0, y: 0 });
+    setIsSwiping(false);
+  };
+
+  // Don't render on server or when closed
+  if (!mounted || !isOpen) return null;
+
+  const canPrev = index > 0;
+  const canNext = index < images.length - 1;
+
+  return createPortal(
+    <div 
+      className="fixed inset-0 z-[9999] bg-black"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
     >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black transition-opacity duration-200"
-        style={{ 
-          opacity: isClosing ? 0 : isOpening ? backdropOpacity : backdropOpacity 
-        }}
-        onClick={onClose}
-      />
-
-      {/* Top controls */}
-      <div
-        className={cn(
-          "absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4",
-          "transition-opacity duration-150",
-          showControls && !isClosing ? "opacity-100" : "opacity-0 pointer-events-none"
-        )}
+      {/* Close button */}
+      <button
+        onClick={handleClose}
+        className="absolute right-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+        aria-label="Close"
       >
-        <div className="rounded-full bg-black/60 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-md">
-          {currentIndex + 1} / {images.length}
-        </div>
-        <button
-          onClick={onClose}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition-transform active:scale-95"
-          aria-label="Close"
-        >
-          <X className="h-5 w-5" />
-        </button>
+        <X className="h-5 w-5" />
+      </button>
+
+      {/* Counter */}
+      <div className="absolute left-4 top-4 z-50 rounded-full bg-white/10 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm">
+        {index + 1} / {images.length}
       </div>
 
-      {/* Desktop arrows */}
-      {images.length > 1 && (
-        <>
-          <button
-            onClick={goToPrev}
-            disabled={!canGoPrev}
-            className={cn(
-              "absolute left-4 z-20 hidden h-12 w-12 items-center justify-center rounded-full sm:flex",
-              "bg-black/60 text-white backdrop-blur-md transition-all active:scale-95",
-              "disabled:opacity-30 disabled:cursor-not-allowed",
-              showControls && !isClosing ? "opacity-100" : "opacity-0 pointer-events-none"
-            )}
-            aria-label="Previous"
-          >
-            <ChevronLeft className="h-6 w-6" />
-          </button>
-          <button
-            onClick={goToNext}
-            disabled={!canGoNext}
-            className={cn(
-              "absolute right-4 z-20 hidden h-12 w-12 items-center justify-center rounded-full sm:flex",
-              "bg-black/60 text-white backdrop-blur-md transition-all active:scale-95",
-              "disabled:opacity-30 disabled:cursor-not-allowed",
-              showControls && !isClosing ? "opacity-100" : "opacity-0 pointer-events-none"
-            )}
-            aria-label="Next"
-          >
-            <ChevronRight className="h-6 w-6" />
-          </button>
-        </>
+      {/* Previous button - desktop */}
+      {canPrev && (
+        <button
+          onClick={() => setIndex(i => i - 1)}
+          className="absolute left-4 top-1/2 z-50 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20 sm:flex"
+          aria-label="Previous"
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </button>
+      )}
+
+      {/* Next button - desktop */}
+      {canNext && (
+        <button
+          onClick={() => setIndex(i => i + 1)}
+          className="absolute right-4 top-1/2 z-50 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20 sm:flex"
+          aria-label="Next"
+        >
+          <ChevronRight className="h-6 w-6" />
+        </button>
       )}
 
       {/* Image carousel */}
-      <div
-        className="relative z-10 h-full w-full overflow-hidden transition-all duration-200"
-        style={{
-          opacity: isClosing ? 0 : 1,
-          transform: isClosing ? "scale(0.95)" : isOpening ? "scale(1)" : "scale(1)",
-        }}
-      >
+      <div className="relative h-full w-full overflow-hidden">
         <div
-          className="flex h-full"
+          className="flex h-full transition-transform duration-300 ease-out"
           style={{
             width: `${images.length * 100}%`,
-            transform: `translateX(calc(-${currentIndex * (100 / images.length)}% + ${slideOffset}px))`,
-            transition: isDragging ? "none" : "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            transform: `translateX(calc(-${index * (100 / images.length)}% + ${isSwiping ? touchDelta.x : 0}px))`,
+            transitionDuration: isSwiping ? "0ms" : "300ms",
           }}
         >
           {images.map((src, i) => (
             <div
-              key={src}
-              className="flex h-full items-center justify-center"
+              key={i}
+              className="flex h-full items-center justify-center px-4"
               style={{ width: `${100 / images.length}%` }}
             >
-              <div
-                className="relative h-[85vh] w-[90vw] max-w-4xl"
+              <div 
+                className="relative h-[80vh] w-full max-w-4xl"
                 style={{
-                  transform: i === currentIndex
-                    ? `translateY(${dismissOffset}px) scale(${imageScale * scale})`
-                    : "scale(1)",
-                  transition: isDragging ? "none" : "transform 0.2s ease-out",
+                  transform: isSwiping && i === index ? `translateY(${Math.max(0, touchDelta.y)}px) scale(${1 - Math.max(0, touchDelta.y) / 1000})` : undefined,
+                  opacity: isSwiping && i === index && touchDelta.y > 0 ? 1 - touchDelta.y / 400 : 1,
                 }}
               >
                 <Image
@@ -369,8 +191,8 @@ function LightboxContent({
                   alt={`${alt} ${i + 1}`}
                   fill
                   className="object-contain"
-                  sizes="90vw"
-                  priority={i === initialIndex || Math.abs(i - currentIndex) <= 1}
+                  sizes="100vw"
+                  priority={i === index}
                   draggable={false}
                 />
               </div>
@@ -381,33 +203,21 @@ function LightboxContent({
 
       {/* Dots */}
       {images.length > 1 && (
-        <div
-          className={cn(
-            "absolute bottom-8 left-1/2 z-20 flex -translate-x-1/2 gap-1.5",
-            "transition-opacity duration-150",
-            showControls && !isClosing ? "opacity-100" : "opacity-0"
-          )}
-        >
+        <div className="absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 gap-2">
           {images.map((_, i) => (
             <button
               key={i}
-              onClick={() => setCurrentIndex(i)}
+              onClick={() => setIndex(i)}
               className={cn(
                 "h-2 rounded-full transition-all duration-200",
-                i === currentIndex ? "w-6 bg-white" : "w-2 bg-white/40"
+                i === index ? "w-6 bg-white" : "w-2 bg-white/40"
               )}
-              aria-label={`Image ${i + 1}`}
+              aria-label={`Go to image ${i + 1}`}
             />
           ))}
         </div>
       )}
-
-      {/* Zoom indicator */}
-      {scale > 1 && (
-        <div className="absolute bottom-20 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs text-white backdrop-blur-md">
-          {Math.round(scale * 100)}%
-        </div>
-      )}
-    </div>
+    </div>,
+    document.body
   );
 }
