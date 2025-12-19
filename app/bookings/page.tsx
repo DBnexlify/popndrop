@@ -3,8 +3,8 @@
 import { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useSearchParams } from "next/navigation";
-import { format, addMonths } from "date-fns";
+import { useSearchParams, useRouter } from "next/navigation";
+import { format, addMonths, isSameDay } from "date-fns";
 import {
   getRentalById,
   getAvailableRentals,
@@ -14,7 +14,6 @@ import {
   DEPOSIT_AMOUNT,
   SCHEDULE,
   type Rental,
-  type BookingType,
   type PricingOption,
 } from "@/lib/rentals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,12 +45,15 @@ import {
   ChevronLeft,
   AlertCircle,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 
 // Main booking form component
 function BookingForm() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const rentalId = searchParams.get("r");
+  const cancelled = searchParams.get("cancelled");
 
   // Available rentals for dropdown
   const availableRentals = getAvailableRentals();
@@ -73,6 +75,11 @@ function BookingForm() {
     notes: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Booked dates state
+  const [unavailableDates, setUnavailableDates] = useState<Date[]>([]);
+  const [isLoadingDates, setIsLoadingDates] = useState(false);
 
   // Set rental from URL param on mount and when it changes
   useEffect(() => {
@@ -83,6 +90,36 @@ function BookingForm() {
       }
     }
   }, [rentalId]);
+
+  // Fetch unavailable dates when rental is selected
+  useEffect(() => {
+    async function fetchUnavailableDates() {
+      if (!selectedRental) {
+        setUnavailableDates([]);
+        return;
+      }
+
+      setIsLoadingDates(true);
+      try {
+        const response = await fetch(
+          `/api/bookings/availability?rentalId=${selectedRental.id}`
+        );
+        const data = await response.json();
+
+        if (data.unavailableDates) {
+          setUnavailableDates(
+            data.unavailableDates.map((d: string) => new Date(d))
+          );
+        }
+      } catch (error) {
+        console.error("Error fetching availability:", error);
+      } finally {
+        setIsLoadingDates(false);
+      }
+    }
+
+    fetchUnavailableDates();
+  }, [selectedRental]);
 
   // Get pricing options when rental and date are selected
   const pricingResult = useMemo(() => {
@@ -95,12 +132,10 @@ function BookingForm() {
   // Auto-select pricing option when available
   useEffect(() => {
     if (pricingResult?.available && pricingResult.options.length >= 1) {
-      // Default to first option (daily)
       setSelectedOption(pricingResult.options[0]);
     } else {
       setSelectedOption(null);
     }
-    // Reset pickup time when date changes
     setFormData((prev) => ({ ...prev, pickupTime: "" }));
   }, [pricingResult]);
 
@@ -111,21 +146,69 @@ function BookingForm() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  // Check if date is unavailable
+  const isDateUnavailable = (date: Date) => {
+    return unavailableDates.some((d) => isSameDay(d, date));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setSubmitError(null);
 
-    console.log("Booking submission:", {
-      rental: selectedRental,
-      eventDate,
-      bookingType: selectedOption?.type,
-      price: selectedOption?.price,
-      customer: formData,
-    });
+    if (!selectedRental || !eventDate || !selectedOption) {
+      setSubmitError("Please complete all required fields");
+      setIsSubmitting(false);
+      return;
+    }
 
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    alert("Demo: This would redirect to Stripe for deposit payment.");
-    setIsSubmitting(false);
+    // Calculate pickup date
+    const pickupDate = new Date(eventDate);
+    if (selectedOption.type === "weekend") {
+      pickupDate.setDate(pickupDate.getDate() + 2); // Monday
+    }
+
+    try {
+      const response = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rentalId: selectedRental.id,
+          rentalName: selectedRental.name,
+          eventDate: eventDate.toISOString().split("T")[0],
+          bookingType: selectedOption.type,
+          pickupDate: pickupDate.toISOString().split("T")[0],
+          customerName: formData.name,
+          customerEmail: formData.email,
+          customerPhone: formData.phone,
+          address: formData.address,
+          city: formData.city,
+          deliveryTime: formData.deliveryTime,
+          pickupTime: formData.pickupTime,
+          notes: formData.notes,
+          totalPrice: selectedOption.price,
+          depositAmount: DEPOSIT_AMOUNT,
+          balanceDue: selectedOption.price - DEPOSIT_AMOUNT,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setSubmitError(data.error || "Something went wrong. Please try again.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Redirect to Stripe Checkout
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      }
+    } catch (error) {
+      console.error("Booking error:", error);
+      setSubmitError("Something went wrong. Please try again or call us.");
+      setIsSubmitting(false);
+    }
   };
 
   // Calendar navigation
@@ -157,6 +240,19 @@ function BookingForm() {
 
   return (
     <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_380px]">
+      {/* Cancelled Alert */}
+      {cancelled && (
+        <div className="lg:col-span-2">
+          <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-950/30 p-4 text-sm">
+            <AlertCircle className="h-5 w-5 shrink-0 text-amber-400" />
+            <p>
+              <span className="font-medium text-amber-300">Payment cancelled.</span>{" "}
+              <span className="text-foreground/70">No worries - your date is still available. Try again when you&apos;re ready.</span>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Main Form */}
       <div className="space-y-6">
         {/* Step 1: Select Rental */}
@@ -248,6 +344,14 @@ function BookingForm() {
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
             <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Error Message */}
+              {submitError && (
+                <div className="flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-950/30 p-4 text-sm">
+                  <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
+                  <p className="text-red-300">{submitError}</p>
+                </div>
+              )}
+
               {/* Date Picker */}
               <div className="space-y-2">
                 <Label>Event date *</Label>
@@ -255,15 +359,23 @@ function BookingForm() {
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
+                      disabled={!selectedRental}
                       className={cn(
                         "w-full justify-start border-white/10 bg-white/5 text-left font-normal hover:bg-white/10",
                         !eventDate && "text-muted-foreground"
                       )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {eventDate
-                        ? format(eventDate, "EEEE, MMMM d, yyyy")
-                        : "Pick a date"}
+                      {isLoadingDates ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading availability...
+                        </span>
+                      ) : eventDate ? (
+                        format(eventDate, "EEEE, MMMM d, yyyy")
+                      ) : (
+                        "Pick a date"
+                      )}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent
@@ -303,7 +415,8 @@ function BookingForm() {
                       disabled={(date) =>
                         date < minDate ||
                         date > maxDate ||
-                        !isDeliveryAvailable(date)
+                        !isDeliveryAvailable(date) ||
+                        isDateUnavailable(date)
                       }
                       className="p-3"
                       classNames={{
@@ -316,11 +429,17 @@ function BookingForm() {
                       }}
                     />
 
-                    <div className="border-t border-white/10 px-3 py-2">
+                    <div className="space-y-1 border-t border-white/10 px-3 py-2">
                       <p className="flex items-center gap-1.5 text-xs text-foreground/60">
                         <AlertCircle className="h-3 w-3" />
                         Sundays unavailable for delivery
                       </p>
+                      {unavailableDates.length > 0 && (
+                        <p className="flex items-center gap-1.5 text-xs text-foreground/60">
+                          <AlertCircle className="h-3 w-3" />
+                          Crossed-out dates are already booked
+                        </p>
+                      )}
                     </div>
                   </PopoverContent>
                 </Popover>
@@ -564,12 +683,23 @@ function BookingForm() {
               {/* Submit */}
               <Button
                 type="submit"
-                disabled={!selectedRental || !eventDate || !selectedOption || isSubmitting}
+                disabled={
+                  !selectedRental ||
+                  !eventDate ||
+                  !selectedOption ||
+                  !formData.name ||
+                  !formData.email ||
+                  !formData.phone ||
+                  !formData.address ||
+                  !formData.deliveryTime ||
+                  !formData.pickupTime ||
+                  isSubmitting
+                }
                 className="w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 py-6 text-base font-semibold text-white shadow-lg shadow-fuchsia-500/20 transition-all hover:shadow-xl hover:shadow-fuchsia-500/30 disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <span className="flex items-center gap-2">
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     Processing...
                   </span>
                 ) : (
@@ -603,7 +733,6 @@ function BookingForm() {
                   <span className="font-medium">{selectedRental.name}</span>
                 </div>
 
-                {/* Always show available pricing tiers */}
                 <div className="space-y-2 rounded-lg bg-white/[0.03] p-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-foreground/60">Daily rate</span>

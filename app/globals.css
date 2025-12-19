@@ -125,6 +125,11 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Prevent black flash on mobile scroll/overscroll */
+  html, body {
+    overscroll-behavior: none;
+  }
 }
 
 /* Logo bounce animation - GPU accelerated, buttery smooth */

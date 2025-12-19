@@ -17,7 +17,10 @@ export function MobileBottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
-      <div className="mx-auto max-w-5xl px-3 pb-3">
+      {/* Background layer that extends to screen edge - prevents black flash on scroll */}
+      <div className="absolute inset-x-0 bottom-0 h-full bg-background/50 backdrop-blur-md" />
+
+      <div className="relative mx-auto max-w-5xl px-3 pb-[max(12px,env(safe-area-inset-bottom))]">
         <div className="rounded-2xl border bg-background/70 backdrop-blur-xl">
           <div className="grid grid-cols-4 px-2 py-2">
             {items.map(({ href, label, Icon }) => {
