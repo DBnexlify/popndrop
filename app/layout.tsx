@@ -23,13 +23,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className="bg-[oklch(0.145_0_0)]">
-      <body className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col antialiased bg-[oklch(0.145_0_0)]`}>
+    <html lang="en" suppressHydrationWarning style={{ backgroundColor: 'oklch(0.145 0 0)' }}>
+      <body className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col antialiased`}>
         <ThemeProvider>
-          {/* Site-wide background gradient - extended beyond viewport for Android */}
-          <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" style={{ top: '-100px', bottom: '-100px' }}>
+          {/* Site-wide background gradient */}
+          <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
             {/* Base dark */}
-            <div className="absolute inset-0 bg-background" style={{ top: '-100px', bottom: '-100px' }} />
+            <div className="absolute inset-0 bg-background" />
 
             {/* Aurora gradient blobs - distributed for full coverage */}
             {/* Top center - fuchsia/pink */}
@@ -57,7 +57,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="absolute bottom-[-200px] left-1/2 h-[450px] w-[450px] -translate-x-1/2 rounded-full bg-fuchsia-500/14 blur-3xl" />
 
             {/* Gentle vignette for depth */}
-            <div className="absolute inset-0 [background:radial-gradient(ellipse_at_center,rgba(0,0,0,0)_0%,rgba(0,0,0,0.18)_65%,rgba(0,0,0,0.4)_100%)]" style={{ top: '-100px', bottom: '-100px' }} />
+            <div className="absolute inset-0 [background:radial-gradient(ellipse_at_center,rgba(0,0,0,0)_0%,rgba(0,0,0,0.18)_65%,rgba(0,0,0,0.4)_100%)]" />
           </div>
 
           <SiteHeader />
