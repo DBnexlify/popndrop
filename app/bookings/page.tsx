@@ -200,8 +200,10 @@ function BookingForm() {
         return;
       }
 
-      // Redirect to Stripe Checkout
-      if (data.checkoutUrl) {
+      // Redirect to success page (or Stripe checkout when enabled)
+      if (data.redirectUrl) {
+        router.push(data.redirectUrl);
+      } else if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
       }
     } catch (error) {
@@ -700,18 +702,18 @@ function BookingForm() {
                 {isSubmitting ? (
                   <span className="flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Processing...
+                    Submitting...
                   </span>
                 ) : (
                   <>
-                    Pay ${DEPOSIT_AMOUNT} Deposit
+                    Reserve Now
                     <ChevronRight className="ml-2 h-5 w-5" />
                   </>
                 )}
               </Button>
 
               <p className="text-center text-xs text-foreground/50">
-                Secure payment powered by Stripe
+                We&apos;ll confirm your booking via email
               </p>
             </form>
           </CardContent>
@@ -782,14 +784,14 @@ function BookingForm() {
                     </div>
 
                     <div className="flex justify-between">
-                      <span className="font-medium">Deposit due today</span>
+                      <span className="font-medium">Total</span>
                       <span className="text-lg font-semibold text-cyan-400">
-                        ${DEPOSIT_AMOUNT}
+                        ${selectedOption.price}
                       </span>
                     </div>
 
                     <p className="text-xs text-foreground/60">
-                      Balance of ${balance} due on delivery
+                      Payment due on delivery
                     </p>
                   </>
                 )}
@@ -849,7 +851,7 @@ function BookingForm() {
             </Button>
             <Button asChild variant="ghost" className="w-full">
               <a
-                href="mailto:bookings@popndroprentals.com"
+                href="mailto:bookings@popanddroprentals.com"
                 className="flex items-center gap-2"
               >
                 <Mail className="h-4 w-4" />
@@ -882,7 +884,7 @@ export default function BookingsPage() {
           Book Your Rental
         </h1>
         <p className="max-w-md text-sm leading-relaxed text-foreground/70 sm:text-base">
-          Fill out the form below and pay a small deposit to reserve your date.
+          Fill out the form below to reserve your date.
         </p>
       </div>
 
