@@ -23,32 +23,20 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning style={{ backgroundColor: 'oklch(0.145 0 0)' }}>
+    <html lang="en" suppressHydrationWarning style={{ backgroundColor: '#1a1a1a' }}>
       <body className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col antialiased`}>
         <ThemeProvider>
-          {/* Site-wide background - subtle Apple-style gradient */}
-          <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+          {/* Site-wide background gradient */}
+          <div className="pointer-events-none fixed inset-0 -z-10">
             {/* Base dark */}
-            <div className="absolute inset-0 bg-background" />
+            <div className="absolute inset-0 bg-neutral-950" />
 
-            {/* Subtle aurora blobs - refined, less heavy */}
-            {/* Top - soft purple/fuchsia glow */}
-            <div className="absolute -top-40 left-1/2 h-[500px] w-[700px] -translate-x-1/2 rounded-full bg-fuchsia-500/[0.07] blur-3xl" />
-            
-            {/* Top right - subtle cyan accent */}
-            <div className="absolute -top-20 right-[-150px] h-[400px] w-[400px] rounded-full bg-cyan-400/[0.06] blur-3xl" />
-            
-            {/* Middle left - soft purple */}
-            <div className="absolute top-[35%] left-[-180px] h-[450px] w-[450px] rounded-full bg-purple-500/[0.06] blur-3xl" />
-            
-            {/* Middle right - soft cyan */}
-            <div className="absolute top-[50%] right-[-120px] h-[400px] w-[400px] rounded-full bg-cyan-400/[0.05] blur-3xl" />
-            
-            {/* Bottom - soft purple glow */}
-            <div className="absolute bottom-[-150px] left-1/3 h-[450px] w-[500px] rounded-full bg-purple-500/[0.07] blur-3xl" />
-
-            {/* Subtle vignette */}
-            <div className="absolute inset-0 [background:radial-gradient(ellipse_at_center,rgba(0,0,0,0)_0%,rgba(0,0,0,0.12)_70%,rgba(0,0,0,0.25)_100%)]" />
+            {/* Gradient blobs */}
+            <div className="absolute -top-40 left-1/2 h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-fuchsia-600 opacity-[0.15] blur-[100px]" />
+            <div className="absolute -top-20 right-[-150px] h-[400px] w-[400px] rounded-full bg-cyan-500 opacity-[0.12] blur-[100px]" />
+            <div className="absolute top-[35%] left-[-180px] h-[500px] w-[500px] rounded-full bg-purple-600 opacity-[0.12] blur-[100px]" />
+            <div className="absolute top-[50%] right-[-120px] h-[400px] w-[400px] rounded-full bg-cyan-500 opacity-[0.10] blur-[100px]" />
+            <div className="absolute bottom-[-150px] left-1/3 h-[500px] w-[600px] rounded-full bg-purple-600 opacity-[0.15] blur-[100px]" />
           </div>
 
           <SiteHeader />

@@ -123,17 +123,13 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    /* No bg-background - gradient is handled in layout.tsx */
   }
 }
 
 /* Logo bounce animation - GPU accelerated, buttery smooth */
 @keyframes logo-bounce {
-  /* 
-   * PHASE 1: THE FALL (0-42%)
-   * Fewer keyframes here - let CSS interpolation do the work
-   * Using transform3d for GPU compositing
-   */
   0% {
     opacity: 0;
     transform: translate3d(0, -2500px, 0) scaleX(0.97) scaleY(1.03);
@@ -150,11 +146,6 @@
     opacity: 1;
     transform: translate3d(0, -12px, 0) scaleX(0.98) scaleY(1.02);
   }
-
-  /*
-   * PHASE 2: FIRST IMPACT & BOUNCE (42-68%)
-   * More keyframes here for precise squash/stretch physics
-   */
   45% {
     transform: translate3d(0, 0, 0) scaleX(1.12) scaleY(0.88);
   }
@@ -185,10 +176,6 @@
   68% {
     transform: translate3d(0, -20px, 0) scaleX(0.97) scaleY(1.03);
   }
-
-  /*
-   * PHASE 3: SECOND IMPACT & BOUNCE (68-85%)
-   */
   72% {
     transform: translate3d(0, -5px, 0) scaleX(0.99) scaleY(1.01);
   }
@@ -207,10 +194,6 @@
   85% {
     transform: translate3d(0, -12px, 0) scaleX(0.98) scaleY(1.02);
   }
-
-  /*
-   * PHASE 4: FINAL SETTLE (85-100%)
-   */
   88% {
     transform: translate3d(0, -5px, 0) scaleX(0.99) scaleY(1.01);
   }
