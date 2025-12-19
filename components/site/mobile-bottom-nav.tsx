@@ -17,10 +17,7 @@ export function MobileBottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
-      {/* Blur layer extends to very bottom edge */}
-      <div className="absolute inset-0 -bottom-10 bg-background/40 backdrop-blur-xl" />
-      
-      <div className="relative mx-auto max-w-5xl px-3 pb-3">
+      <div className="mx-auto max-w-5xl px-3 pb-3">
         <div className="rounded-2xl border bg-background/70 backdrop-blur-xl">
           <div className="grid grid-cols-4 px-2 py-2">
             {items.map(({ href, label, Icon }) => {
