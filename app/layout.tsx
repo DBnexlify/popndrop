@@ -32,11 +32,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="absolute inset-0 bg-neutral-950" />
 
             {/* Gradient blobs */}
-            <div className="absolute -top-40 left-1/2 h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-fuchsia-600 opacity-[0.15] blur-[100px]" />
-            <div className="absolute -top-20 right-[-150px] h-[400px] w-[400px] rounded-full bg-cyan-500 opacity-[0.12] blur-[100px]" />
-            <div className="absolute top-[35%] left-[-180px] h-[500px] w-[500px] rounded-full bg-purple-600 opacity-[0.12] blur-[100px]" />
-            <div className="absolute top-[50%] right-[-120px] h-[400px] w-[400px] rounded-full bg-cyan-500 opacity-[0.10] blur-[100px]" />
-            <div className="absolute bottom-[-150px] left-1/3 h-[500px] w-[600px] rounded-full bg-purple-600 opacity-[0.15] blur-[100px]" />
+            <div className="absolute -top-40 left-1/2 h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-fuchsia-600 opacity-[0.08] blur-[100px]" />
+            <div className="absolute -top-20 right-[-150px] h-[200px] w-[400px] rounded-full bg-cyan-500 opacity-[0.06] blur-[100px]" />
+            <div className="absolute top-[35%] left-[-180px] h-[500px] w-[500px] rounded-full bg-purple-600 opacity-[0.06] blur-[100px]" />
+            <div className="absolute top-[50%] right-[-120px] h-[800px] w-[400px] rounded-full bg-cyan-500 opacity-[0.05] blur-[100px]" />
+            <div className="absolute bottom-[-150px] left-1/3 h-[500px] w-[600px] rounded-full bg-purple-600 opacity-[0.08] blur-[100px]" />
           </div>
 
           <SiteHeader />
