@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { resend, FROM_EMAIL, NOTIFY_EMAIL } from '@/lib/resend';
 
-// Email template helper - creates consistent branded wrapper
+// Configuration
+const SITE_URL = "https://popndroprentals.com";
+const LOGO_URL = "https://popndroprentals.com/brand/logo.png";
+const POWER_OUTLET_DISTANCE = "50"; // feet - update to match your actual policy
+
+// Email wrapper with clean, email-safe HTML
 function createEmailWrapper(content: string, previewText: string) {
   return `
 <!DOCTYPE html>
@@ -10,60 +15,69 @@ function createEmailWrapper(content: string, previewText: string) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <title>Pop and Drop Party Rentals</title>
-  <!--[if mso]>
-  <style type="text/css">
-    body, table, td {font-family: Arial, sans-serif !important;}
-  </style>
-  <![endif]-->
 </head>
-<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-  <!-- Preview text (hidden) -->
-  <div style="display: none; max-height: 0; overflow: hidden;">
-    ${previewText}
+<body style="margin: 0; padding: 0; background-color: #111111; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+  
+  <!-- Preview text -->
+  <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">
+    ${previewText}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
   </div>
   
-  <!-- Email container -->
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0a0a0a;">
+  <!-- Main container -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #111111;">
     <tr>
-      <td align="center" style="padding: 40px 20px;">
-        <!-- Main content card -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 560px; background: linear-gradient(180deg, #1a1a1a 0%, #141414 100%); border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); overflow: hidden;">
+      <td align="center" style="padding: 32px 16px;">
+        
+        <!-- Content card -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 520px; background-color: #1a1a1a; border-radius: 16px;">
           
-          <!-- Header with logo -->
+          <!-- Logo header -->
           <tr>
-            <td align="center" style="padding: 32px 32px 24px 32px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-              <img src="https://popndroprentals.com/brand/logo.png" alt="Pop and Drop Party Rentals" width="180" style="display: block; max-width: 180px; height: auto;" />
+            <td align="center" style="padding: 28px 24px 20px 24px; border-bottom: 1px solid #2a2a2a;">
+              <a href="${SITE_URL}" style="text-decoration: none; display: block;">
+                <!--[if mso]>
+                <table cellpadding="0" cellspacing="0" border="0" align="center">
+                  <tr>
+                    <td align="center">
+                <![endif]-->
+                <img 
+                  src="${LOGO_URL}" 
+                  alt="Pop and Drop Party Rentals" 
+                  width="160" 
+                  height="160"
+                  style="display: block; width: 160px; height: auto; max-width: 100%; border: 0; border-radius: 12px;"
+                />
+                <!--[if mso]>
+                    </td>
+                  </tr>
+                </table>
+                <![endif]-->
+              </a>
             </td>
           </tr>
           
           <!-- Content -->
           <tr>
-            <td style="padding: 32px;">
+            <td style="padding: 28px 24px;">
               ${content}
             </td>
           </tr>
           
           <!-- Footer -->
           <tr>
-            <td style="padding: 24px 32px; background-color: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.06);">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+            <td style="padding: 20px 24px; background-color: #141414; border-top: 1px solid #2a2a2a; border-radius: 0 0 16px 16px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td align="center" style="padding-bottom: 16px;">
-                    <a href="tel:3524453723" style="color: #22d3ee; text-decoration: none; font-size: 14px; font-weight: 600;">
-                      📞 (352) 445-3723
-                    </a>
-                    <span style="color: rgba(255,255,255,0.3); margin: 0 12px;">|</span>
-                    <a href="mailto:bookings@popndroprentals.com" style="color: #22d3ee; text-decoration: none; font-size: 14px; font-weight: 600;">
-                      ✉️ bookings@popndroprentals.com
-                    </a>
+                  <td align="center" style="padding-bottom: 12px;">
+                    <a href="tel:3524453723" style="color: #22d3ee; text-decoration: none; font-size: 13px; font-weight: 500;">(352) 445-3723</a>
+                    <span style="color: #444444; margin: 0 8px;">•</span>
+                    <a href="mailto:bookings@popndroprentals.com" style="color: #22d3ee; text-decoration: none; font-size: 13px; font-weight: 500;">bookings@popndroprentals.com</a>
                   </td>
                 </tr>
                 <tr>
-                  <td align="center" style="color: rgba(255,255,255,0.4); font-size: 12px; line-height: 1.5;">
-                    Pop and Drop Party Rentals<br>
-                    Ocala, FL &amp; Marion County
+                  <td align="center">
+                    <span style="font-size: 12px; color: #555555;">Pop and Drop Party Rentals • Ocala, FL</span>
                   </td>
                 </tr>
               </table>
@@ -72,12 +86,14 @@ function createEmailWrapper(content: string, previewText: string) {
           
         </table>
         
-        <!-- Bottom text -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 560px;">
+        <!-- Bottom disclaimer -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 520px;">
           <tr>
-            <td align="center" style="padding: 24px 20px; color: rgba(255,255,255,0.3); font-size: 11px; line-height: 1.5;">
-              You're receiving this email because you made a booking at popndroprentals.com.<br>
-              © ${new Date().getFullYear()} Pop and Drop Party Rentals. All rights reserved.
+            <td align="center" style="padding: 20px 16px;">
+              <span style="font-size: 11px; color: #444444; line-height: 1.5;">
+                You received this email because you booked at <a href="${SITE_URL}" style="color: #555555;">popndroprentals.com</a><br>
+                © ${new Date().getFullYear()} Pop and Drop Party Rentals
+              </span>
             </td>
           </tr>
         </table>
@@ -85,12 +101,13 @@ function createEmailWrapper(content: string, previewText: string) {
       </td>
     </tr>
   </table>
+  
 </body>
 </html>
 `;
 }
 
-// Customer confirmation email content
+// Customer email content
 function createCustomerEmailContent({
   customerName,
   rentalName,
@@ -114,71 +131,83 @@ function createCustomerEmailContent({
   totalPrice: number;
   notes: string | null;
 }) {
+  const firstName = customerName.split(' ')[0];
+  
   return `
-<!-- Success badge -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+<!-- Success icon - perfectly round -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0">
   <tr>
-    <td align="center" style="padding-bottom: 24px;">
-      <div style="display: inline-block; background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); border-radius: 50%; padding: 16px;">
-        <span style="font-size: 32px;">✓</span>
-      </div>
+    <td align="center" style="padding-bottom: 20px;">
+      <!--[if mso]>
+      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" style="height:56px;v-text-anchor:middle;width:56px;" arcsize="50%" fillcolor="#22c55e" stroke="f">
+        <w:anchorlock/>
+        <center style="color:#ffffff;font-size:28px;">✓</center>
+      </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-->
+      <div style="display: inline-block; width: 56px; height: 56px; line-height: 56px; background-color: #22c55e; border-radius: 50%; text-align: center; font-size: 28px; color: #ffffff;">✓</div>
+      <!--<![endif]-->
     </td>
   </tr>
 </table>
 
-<!-- Headline -->
-<h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 700; color: #ffffff; text-align: center; line-height: 1.2;">
-  You're All Set! 🎉
-</h1>
-<p style="margin: 0 0 32px 0; font-size: 16px; color: rgba(255,255,255,0.7); text-align: center; line-height: 1.5;">
-  Get ready for an amazing party, ${customerName.split(' ')[0]}!
-</p>
-
-<!-- Booking details card -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: rgba(255,255,255,0.03); border-radius: 16px; border: 1px solid rgba(255,255,255,0.06); margin-bottom: 24px;">
+<!-- Heading -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0">
   <tr>
-    <td style="padding: 24px;">
+    <td align="center" style="padding-bottom: 6px;">
+      <span style="font-size: 24px; font-weight: 700; color: #ffffff;">You're All Set!</span>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" style="padding-bottom: 24px;">
+      <span style="font-size: 15px; color: #888888;">Get ready for an amazing party, ${firstName}!</span>
+    </td>
+  </tr>
+</table>
+
+<!-- Rental highlight -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: linear-gradient(135deg, #581c87 0%, #0e7490 100%); border-radius: 12px; margin-bottom: 20px;">
+  <tr>
+    <td align="center" style="padding: 16px 20px;">
+      <span style="font-size: 11px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px;">Your Rental</span>
+      <span style="font-size: 18px; font-weight: 600; color: #ffffff;">${rentalName}</span>
+    </td>
+  </tr>
+</table>
+
+<!-- Booking details -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #222222; border-radius: 12px; margin-bottom: 20px;">
+  <tr>
+    <td style="padding: 16px 20px;">
       
-      <!-- Rental name highlight -->
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <!-- Date & Package row -->
         <tr>
-          <td style="background: linear-gradient(135deg, rgba(217,70,239,0.15) 0%, rgba(34,211,238,0.15) 100%); border-radius: 12px; padding: 16px; text-align: center;">
-            <p style="margin: 0 0 4px 0; font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px;">
-              Your Rental
-            </p>
-            <p style="margin: 0; font-size: 20px; font-weight: 700; color: #ffffff;">
-              ${rentalName}
-            </p>
+          <td width="50%" style="padding: 6px 0; vertical-align: top;">
+            <span style="font-size: 11px; color: #666666; display: block;">📅 Date</span>
+            <span style="font-size: 14px; color: #ffffff; font-weight: 500;">${formattedDate}</span>
+          </td>
+          <td width="50%" style="padding: 6px 0; vertical-align: top;">
+            <span style="font-size: 11px; color: #666666; display: block;">📦 Package</span>
+            <span style="font-size: 14px; color: #ffffff; font-weight: 500;">${bookingType === 'weekend' ? 'Weekend Special' : 'Daily Rental'}</span>
           </td>
         </tr>
-      </table>
-      
-      <!-- Details grid -->
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+        <!-- Times row -->
         <tr>
-          <td width="50%" style="padding: 8px 8px 8px 0; vertical-align: top;">
-            <p style="margin: 0 0 4px 0; font-size: 12px; color: rgba(255,255,255,0.5);">📅 Date</p>
-            <p style="margin: 0; font-size: 14px; color: #ffffff; font-weight: 500;">${formattedDate}</p>
+          <td width="50%" style="padding: 6px 0; vertical-align: top;">
+            <span style="font-size: 11px; color: #666666; display: block;">🚚 Delivery</span>
+            <span style="font-size: 14px; color: #ffffff; font-weight: 500;">${deliveryTime}</span>
           </td>
-          <td width="50%" style="padding: 8px 0 8px 8px; vertical-align: top;">
-            <p style="margin: 0 0 4px 0; font-size: 12px; color: rgba(255,255,255,0.5);">📦 Package</p>
-            <p style="margin: 0; font-size: 14px; color: #ffffff; font-weight: 500;">${bookingType === 'weekend' ? 'Weekend Special' : 'Daily Rental'}</p>
+          <td width="50%" style="padding: 6px 0; vertical-align: top;">
+            <span style="font-size: 11px; color: #666666; display: block;">📍 Pickup</span>
+            <span style="font-size: 14px; color: #ffffff; font-weight: 500;">${pickupTime}</span>
           </td>
         </tr>
+        <!-- Address row -->
         <tr>
-          <td width="50%" style="padding: 8px 8px 8px 0; vertical-align: top;">
-            <p style="margin: 0 0 4px 0; font-size: 12px; color: rgba(255,255,255,0.5);">🚚 Delivery</p>
-            <p style="margin: 0; font-size: 14px; color: #ffffff; font-weight: 500;">${deliveryTime}</p>
-          </td>
-          <td width="50%" style="padding: 8px 0 8px 8px; vertical-align: top;">
-            <p style="margin: 0 0 4px 0; font-size: 12px; color: rgba(255,255,255,0.5);">🏠 Pickup</p>
-            <p style="margin: 0; font-size: 14px; color: #ffffff; font-weight: 500;">${pickupTime}</p>
-          </td>
-        </tr>
-        <tr>
-          <td colspan="2" style="padding: 8px 0 0 0; vertical-align: top;">
-            <p style="margin: 0 0 4px 0; font-size: 12px; color: rgba(255,255,255,0.5);">📍 Location</p>
-            <p style="margin: 0; font-size: 14px; color: #ffffff; font-weight: 500;">${address}, ${city}</p>
+          <td colspan="2" style="padding: 6px 0; padding-top: 12px; border-top: 1px solid #333333; margin-top: 8px;">
+            <span style="font-size: 11px; color: #666666; display: block;">🏠 Location</span>
+            <span style="font-size: 14px; color: #ffffff; font-weight: 500;">${address}, ${city}</span>
           </td>
         </tr>
       </table>
@@ -188,13 +217,13 @@ function createCustomerEmailContent({
 </table>
 
 <!-- Total -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: rgba(34,211,238,0.1); border-radius: 12px; margin-bottom: 24px;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: rgba(34, 211, 238, 0.1); border-radius: 10px; margin-bottom: 24px;">
   <tr>
-    <td style="padding: 16px 20px;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <td style="padding: 14px 20px;">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td style="color: rgba(255,255,255,0.7); font-size: 14px;">Total (due on delivery)</td>
-          <td align="right" style="color: #22d3ee; font-size: 24px; font-weight: 700;">$${totalPrice}</td>
+          <td style="color: #888888; font-size: 14px;">Total (due on delivery)</td>
+          <td align="right" style="color: #22d3ee; font-size: 22px; font-weight: 700;">$${totalPrice}</td>
         </tr>
       </table>
     </td>
@@ -202,63 +231,83 @@ function createCustomerEmailContent({
 </table>
 
 ${notes ? `
-<!-- Customer notes -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+<!-- Notes -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
   <tr>
-    <td style="padding: 12px 16px; background-color: rgba(255,255,255,0.03); border-radius: 8px; border-left: 3px solid #a855f7;">
-      <p style="margin: 0 0 4px 0; font-size: 12px; color: rgba(255,255,255,0.5);">Your Notes</p>
-      <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.8); line-height: 1.5;">${notes}</p>
+    <td style="padding: 12px 16px; background-color: #222222; border-left: 3px solid #a855f7; border-radius: 0 8px 8px 0;">
+      <span style="font-size: 11px; color: #666666; display: block; margin-bottom: 4px;">Your Notes</span>
+      <span style="font-size: 13px; color: #cccccc; line-height: 1.5;">${notes}</span>
     </td>
   </tr>
 </table>
 ` : ''}
 
-<!-- What happens next -->
-<h2 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600; color: #ffffff;">
-  What Happens Next?
-</h2>
+<!-- What's next section -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 20px;">
+  <tr>
+    <td style="padding-bottom: 14px;">
+      <span style="font-size: 16px; font-weight: 600; color: #ffffff;">What Happens Next?</span>
+    </td>
+  </tr>
+</table>
 
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+<!-- Steps -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
+  <!-- Step 1 -->
   <tr>
-    <td style="padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <td style="padding: 10px 0; border-bottom: 1px solid #2a2a2a;">
+      <table cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td width="32" style="vertical-align: top;">
-            <span style="display: inline-block; width: 24px; height: 24px; background: linear-gradient(135deg, #d946ef 0%, #a855f7 100%); border-radius: 50%; text-align: center; line-height: 24px; font-size: 12px; color: white; font-weight: 600;">1</span>
+          <td width="28" valign="top">
+            <table cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td width="22" height="22" align="center" valign="middle" style="background-color: #a855f7; border-radius: 11px; font-size: 11px; color: #ffffff; font-weight: 600;">1</td>
+              </tr>
+            </table>
           </td>
-          <td style="padding-left: 12px; vertical-align: top;">
-            <p style="margin: 0 0 2px 0; font-size: 14px; color: #ffffff; font-weight: 500;">Day Before Confirmation</p>
-            <p style="margin: 0; font-size: 13px; color: rgba(255,255,255,0.5);">We'll text you to confirm our arrival window</p>
+          <td style="padding-left: 10px;">
+            <span style="font-size: 14px; color: #ffffff; font-weight: 500; display: block;">Day Before Confirmation</span>
+            <span style="font-size: 12px; color: #666666;">We'll text you to confirm our arrival window</span>
           </td>
         </tr>
       </table>
     </td>
   </tr>
+  <!-- Step 2 -->
   <tr>
-    <td style="padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <td style="padding: 10px 0; border-bottom: 1px solid #2a2a2a;">
+      <table cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td width="32" style="vertical-align: top;">
-            <span style="display: inline-block; width: 24px; height: 24px; background: linear-gradient(135deg, #d946ef 0%, #a855f7 100%); border-radius: 50%; text-align: center; line-height: 24px; font-size: 12px; color: white; font-weight: 600;">2</span>
+          <td width="28" valign="top">
+            <table cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td width="22" height="22" align="center" valign="middle" style="background-color: #a855f7; border-radius: 11px; font-size: 11px; color: #ffffff; font-weight: 600;">2</td>
+              </tr>
+            </table>
           </td>
-          <td style="padding-left: 12px; vertical-align: top;">
-            <p style="margin: 0 0 2px 0; font-size: 14px; color: #ffffff; font-weight: 500;">Delivery Day</p>
-            <p style="margin: 0; font-size: 13px; color: rgba(255,255,255,0.5);">We'll set everything up and do a safety check</p>
+          <td style="padding-left: 10px;">
+            <span style="font-size: 14px; color: #ffffff; font-weight: 500; display: block;">Delivery Day</span>
+            <span style="font-size: 12px; color: #666666;">We set up everything and do a safety walkthrough</span>
           </td>
         </tr>
       </table>
     </td>
   </tr>
+  <!-- Step 3 -->
   <tr>
-    <td style="padding: 12px 0;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <td style="padding: 10px 0;">
+      <table cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td width="32" style="vertical-align: top;">
-            <span style="display: inline-block; width: 24px; height: 24px; background: linear-gradient(135deg, #d946ef 0%, #a855f7 100%); border-radius: 50%; text-align: center; line-height: 24px; font-size: 12px; color: white; font-weight: 600;">3</span>
+          <td width="28" valign="top">
+            <table cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td width="22" height="22" align="center" valign="middle" style="background-color: #a855f7; border-radius: 11px; font-size: 11px; color: #ffffff; font-weight: 600;">3</td>
+              </tr>
+            </table>
           </td>
-          <td style="padding-left: 12px; vertical-align: top;">
-            <p style="margin: 0 0 2px 0; font-size: 14px; color: #ffffff; font-weight: 500;">Party Time! 🎈</p>
-            <p style="margin: 0; font-size: 13px; color: rgba(255,255,255,0.5);">Enjoy your event - we'll handle the rest</p>
+          <td style="padding-left: 10px;">
+            <span style="font-size: 14px; color: #ffffff; font-weight: 500; display: block;">Party Time! 🎈</span>
+            <span style="font-size: 12px; color: #666666;">Enjoy your event — we handle the rest</span>
           </td>
         </tr>
       </table>
@@ -267,27 +316,25 @@ ${notes ? `
 </table>
 
 <!-- Prep tips -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: rgba(168,85,247,0.1); border-radius: 12px; margin-bottom: 24px;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #1f1a2e; border-radius: 10px; margin-bottom: 24px;">
   <tr>
-    <td style="padding: 16px 20px;">
-      <p style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #a855f7;">💡 Quick Prep Tips</p>
-      <p style="margin: 0; font-size: 13px; color: rgba(255,255,255,0.7); line-height: 1.6;">
-        Clear a flat area at least 5 feet larger than the rental. Make sure there's access to a power outlet within 100 feet. Remove any sharp objects from the setup area.
-      </p>
+    <td style="padding: 14px 18px;">
+      <span style="font-size: 13px; font-weight: 600; color: #c084fc; display: block; margin-bottom: 6px;">💡 Quick Prep Tips</span>
+      <span style="font-size: 13px; color: #a0a0a0; line-height: 1.5;">Clear a flat area at least 5 feet larger than the unit. Have a power outlet within ${POWER_OUTLET_DISTANCE} feet. Remove sharp objects from the setup area.</span>
     </td>
   </tr>
 </table>
 
-<!-- Questions CTA -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+<!-- CTA -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td align="center" style="padding-bottom: 8px;">
+      <span style="font-size: 13px; color: #666666;">Questions? We're here to help!</span>
+    </td>
+  </tr>
   <tr>
     <td align="center">
-      <p style="margin: 0 0 16px 0; font-size: 14px; color: rgba(255,255,255,0.6);">
-        Questions? We're here to help!
-      </p>
-      <a href="tel:3524453723" style="display: inline-block; background: linear-gradient(135deg, #d946ef 0%, #a855f7 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 32px; border-radius: 100px;">
-        Call Us: (352) 445-3723
-      </a>
+      <a href="tel:3524453723" style="display: inline-block; background: linear-gradient(135deg, #d946ef 0%, #a855f7 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 28px; border-radius: 50px;">Call Us: (352) 445-3723</a>
     </td>
   </tr>
 </table>
@@ -327,194 +374,165 @@ function createBusinessEmailContent({
   notes: string | null;
 }) {
   return `
-<!-- Alert badge -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+<!-- Alert header -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td align="center" style="padding-bottom: 8px;">
+      <span style="font-size: 28px;">🎯</span>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" style="padding-bottom: 4px;">
+      <span style="font-size: 22px; font-weight: 700; color: #ffffff;">New Booking!</span>
+    </td>
+  </tr>
   <tr>
     <td align="center" style="padding-bottom: 24px;">
-      <div style="display: inline-block; background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%); border-radius: 50%; padding: 16px;">
-        <span style="font-size: 32px;">🎯</span>
-      </div>
+      <span style="font-size: 14px; color: #888888;">${rentalName} • ${formattedDate}</span>
     </td>
   </tr>
 </table>
 
-<!-- Headline -->
-<h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 700; color: #ffffff; text-align: center; line-height: 1.2;">
-  New Booking! 💰
-</h1>
-<p style="margin: 0 0 32px 0; font-size: 16px; color: rgba(255,255,255,0.7); text-align: center; line-height: 1.5;">
-  ${rentalName} on ${formattedDate}
-</p>
-
-<!-- Quick action buttons -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+<!-- Quick actions -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 20px;">
   <tr>
     <td align="center">
-      <a href="tel:${customerPhone.replace(/\D/g, '')}" style="display: inline-block; background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 24px; border-radius: 100px; margin: 0 8px 8px 0;">
-        📞 Call Customer
-      </a>
-      <a href="mailto:${customerEmail}" style="display: inline-block; background: rgba(255,255,255,0.1); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 24px; border-radius: 100px; margin: 0 0 8px 0; border: 1px solid rgba(255,255,255,0.2);">
-        ✉️ Email Customer
-      </a>
+      <a href="tel:${customerPhone.replace(/\D/g, '')}" style="display: inline-block; background-color: #22c55e; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600; padding: 10px 18px; border-radius: 50px; margin-right: 8px;">📞 Call</a>
+      <a href="mailto:${customerEmail}" style="display: inline-block; background-color: #333333; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600; padding: 10px 18px; border-radius: 50px;">✉️ Email</a>
     </td>
   </tr>
 </table>
 
-<!-- Customer info card -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: linear-gradient(135deg, rgba(34,211,238,0.15) 0%, rgba(6,182,212,0.15) 100%); border-radius: 16px; border: 1px solid rgba(34,211,238,0.2); margin-bottom: 24px;">
+<!-- Customer info -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: linear-gradient(135deg, #164e63 0%, #0e7490 100%); border-radius: 12px; margin-bottom: 16px;">
   <tr>
-    <td style="padding: 20px 24px;">
-      <p style="margin: 0 0 12px 0; font-size: 12px; color: #22d3ee; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
-        👤 Customer Information
-      </p>
-      <p style="margin: 0 0 8px 0; font-size: 18px; color: #ffffff; font-weight: 600;">${customerName}</p>
-      <p style="margin: 0 0 4px 0; font-size: 14px; color: rgba(255,255,255,0.8);">📱 ${customerPhone}</p>
-      <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.8);">✉️ ${customerEmail}</p>
+    <td style="padding: 16px 20px;">
+      <span style="font-size: 10px; color: #67e8f9; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 8px;">Customer</span>
+      <span style="font-size: 17px; color: #ffffff; font-weight: 600; display: block; margin-bottom: 6px;">${customerName}</span>
+      <span style="font-size: 13px; color: #cccccc; display: block; margin-bottom: 2px;">📱 ${customerPhone}</span>
+      <span style="font-size: 13px; color: #cccccc;">✉️ ${customerEmail}</span>
     </td>
   </tr>
 </table>
 
 <!-- Booking details -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: rgba(255,255,255,0.03); border-radius: 16px; border: 1px solid rgba(255,255,255,0.06); margin-bottom: 24px;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #222222; border-radius: 12px; margin-bottom: 16px;">
   <tr>
-    <td style="padding: 24px;">
-      <p style="margin: 0 0 16px 0; font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
-        📋 Booking Details
-      </p>
+    <td style="padding: 16px 20px;">
+      <span style="font-size: 10px; color: #666666; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 12px;">Booking Details</span>
       
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-              <tr>
-                <td style="color: rgba(255,255,255,0.5); font-size: 13px;">Rental</td>
-                <td align="right" style="color: #ffffff; font-size: 14px; font-weight: 600;">${rentalName}</td>
-              </tr>
-            </table>
+          <td style="padding: 6px 0; border-bottom: 1px solid #333333;">
+            <span style="font-size: 13px; color: #888888;">Rental</span>
+          </td>
+          <td align="right" style="padding: 6px 0; border-bottom: 1px solid #333333;">
+            <span style="font-size: 13px; color: #ffffff; font-weight: 500;">${rentalName}</span>
           </td>
         </tr>
         <tr>
-          <td style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-              <tr>
-                <td style="color: rgba(255,255,255,0.5); font-size: 13px;">Date</td>
-                <td align="right" style="color: #ffffff; font-size: 14px; font-weight: 600;">${formattedDate}</td>
-              </tr>
-            </table>
+          <td style="padding: 6px 0; border-bottom: 1px solid #333333;">
+            <span style="font-size: 13px; color: #888888;">Date</span>
+          </td>
+          <td align="right" style="padding: 6px 0; border-bottom: 1px solid #333333;">
+            <span style="font-size: 13px; color: #ffffff; font-weight: 500;">${formattedDate}</span>
           </td>
         </tr>
         <tr>
-          <td style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-              <tr>
-                <td style="color: rgba(255,255,255,0.5); font-size: 13px;">Package</td>
-                <td align="right" style="color: #ffffff; font-size: 14px; font-weight: 600;">${bookingType === 'weekend' ? 'Weekend Special' : 'Daily Rental'}</td>
-              </tr>
-            </table>
+          <td style="padding: 6px 0; border-bottom: 1px solid #333333;">
+            <span style="font-size: 13px; color: #888888;">Package</span>
+          </td>
+          <td align="right" style="padding: 6px 0; border-bottom: 1px solid #333333;">
+            <span style="font-size: 13px; color: #ffffff; font-weight: 500;">${bookingType === 'weekend' ? 'Weekend' : 'Daily'}</span>
           </td>
         </tr>
         <tr>
-          <td style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-              <tr>
-                <td style="color: rgba(255,255,255,0.5); font-size: 13px;">Delivery</td>
-                <td align="right" style="color: #ffffff; font-size: 14px; font-weight: 600;">${deliveryTime}</td>
-              </tr>
-            </table>
+          <td style="padding: 6px 0; border-bottom: 1px solid #333333;">
+            <span style="font-size: 13px; color: #888888;">Delivery</span>
+          </td>
+          <td align="right" style="padding: 6px 0; border-bottom: 1px solid #333333;">
+            <span style="font-size: 13px; color: #ffffff; font-weight: 500;">${deliveryTime}</span>
           </td>
         </tr>
         <tr>
-          <td style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-              <tr>
-                <td style="color: rgba(255,255,255,0.5); font-size: 13px;">Pickup</td>
-                <td align="right" style="color: #ffffff; font-size: 14px; font-weight: 600;">${pickupTime}</td>
-              </tr>
-            </table>
+          <td style="padding: 6px 0; border-bottom: 1px solid #333333;">
+            <span style="font-size: 13px; color: #888888;">Pickup</span>
+          </td>
+          <td align="right" style="padding: 6px 0; border-bottom: 1px solid #333333;">
+            <span style="font-size: 13px; color: #ffffff; font-weight: 500;">${pickupTime}</span>
           </td>
         </tr>
         <tr>
-          <td style="padding: 8px 0;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-              <tr>
-                <td style="color: rgba(255,255,255,0.5); font-size: 13px;">Address</td>
-                <td align="right" style="color: #ffffff; font-size: 14px; font-weight: 600;">${address}, ${city}</td>
-              </tr>
-            </table>
+          <td style="padding: 6px 0;">
+            <span style="font-size: 13px; color: #888888;">Address</span>
+          </td>
+          <td align="right" style="padding: 6px 0;">
+            <span style="font-size: 13px; color: #ffffff; font-weight: 500;">${address}, ${city}</span>
           </td>
         </tr>
       </table>
+      
     </td>
   </tr>
 </table>
 
 <!-- Pricing -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: linear-gradient(135deg, rgba(34,197,94,0.15) 0%, rgba(22,163,74,0.15) 100%); border-radius: 16px; border: 1px solid rgba(34,197,94,0.2); margin-bottom: 24px;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #14532d; border-radius: 12px; margin-bottom: 16px;">
   <tr>
-    <td style="padding: 20px 24px;">
-      <p style="margin: 0 0 12px 0; font-size: 12px; color: #22c55e; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
-        💵 Pricing
-      </p>
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <td style="padding: 16px 20px;">
+      <span style="font-size: 10px; color: #86efac; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 10px;">Pricing</span>
+      
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
           <td style="padding: 4px 0;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-              <tr>
-                <td style="color: rgba(255,255,255,0.7); font-size: 14px;">Total</td>
-                <td align="right" style="color: #ffffff; font-size: 14px;">$${totalPrice}</td>
-              </tr>
-            </table>
+            <span style="font-size: 13px; color: #a7f3d0;">Total</span>
+          </td>
+          <td align="right" style="padding: 4px 0;">
+            <span style="font-size: 13px; color: #ffffff;">$${totalPrice}</span>
           </td>
         </tr>
         <tr>
           <td style="padding: 4px 0;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-              <tr>
-                <td style="color: rgba(255,255,255,0.7); font-size: 14px;">Deposit Paid</td>
-                <td align="right" style="color: #ffffff; font-size: 14px;">$${depositAmount}</td>
-              </tr>
-            </table>
+            <span style="font-size: 13px; color: #a7f3d0;">Deposit</span>
+          </td>
+          <td align="right" style="padding: 4px 0;">
+            <span style="font-size: 13px; color: #ffffff;">$${depositAmount}</span>
           </td>
         </tr>
         <tr>
-          <td style="padding: 8px 0 0 0; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 8px;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-              <tr>
-                <td style="color: #22c55e; font-size: 16px; font-weight: 600;">Balance Due</td>
-                <td align="right" style="color: #22c55e; font-size: 20px; font-weight: 700;">$${balanceDue}</td>
-              </tr>
-            </table>
+          <td style="padding: 8px 0 0 0; border-top: 1px solid #166534;">
+            <span style="font-size: 14px; color: #4ade80; font-weight: 600;">Balance Due</span>
+          </td>
+          <td align="right" style="padding: 8px 0 0 0; border-top: 1px solid #166534;">
+            <span style="font-size: 18px; color: #4ade80; font-weight: 700;">$${balanceDue}</span>
           </td>
         </tr>
       </table>
+      
     </td>
   </tr>
 </table>
 
 ${notes ? `
 <!-- Customer notes -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: rgba(168,85,247,0.1); border-radius: 12px; border-left: 4px solid #a855f7; margin-bottom: 24px;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #1f1a2e; border-left: 3px solid #a855f7; border-radius: 0 8px 8px 0; margin-bottom: 16px;">
   <tr>
-    <td style="padding: 16px 20px;">
-      <p style="margin: 0 0 8px 0; font-size: 12px; color: #a855f7; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
-        📝 Customer Notes
-      </p>
-      <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.9); line-height: 1.6;">${notes}</p>
+    <td style="padding: 14px 18px;">
+      <span style="font-size: 10px; color: #c084fc; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 6px;">Customer Notes</span>
+      <span style="font-size: 13px; color: #cccccc; line-height: 1.5;">${notes}</span>
     </td>
   </tr>
 </table>
 ` : ''}
 
-<!-- Action checklist -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+<!-- Checklist -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #222222; border-radius: 10px;">
   <tr>
-    <td style="padding: 16px 20px;">
-      <p style="margin: 0 0 12px 0; font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
-        ✅ Action Items
-      </p>
-      <p style="margin: 0 0 8px 0; font-size: 14px; color: rgba(255,255,255,0.8);">☐ Add to calendar</p>
-      <p style="margin: 0 0 8px 0; font-size: 14px; color: rgba(255,255,255,0.8);">☐ Confirm availability of ${rentalName}</p>
-      <p style="margin: 0; font-size: 14px; color: rgba(255,255,255,0.8);">☐ Text customer day before</p>
+    <td style="padding: 14px 18px;">
+      <span style="font-size: 10px; color: #666666; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 10px;">Action Items</span>
+      <span style="font-size: 13px; color: #aaaaaa; display: block; margin-bottom: 6px;">☐ Add to calendar</span>
+      <span style="font-size: 13px; color: #aaaaaa; display: block; margin-bottom: 6px;">☐ Confirm ${rentalName} availability</span>
+      <span style="font-size: 13px; color: #aaaaaa; display: block;">☐ Text customer day before</span>
     </td>
   </tr>
 </table>
@@ -554,7 +572,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Check if date is still available (prevent race conditions)
+    // Check if date is still available
     const { data: existingBookings } = await supabase
       .from('bookings')
       .select('id')
@@ -569,7 +587,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // For weekend bookings, also check Sunday
+    // For weekend bookings, check Sunday too
     if (bookingType === 'weekend') {
       const eventDateObj = new Date(eventDate);
       const sunday = new Date(eventDateObj);
@@ -591,7 +609,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create booking in database
+    // Create booking
     const bookingData = {
       rental_id: rentalId,
       rental_name: rentalName,
@@ -633,7 +651,7 @@ export async function POST(request: NextRequest) {
       year: 'numeric',
     });
 
-    // Send confirmation email to customer
+    // Send customer email
     try {
       const customerContent = createCustomerEmailContent({
         customerName,
@@ -651,17 +669,17 @@ export async function POST(request: NextRequest) {
       await resend.emails.send({
         from: FROM_EMAIL,
         to: customerEmail,
-        subject: `🎉 You're booked! ${rentalName} on ${formattedDate}`,
+        subject: `You're booked! ${rentalName} on ${formattedDate}`,
         html: createEmailWrapper(
           customerContent,
-          `Your ${rentalName} rental is confirmed for ${formattedDate}. We can't wait to help make your party amazing!`
+          `Your ${rentalName} rental is confirmed for ${formattedDate}. We can't wait to make your party amazing!`
         ),
       });
     } catch (emailError) {
       console.error('Failed to send customer email:', emailError);
     }
 
-    // Send notification email to business
+    // Send business notification
     try {
       const businessContent = createBusinessEmailContent({
         customerName,
@@ -683,7 +701,7 @@ export async function POST(request: NextRequest) {
       await resend.emails.send({
         from: FROM_EMAIL,
         to: NOTIFY_EMAIL,
-        subject: `🎯 New Booking: ${rentalName} - ${formattedDate} - $${totalPrice}`,
+        subject: `New Booking: ${rentalName} - ${formattedDate} - $${totalPrice}`,
         html: createEmailWrapper(
           businessContent,
           `New booking from ${customerName} for ${rentalName} on ${formattedDate}. Total: $${totalPrice}`
@@ -693,7 +711,6 @@ export async function POST(request: NextRequest) {
       console.error('Failed to send business notification:', emailError);
     }
 
-    // Return success
     return NextResponse.json({
       success: true,
       bookingId: booking.id,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
@@ -14,14 +14,12 @@ interface GalleryLightboxProps {
   alt?: string;
 }
 
-// Configuration
+// Gesture thresholds
 const SWIPE_THRESHOLD = 50;
 const VELOCITY_THRESHOLD = 0.3;
-const DISMISS_THRESHOLD = 150;
+const DISMISS_THRESHOLD = 120;
 const DOUBLE_TAP_DELAY = 300;
-const ZOOM_LEVELS = { min: 1, max: 3, doubleTap: 2 };
-
-type GestureState = "idle" | "swiping" | "dismissing" | "zooming" | "panning";
+const ZOOM_MAX = 3;
 
 export function GalleryLightbox({
   images,
@@ -30,73 +28,85 @@ export function GalleryLightbox({
   onClose,
   alt = "Gallery image",
 }: GalleryLightboxProps) {
-  // Core state
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [showControls, setShowControls] = useState(true);
-  const [mounted, setMounted] = useState(false);
+  // Use key to force clean remount on each open
+  const [instanceKey, setInstanceKey] = useState(0);
   
-  // Animation state
-  const [isEntering, setIsEntering] = useState(false);
-  const [isExiting, setIsExiting] = useState(false);
-  
-  // Gesture state
-  const [gestureState, setGestureState] = useState<GestureState>("idle");
-  const [slideOffset, setSlideOffset] = useState(0);
-  const [dismissOffset, setDismissOffset] = useState(0);
-  const [scale, setScale] = useState(1);
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
-  
-  // Refs for gesture tracking
-  const containerRef = useRef<HTMLDivElement>(null);
-  const touchStartRef = useRef({ x: 0, y: 0, time: 0 });
-  const lastTapRef = useRef(0);
-  const initialPinchDistanceRef = useRef(0);
-  const initialScaleRef = useRef(1);
-  const gestureLockedRef = useRef<"horizontal" | "vertical" | null>(null);
+  // Track if we should render
+  const [shouldRender, setShouldRender] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
-  // Portal mounting
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Handle open
+  // Handle open/close lifecycle
   useEffect(() => {
     if (isOpen) {
-      setCurrentIndex(initialIndex);
-      setIsEntering(true);
-      setIsExiting(false);
-      setShowControls(true);
-      resetGestureState();
+      // Opening - increment key to force fresh state, then render
+      setInstanceKey((k) => k + 1);
+      setShouldRender(true);
+      setIsClosing(false);
       document.body.style.overflow = "hidden";
-      
-      requestAnimationFrame(() => {
-        setTimeout(() => setIsEntering(false), 300);
-      });
+    } else if (shouldRender) {
+      // Closing - animate out then unmount
+      setIsClosing(true);
+      const timer = setTimeout(() => {
+        setShouldRender(false);
+        setIsClosing(false);
+        document.body.style.overflow = "";
+      }, 250);
+      return () => clearTimeout(timer);
     }
+  }, [isOpen]);
+
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
       document.body.style.overflow = "";
     };
-  }, [isOpen, initialIndex]);
-
-  // Reset gesture state
-  const resetGestureState = useCallback(() => {
-    setGestureState("idle");
-    setSlideOffset(0);
-    setDismissOffset(0);
-    setScale(1);
-    setPanOffset({ x: 0, y: 0 });
-    gestureLockedRef.current = null;
   }, []);
 
-  // Close with animation
-  const handleClose = useCallback(() => {
-    setIsExiting(true);
-    setTimeout(() => {
-      document.body.style.overflow = "";
-      onClose();
-      setIsExiting(false);
-    }, 250);
-  }, [onClose]);
+  if (!shouldRender) return null;
+
+  return createPortal(
+    <LightboxContent
+      key={instanceKey}
+      images={images}
+      initialIndex={initialIndex}
+      isClosing={isClosing}
+      onClose={onClose}
+      alt={alt}
+    />,
+    document.body
+  );
+}
+
+// Separated content component - gets fresh state on each open via key
+function LightboxContent({
+  images,
+  initialIndex,
+  isClosing,
+  onClose,
+  alt,
+}: {
+  images: string[];
+  initialIndex: number;
+  isClosing: boolean;
+  onClose: () => void;
+  alt: string;
+}) {
+  // Initialize with correct index immediately - no useEffect delay
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [showControls, setShowControls] = useState(true);
+  
+  // Gesture state
+  const [slideOffset, setSlideOffset] = useState(0);
+  const [dismissOffset, setDismissOffset] = useState(0);
+  const [scale, setScale] = useState(1);
+  const [isDragging, setIsDragging] = useState(false);
+  
+  // Refs
+  const touchStartRef = useRef({ x: 0, y: 0, time: 0 });
+  const lastTapRef = useRef(0);
+  const gestureRef = useRef<"none" | "horizontal" | "vertical" | "pinch">("none");
+  const initialPinchRef = useRef(0);
+  const initialScaleRef = useRef(1);
 
   // Navigation
   const canGoNext = currentIndex < images.length - 1;
@@ -104,254 +114,167 @@ export function GalleryLightbox({
 
   const goToNext = useCallback(() => {
     if (canGoNext) {
-      setCurrentIndex((prev) => prev + 1);
-      resetGestureState();
+      setCurrentIndex((i) => i + 1);
+      setScale(1);
     }
-  }, [canGoNext, resetGestureState]);
+  }, [canGoNext]);
 
-  const goToPrevious = useCallback(() => {
+  const goToPrev = useCallback(() => {
     if (canGoPrev) {
-      setCurrentIndex((prev) => prev - 1);
-      resetGestureState();
+      setCurrentIndex((i) => i - 1);
+      setScale(1);
     }
-  }, [canGoPrev, resetGestureState]);
+  }, [canGoPrev]);
+
+  // Close handler
+  const handleClose = useCallback(() => {
+    onClose();
+  }, [onClose]);
 
   // Keyboard navigation
   useEffect(() => {
-    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleClose();
+      if (e.key === "ArrowRight") goToNext();
+      if (e.key === "ArrowLeft") goToPrev();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [handleClose, goToNext, goToPrev]);
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case "Escape":
-          handleClose();
-          break;
-        case "ArrowLeft":
-          goToPrevious();
-          break;
-        case "ArrowRight":
-          goToNext();
-          break;
+  // Preload adjacent images
+  useEffect(() => {
+    const preload = (index: number) => {
+      if (index >= 0 && index < images.length) {
+        const img = new window.Image();
+        img.src = images[index];
       }
     };
+    preload(currentIndex - 1);
+    preload(currentIndex + 1);
+  }, [currentIndex, images]);
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, handleClose, goToNext, goToPrevious]);
-
-  // Calculate pinch distance
-  const getPinchDistance = (touches: React.TouchList): number => {
-    if (touches.length < 2) return 0;
-    const dx = touches[0].clientX - touches[1].clientX;
-    const dy = touches[0].clientY - touches[1].clientY;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
-
-  // Touch start handler
+  // Touch handlers
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touches = e.touches;
     
-    // Pinch zoom start (two fingers)
     if (touches.length === 2) {
-      setGestureState("zooming");
-      initialPinchDistanceRef.current = getPinchDistance(touches);
+      gestureRef.current = "pinch";
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      initialPinchRef.current = Math.sqrt(dx * dx + dy * dy);
       initialScaleRef.current = scale;
       return;
     }
     
-    // Single touch
-    const touch = touches[0];
+    gestureRef.current = "none";
     touchStartRef.current = {
-      x: touch.clientX,
-      y: touch.clientY,
+      x: touches[0].clientX,
+      y: touches[0].clientY,
       time: Date.now(),
     };
-    gestureLockedRef.current = null;
+    setIsDragging(true);
   }, [scale]);
 
-  // Touch move handler
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     const touches = e.touches;
     
     // Pinch zoom
-    if (touches.length === 2 && gestureState === "zooming") {
-      const currentDistance = getPinchDistance(touches);
-      const pinchScale = currentDistance / initialPinchDistanceRef.current;
-      const newScale = Math.min(
-        ZOOM_LEVELS.max,
-        Math.max(ZOOM_LEVELS.min, initialScaleRef.current * pinchScale)
-      );
+    if (touches.length === 2 && gestureRef.current === "pinch") {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const newScale = Math.min(ZOOM_MAX, Math.max(1, initialScaleRef.current * (distance / initialPinchRef.current)));
       setScale(newScale);
       return;
     }
     
-    // Single touch gestures
-    if (touches.length !== 1) return;
+    if (touches.length !== 1 || !isDragging) return;
     
-    const touch = touches[0];
-    const deltaX = touch.clientX - touchStartRef.current.x;
-    const deltaY = touch.clientY - touchStartRef.current.y;
+    const deltaX = touches[0].clientX - touchStartRef.current.x;
+    const deltaY = touches[0].clientY - touchStartRef.current.y;
     
-    // Lock gesture direction on first significant movement
-    if (!gestureLockedRef.current && (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10)) {
-      gestureLockedRef.current = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
+    // Lock direction
+    if (gestureRef.current === "none" && (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10)) {
+      gestureRef.current = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
     }
     
-    // If zoomed in, pan the image
-    if (scale > 1) {
-      setGestureState("panning");
-      setPanOffset({
-        x: deltaX,
-        y: deltaY,
-      });
-      return;
-    }
+    // When zoomed, don't allow swipe navigation
+    if (scale > 1) return;
     
-    // Horizontal swipe - navigate
-    if (gestureLockedRef.current === "horizontal") {
-      setGestureState("swiping");
-      // Add resistance at edges
+    if (gestureRef.current === "horizontal") {
+      // Rubber band at edges
       let offset = deltaX;
       if ((deltaX > 0 && !canGoPrev) || (deltaX < 0 && !canGoNext)) {
-        offset = deltaX * 0.3; // Rubber band effect
+        offset = deltaX * 0.25;
       }
       setSlideOffset(offset);
-    }
-    
-    // Vertical swipe - dismiss (only downward)
-    if (gestureLockedRef.current === "vertical" && deltaY > 0) {
-      setGestureState("dismissing");
+    } else if (gestureRef.current === "vertical" && deltaY > 0) {
       setDismissOffset(deltaY);
     }
-  }, [gestureState, scale, canGoNext, canGoPrev]);
+  }, [isDragging, scale, canGoNext, canGoPrev]);
 
-  // Touch end handler
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+  const handleTouchEnd = useCallback(() => {
     const elapsed = Date.now() - touchStartRef.current.time;
     const velocityX = Math.abs(slideOffset) / elapsed;
     const velocityY = Math.abs(dismissOffset) / elapsed;
     
-    // Handle pinch end
-    if (gestureState === "zooming") {
-      // Snap to 1 if close to it
-      if (scale < 1.1) {
-        setScale(1);
-        setPanOffset({ x: 0, y: 0 });
+    // Pinch end
+    if (gestureRef.current === "pinch") {
+      if (scale < 1.1) setScale(1);
+      gestureRef.current = "none";
+      setIsDragging(false);
+      return;
+    }
+    
+    // Swipe navigation
+    if (gestureRef.current === "horizontal") {
+      if (Math.abs(slideOffset) > SWIPE_THRESHOLD || velocityX > VELOCITY_THRESHOLD) {
+        if (slideOffset > 0) goToPrev();
+        else goToNext();
       }
-      setGestureState("idle");
-      return;
     }
     
-    // Handle pan end
-    if (gestureState === "panning") {
-      // Keep pan offset relative to current position
-      // For simplicity, reset on touch end (could be enhanced to maintain position)
-      setGestureState("idle");
-      setPanOffset({ x: 0, y: 0 });
-      return;
-    }
-    
-    // Handle swipe navigation
-    if (gestureState === "swiping") {
-      const shouldNavigate = 
-        Math.abs(slideOffset) > SWIPE_THRESHOLD || 
-        velocityX > VELOCITY_THRESHOLD;
-      
-      if (shouldNavigate) {
-        if (slideOffset > 0 && canGoPrev) {
-          goToPrevious();
-        } else if (slideOffset < 0 && canGoNext) {
-          goToNext();
-        }
-      }
-      setSlideOffset(0);
-      setGestureState("idle");
-      return;
-    }
-    
-    // Handle dismiss
-    if (gestureState === "dismissing") {
+    // Dismiss
+    if (gestureRef.current === "vertical") {
       if (dismissOffset > DISMISS_THRESHOLD || velocityY > VELOCITY_THRESHOLD) {
         handleClose();
-      } else {
-        setDismissOffset(0);
+        return;
       }
-      setGestureState("idle");
-      return;
     }
     
-    // Handle taps (only if no significant movement)
-    if (Math.abs(slideOffset) < 5 && Math.abs(dismissOffset) < 5) {
+    // Tap detection
+    if (Math.abs(slideOffset) < 5 && Math.abs(dismissOffset) < 5 && gestureRef.current === "none") {
       const now = Date.now();
-      const timeSinceLastTap = now - lastTapRef.current;
-      
-      // Double tap - toggle zoom
-      if (timeSinceLastTap < DOUBLE_TAP_DELAY) {
-        if (scale > 1) {
-          setScale(1);
-          setPanOffset({ x: 0, y: 0 });
-        } else {
-          setScale(ZOOM_LEVELS.doubleTap);
-        }
+      if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+        // Double tap - toggle zoom
+        setScale((s) => (s > 1 ? 1 : 2));
         lastTapRef.current = 0;
       } else {
-        // Single tap - toggle controls (with delay to check for double tap)
         lastTapRef.current = now;
         setTimeout(() => {
-          if (Date.now() - lastTapRef.current >= DOUBLE_TAP_DELAY) {
-            setShowControls((prev) => !prev);
+          if (Date.now() - lastTapRef.current >= DOUBLE_TAP_DELAY - 50) {
+            setShowControls((s) => !s);
           }
         }, DOUBLE_TAP_DELAY);
       }
     }
     
-    gestureLockedRef.current = null;
-    setGestureState("idle");
-  }, [
-    gestureState, 
-    slideOffset, 
-    dismissOffset, 
-    scale,
-    canGoNext, 
-    canGoPrev, 
-    goToNext, 
-    goToPrevious, 
-    handleClose
-  ]);
+    setSlideOffset(0);
+    setDismissOffset(0);
+    setIsDragging(false);
+    gestureRef.current = "none";
+  }, [slideOffset, dismissOffset, scale, goToNext, goToPrev, handleClose]);
 
-  if (!mounted || !isOpen) return null;
+  // Calculate styles
+  const backdropOpacity = dismissOffset > 0 ? Math.max(0, 1 - dismissOffset / 300) : 1;
+  const imageScale = dismissOffset > 0 ? Math.max(0.85, 1 - dismissOffset / 400) : 1;
 
-  // Calculate visual transforms
-  const imageTransform = (() => {
-    let transform = "";
-    
-    // Dismissing - move down and scale
-    if (gestureState === "dismissing") {
-      const dismissScale = Math.max(0.8, 1 - dismissOffset / 500);
-      transform = `translateY(${dismissOffset}px) scale(${dismissScale})`;
-    }
-    // Zoomed/panning
-    else if (scale !== 1 || gestureState === "panning") {
-      transform = `scale(${scale}) translate(${panOffset.x / scale}px, ${panOffset.y / scale}px)`;
-    }
-    // Normal
-    else {
-      transform = "translateY(0) scale(1)";
-    }
-    
-    return transform;
-  })();
-
-  const backdropOpacity = gestureState === "dismissing"
-    ? Math.max(0, 1 - dismissOffset / 300)
-    : 1;
-
-  return createPortal(
+  return (
     <div
-      ref={containerRef}
       className={cn(
-        "fixed inset-0 z-[100]",
-        "flex items-center justify-center",
-        "touch-none select-none"
+        "fixed inset-0 z-[100] touch-none select-none",
+        "flex items-center justify-center"
       )}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -361,118 +284,100 @@ export function GalleryLightbox({
       <div
         className={cn(
           "absolute inset-0 bg-black",
-          "transition-opacity duration-300"
+          isClosing ? "animate-out fade-out duration-200" : "animate-in fade-in duration-200"
         )}
-        style={{
-          opacity: isExiting ? 0 : isEntering ? 0 : backdropOpacity,
-        }}
+        style={{ opacity: isClosing ? undefined : backdropOpacity }}
+        onClick={handleClose}
       />
 
       {/* Top controls */}
       <div
         className={cn(
-          "absolute inset-x-0 top-0 z-20",
-          "flex items-center justify-between p-4",
+          "absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4",
           "transition-opacity duration-200",
-          showControls && !isExiting ? "opacity-100" : "opacity-0 pointer-events-none"
+          showControls && !isClosing ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
       >
-        {/* Counter pill */}
-        <div className="rounded-full bg-black/50 px-3 py-1.5 text-sm font-medium text-white/90 backdrop-blur-md">
+        <div className="rounded-full bg-black/60 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-md">
           {currentIndex + 1} / {images.length}
         </div>
-
-        {/* Close button */}
         <button
           onClick={handleClose}
-          className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-full",
-            "bg-black/50 text-white/90 backdrop-blur-md",
-            "transition-all duration-200",
-            "hover:bg-black/70 active:scale-95"
-          )}
-          aria-label="Close gallery"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition-transform active:scale-95"
+          aria-label="Close"
         >
           <X className="h-5 w-5" />
         </button>
       </div>
 
-      {/* Desktop navigation arrows */}
+      {/* Desktop nav arrows */}
       {images.length > 1 && (
         <>
           <button
-            onClick={goToPrevious}
+            onClick={goToPrev}
             disabled={!canGoPrev}
             className={cn(
-              "absolute left-4 z-20 hidden sm:flex",
-              "h-12 w-12 items-center justify-center rounded-full",
-              "bg-black/50 text-white/90 backdrop-blur-md",
-              "transition-all duration-200",
-              "hover:bg-black/70 active:scale-95",
+              "absolute left-4 z-20 hidden h-12 w-12 items-center justify-center rounded-full sm:flex",
+              "bg-black/60 text-white backdrop-blur-md transition-all active:scale-95",
               "disabled:opacity-30 disabled:cursor-not-allowed",
-              showControls && !isExiting ? "opacity-100" : "opacity-0 pointer-events-none"
+              showControls && !isClosing ? "opacity-100" : "opacity-0 pointer-events-none"
             )}
-            aria-label="Previous image"
+            aria-label="Previous"
           >
             <ChevronLeft className="h-6 w-6" />
           </button>
-
           <button
             onClick={goToNext}
             disabled={!canGoNext}
             className={cn(
-              "absolute right-4 z-20 hidden sm:flex",
-              "h-12 w-12 items-center justify-center rounded-full",
-              "bg-black/50 text-white/90 backdrop-blur-md",
-              "transition-all duration-200",
-              "hover:bg-black/70 active:scale-95",
+              "absolute right-4 z-20 hidden h-12 w-12 items-center justify-center rounded-full sm:flex",
+              "bg-black/60 text-white backdrop-blur-md transition-all active:scale-95",
               "disabled:opacity-30 disabled:cursor-not-allowed",
-              showControls && !isExiting ? "opacity-100" : "opacity-0 pointer-events-none"
+              showControls && !isClosing ? "opacity-100" : "opacity-0 pointer-events-none"
             )}
-            aria-label="Next image"
+            aria-label="Next"
           >
             <ChevronRight className="h-6 w-6" />
           </button>
         </>
       )}
 
-      {/* Image carousel container */}
+      {/* Image carousel */}
       <div
-        className="relative z-10 h-full w-full overflow-hidden"
-        style={{
-          opacity: isEntering ? 0 : isExiting ? 0 : 1,
-          transition: "opacity 0.3s ease-out",
-        }}
+        className={cn(
+          "relative z-10 h-full w-full overflow-hidden",
+          isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200"
+        )}
       >
-        {/* Sliding image track */}
         <div
-          className="flex h-full transition-transform duration-300 ease-out"
+          className="flex h-full"
           style={{
             width: `${images.length * 100}%`,
             transform: `translateX(calc(-${currentIndex * (100 / images.length)}% + ${slideOffset}px))`,
-            transition: gestureState === "swiping" ? "none" : "transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)",
+            transition: isDragging ? "none" : "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         >
-          {images.map((src, index) => (
+          {images.map((src, i) => (
             <div
-              key={index}
+              key={src}
               className="flex h-full items-center justify-center"
               style={{ width: `${100 / images.length}%` }}
             >
               <div
-                className="relative h-[85vh] w-[90vw] max-w-4xl"
+                className="relative h-[85vh] w-[90vw] max-w-4xl transition-transform duration-200"
                 style={{
-                  transform: index === currentIndex ? imageTransform : "scale(1)",
-                  transition: gestureState === "idle" ? "transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)" : "none",
+                  transform: i === currentIndex 
+                    ? `translateY(${dismissOffset}px) scale(${imageScale * scale})` 
+                    : "scale(1)",
                 }}
               >
                 <Image
                   src={src}
-                  alt={`${alt} ${index + 1}`}
+                  alt={`${alt} ${i + 1}`}
                   fill
                   className="object-contain"
                   sizes="90vw"
-                  priority={Math.abs(index - currentIndex) <= 1}
+                  priority={i === initialIndex || Math.abs(i - currentIndex) <= 1}
                   draggable={false}
                 />
               </div>
@@ -481,30 +386,24 @@ export function GalleryLightbox({
         </div>
       </div>
 
-      {/* Bottom indicator dots */}
+      {/* Dots */}
       {images.length > 1 && (
         <div
           className={cn(
-            "absolute bottom-8 left-1/2 z-20",
-            "flex -translate-x-1/2 gap-1.5",
+            "absolute bottom-8 left-1/2 z-20 flex -translate-x-1/2 gap-1.5",
             "transition-opacity duration-200",
-            showControls && !isExiting ? "opacity-100" : "opacity-0 pointer-events-none"
+            showControls && !isClosing ? "opacity-100" : "opacity-0"
           )}
         >
-          {images.map((_, index) => (
+          {images.map((_, i) => (
             <button
-              key={index}
-              onClick={() => {
-                setCurrentIndex(index);
-                resetGestureState();
-              }}
+              key={i}
+              onClick={() => setCurrentIndex(i)}
               className={cn(
-                "h-2 rounded-full transition-all duration-300",
-                index === currentIndex
-                  ? "w-6 bg-white"
-                  : "w-2 bg-white/40 hover:bg-white/60"
+                "h-2 rounded-full transition-all duration-200",
+                i === currentIndex ? "w-6 bg-white" : "w-2 bg-white/40"
               )}
-              aria-label={`Go to image ${index + 1}`}
+              aria-label={`Image ${i + 1}`}
             />
           ))}
         </div>
@@ -512,11 +411,10 @@ export function GalleryLightbox({
 
       {/* Zoom indicator */}
       {scale > 1 && (
-        <div className="absolute bottom-20 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs text-white/80 backdrop-blur-md">
+        <div className="absolute bottom-20 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs text-white backdrop-blur-md">
           {Math.round(scale * 100)}%
         </div>
       )}
-    </div>,
-    document.body
+    </div>
   );
 }
