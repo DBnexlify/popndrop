@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { useEffect, useState, createContext, useContext, useCallback } from "react";
-import { Bell, BellOff, Download, X, CheckCircle2, Loader2 } from "lucide-react";
+import { Bell, BellOff, Download, X, CheckCircle2, Loader2, Share, PlusSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // =============================================================================
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 interface PWAContextType {
   isInstalled: boolean;
   isInstallable: boolean;
+  isIOS: boolean;
   isOnline: boolean;
   notificationPermission: NotificationPermission | "default";
   isSubscribed: boolean;
@@ -45,10 +46,9 @@ export function usePWA() {
 }
 
 // =============================================================================
-// VAPID PUBLIC KEY (Replace with your own from Supabase)
+// VAPID PUBLIC KEY
 // =============================================================================
 
-// This should be set in your environment variables
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
 
 // =============================================================================
@@ -66,6 +66,19 @@ function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
   return outputArray.buffer as ArrayBuffer;
 }
 
+function isIOSDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as Window & { MSStream?: unknown }).MSStream;
+}
+
+function isInStandaloneMode(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
 // =============================================================================
 // PROVIDER COMPONENT
 // =============================================================================
@@ -73,25 +86,22 @@ function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
 export function PWAProvider({ children }: { children: React.ReactNode }) {
   const [isInstalled, setIsInstalled] = useState(false);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
 
-  // Check if already installed as PWA
+  // Check platform and install status
   useEffect(() => {
-    const checkInstalled = () => {
-      const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
-      const isIOSStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-      setIsInstalled(isStandalone || isIOSStandalone);
-    };
+    setIsIOS(isIOSDevice());
+    setIsInstalled(isInStandaloneMode());
     
-    checkInstalled();
-    window.matchMedia("(display-mode: standalone)").addEventListener("change", checkInstalled);
-    
+    const handleChange = () => setIsInstalled(isInStandaloneMode());
+    window.matchMedia("(display-mode: standalone)").addEventListener("change", handleChange);
     return () => {
-      window.matchMedia("(display-mode: standalone)").removeEventListener("change", checkInstalled);
+      window.matchMedia("(display-mode: standalone)").removeEventListener("change", handleChange);
     };
   }, []);
 
@@ -118,7 +128,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
     registerSW();
   }, []);
 
-  // Listen for install prompt
+  // Listen for install prompt (Android/Desktop Chrome)
   useEffect(() => {
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
@@ -127,7 +137,6 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstall);
-
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
     };
@@ -155,7 +164,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Install PWA
+  // Install PWA (Android/Desktop)
   const install = useCallback(async () => {
     if (!deferredPrompt) return;
 
@@ -182,7 +191,6 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // Request notification permission
       const permission = await Notification.requestPermission();
       setNotificationPermission(permission);
 
@@ -191,7 +199,6 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Subscribe to push
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
@@ -199,7 +206,6 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 
       console.log("[PWA] Push subscription:", subscription);
 
-      // Send subscription to server
       const response = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -225,14 +231,12 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
       const subscription = await registration.pushManager.getSubscription();
       
       if (subscription) {
-        // Remove from server first
         await fetch("/api/push/unsubscribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ endpoint: subscription.endpoint }),
         });
 
-        // Then unsubscribe locally
         await subscription.unsubscribe();
         setIsSubscribed(false);
         console.log("[PWA] Unsubscribed from push notifications");
@@ -247,6 +251,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
       value={{
         isInstalled,
         isInstallable,
+        isIOS,
         isOnline,
         notificationPermission,
         isSubscribed,
@@ -265,17 +270,101 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 // =============================================================================
 
 export function PWAInstallPrompt() {
-  const { isInstallable, isInstalled, install } = usePWA();
+  const { isInstallable, isInstalled, isIOS, install } = usePWA();
   const [dismissed, setDismissed] = useState(false);
+  const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
-  // Don't show if already installed, not installable, or dismissed
-  if (isInstalled || !isInstallable || dismissed) return null;
+  // Check localStorage for dismissed state
+  useEffect(() => {
+    const wasDismissed = localStorage.getItem("pwa-install-dismissed");
+    if (wasDismissed) {
+      const dismissedAt = parseInt(wasDismissed, 10);
+      // Show again after 7 days
+      if (Date.now() - dismissedAt < 7 * 24 * 60 * 60 * 1000) {
+        setDismissed(true);
+      }
+    }
+  }, []);
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    localStorage.setItem("pwa-install-dismissed", Date.now().toString());
+  };
+
+  // Don't show if already installed or dismissed
+  if (isInstalled || dismissed) return null;
+
+  // Don't show if not installable and not iOS
+  if (!isInstallable && !isIOS) return null;
+
+  // iOS Instructions Modal
+  if (showIOSInstructions) {
+    return (
+      <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 backdrop-blur-sm p-4 lg:items-center">
+        <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-900 p-6 shadow-[0_20px_70px_rgba(0,0,0,0.4)]">
+          <button
+            onClick={() => setShowIOSInstructions(false)}
+            className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          
+          <h3 className="mb-4 text-lg font-semibold">Install on iPhone/iPad</h3>
+          
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">
+                1
+              </div>
+              <div>
+                <p className="font-medium">Tap the Share button</p>
+                <p className="text-sm text-foreground/60">
+                  <Share className="mb-0.5 inline h-4 w-4" /> at the bottom of Safari
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">
+                2
+              </div>
+              <div>
+                <p className="font-medium">Scroll down and tap</p>
+                <p className="text-sm text-foreground/60">
+                  <PlusSquare className="mb-0.5 inline h-4 w-4" /> &quot;Add to Home Screen&quot;
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">
+                3
+              </div>
+              <div>
+                <p className="font-medium">Tap &quot;Add&quot;</p>
+                <p className="text-sm text-foreground/60">
+                  The app will appear on your home screen
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <Button
+            onClick={() => setShowIOSInstructions(false)}
+            className="mt-6 w-full bg-gradient-to-r from-fuchsia-500 to-purple-600"
+          >
+            Got it!
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed bottom-20 left-4 right-4 z-50 animate-in slide-in-from-bottom-4 lg:bottom-4 lg:left-auto lg:right-4 lg:w-80">
+    <div className="fixed bottom-24 left-4 right-4 z-50 animate-in slide-in-from-bottom-4 lg:bottom-4 lg:left-auto lg:right-4 lg:w-80">
       <div className="relative overflow-hidden rounded-xl border border-white/10 bg-neutral-900/95 p-4 shadow-[0_20px_70px_rgba(0,0,0,0.4)] backdrop-blur-xl">
         <button
-          onClick={() => setDismissed(true)}
+          onClick={handleDismiss}
           className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full text-foreground/50 hover:bg-white/10"
         >
           <X className="h-4 w-4" />
@@ -288,19 +377,18 @@ export function PWAInstallPrompt() {
           <div className="min-w-0">
             <p className="font-medium">Install Admin App</p>
             <p className="mt-0.5 text-sm text-foreground/60">
-              Quick access with push notifications
+              Quick access from your home screen
             </p>
             <Button
-              onClick={install}
+              onClick={isIOS ? () => setShowIOSInstructions(true) : install}
               size="sm"
               className="mt-3 bg-gradient-to-r from-fuchsia-500 to-purple-600"
             >
-              Install Now
+              {isIOS ? "Show Me How" : "Install Now"}
             </Button>
           </div>
         </div>
         
-        {/* Inner glow */}
         <div className="pointer-events-none absolute inset-0 rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07)]" />
       </div>
     </div>
@@ -330,15 +418,20 @@ export function NotificationToggle() {
 
   // Don't show if notifications not supported
   if (typeof window === "undefined" || !("Notification" in window)) {
-    return null;
+    return (
+      <div className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2.5 text-sm text-foreground/50">
+        <BellOff className="h-4 w-4" />
+        <span>Notifications not supported</span>
+      </div>
+    );
   }
 
   // Permission denied
   if (notificationPermission === "denied") {
     return (
-      <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
+      <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
         <BellOff className="h-4 w-4" />
-        <span>Notifications blocked in browser settings</span>
+        <span>Blocked in browser settings</span>
       </div>
     );
   }
@@ -347,7 +440,7 @@ export function NotificationToggle() {
     <button
       onClick={handleToggle}
       disabled={loading}
-      className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors ${
         isSubscribed
           ? "bg-green-500/10 text-green-400 hover:bg-green-500/20"
           : "bg-white/5 text-foreground/70 hover:bg-white/10"

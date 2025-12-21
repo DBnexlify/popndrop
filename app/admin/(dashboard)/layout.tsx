@@ -9,6 +9,7 @@ import { AdminNav } from '@/components/admin/admin-nav';
 import { AdminMobileNav } from '@/components/admin/admin-mobile-nav';
 import { PWAProvider, PWAInstallPrompt, OfflineIndicator } from '@/components/admin/pwa-provider';
 import type { Metadata, Viewport } from 'next';
+import Image from 'next/image';
 
 // =============================================================================
 // PWA METADATA
@@ -66,15 +67,36 @@ export default async function AdminDashboardLayout({
         
         {/* Main content */}
         <div className="lg:pl-64">
-          {/* Top bar for mobile */}
-          <div className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-white/10 bg-neutral-950/80 px-4 backdrop-blur-xl lg:hidden">
-            <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-sm font-semibold text-transparent">
-              Pop & Drop Admin
-            </span>
-          </div>
+          {/* Mobile header */}
+          <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-white/10 bg-neutral-950/80 px-4 backdrop-blur-xl lg:hidden">
+            <div className="flex items-center gap-2">
+              <Image
+                src="/brand/logo.png"
+                alt="Pop & Drop"
+                width={32}
+                height={32}
+                className="h-8 w-8 object-contain"
+              />
+              <div className="flex flex-col">
+                <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-sm font-bold text-transparent">
+                  Pop & Drop
+                </span>
+                <span className="text-[10px] font-medium text-foreground/50">
+                  Admin Dashboard
+                </span>
+              </div>
+            </div>
+            
+            {/* Admin badge */}
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-gradient-to-r from-fuchsia-500/20 to-purple-500/20 px-2.5 py-1 text-[10px] font-semibold text-fuchsia-300">
+                ADMIN
+              </span>
+            </div>
+          </header>
           
           {/* Page content */}
-          <main className="min-h-[calc(100vh-3.5rem)] pb-20 lg:min-h-screen lg:pb-0">
+          <main className="min-h-[calc(100vh-3.5rem)] pb-24 lg:min-h-screen lg:pb-0">
             {children}
           </main>
         </div>
