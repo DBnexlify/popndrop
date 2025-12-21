@@ -41,6 +41,8 @@ import {
   AlertCircle,
   Sparkles,
   Loader2,
+  Clock,
+  Truck,
 } from "lucide-react";
 
 // =============================================================================
@@ -152,7 +154,7 @@ function Callout({
     >
       <div className="flex items-start gap-3 text-sm">
         <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", iconColors[variant])} />
-        {children}
+        <div className="flex-1">{children}</div>
       </div>
       {/* Inner feather for nested elements */}
       <div className="pointer-events-none absolute inset-0 rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]" />
@@ -228,8 +230,8 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
-  // Track which option type is currently selected (for smart time reset)
-  const [lastOptionType, setLastOptionType] = useState<string | null>(null);
+  // Track the previous date to detect date changes
+  const [prevEventDate, setPrevEventDate] = useState<Date | undefined>();
 
   // Availability state
   const [unavailableDates, setUnavailableDates] = useState<Date[]>([]);
@@ -283,41 +285,69 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     return null;
   }, [selectedProduct, eventDate]);
 
-  // Auto-select first pricing option when options change
-  // FIX: Only reset times when the option TYPE actually changes
+  // ==========================================================================
+  // SMART OPTION SELECTION
+  // ==========================================================================
+  // When the date changes, we need to select a default option.
+  // CRITICAL: For multi-option dates (Saturday/Sunday), we should:
+  // - NOT auto-select the "recommended" option (that feels like a trick)
+  // - Instead, select the base option and show the upgrade nudge
+  // - Let the USER choose to upgrade
+  // ==========================================================================
+  
   useEffect(() => {
-    if (pricingResult?.available && pricingResult.options.length >= 1) {
-      const firstOption = pricingResult.options[0];
-
-      // Only update selection and reset times if option type changed
-      if (lastOptionType !== firstOption.type) {
-        setSelectedOption(firstOption);
-        setLastOptionType(firstOption.type);
+    // Only run when the date actually changes
+    if (eventDate && eventDate !== prevEventDate) {
+      setPrevEventDate(eventDate);
+      
+      if (pricingResult?.available && pricingResult.options.length > 0) {
+        const options = pricingResult.options;
+        
+        // For multi-option scenarios (Saturday/Sunday), select the BASE option
+        // This is the NON-recommended option (daily or sunday-only)
+        // The user can then choose to upgrade via the nudge
+        if (options.length > 1) {
+          const baseOption = options.find(o => !o.recommended) || options[0];
+          setSelectedOption(baseOption);
+        } else {
+          // Single option (Mon-Fri) - just select it
+          setSelectedOption(options[0]);
+        }
+        
+        // Reset time selections when date changes
         setFormData((prev) => ({ ...prev, deliveryTime: "", pickupTime: "" }));
-      } else {
-        // Same option type, just update the option object (in case price changed)
-        setSelectedOption(firstOption);
       }
-    } else if (!pricingResult?.available) {
+    }
+    
+    // Handle when date is cleared
+    if (!eventDate && prevEventDate) {
+      setPrevEventDate(undefined);
       setSelectedOption(null);
-      setLastOptionType(null);
       setFormData((prev) => ({ ...prev, deliveryTime: "", pickupTime: "" }));
     }
-  }, [pricingResult, lastOptionType]);
+  }, [eventDate, prevEventDate, pricingResult]);
 
   // Computed values
-  const hasMultipleOptions =
-    pricingResult?.options && pricingResult.options.length > 1;
+  const hasMultipleOptions = pricingResult?.options && pricingResult.options.length > 1;
   const isSundayEvent = eventDate?.getDay() === 0;
+  const isSaturdayEvent = eventDate?.getDay() === 6;
   const recommendedOption = pricingResult?.options.find((o) => o.recommended);
+  const baseOption = pricingResult?.options.find((o) => !o.recommended);
+  
+  // Show upgrade nudge when user has selected the non-recommended option
+  // AND there is a recommended option available
   const showUpgradeNudge =
     selectedOption &&
     !selectedOption.recommended &&
     hasMultipleOptions &&
     recommendedOption;
-  const upgradePriceDiff = showUpgradeNudge
+  
+  const upgradePriceDiff = showUpgradeNudge && recommendedOption && selectedOption
     ? recommendedOption.price - selectedOption.price
     : 0;
+
+  // Show Sunday explanation when Sunday-only is selected
+  const showSundayExplanation = selectedOption?.type === "sunday";
 
   // Calendar bounds
   const minDate = new Date();
@@ -360,10 +390,10 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     }
   }, [calendarMonth, maxDate]);
 
-  // Handle option selection with time reset
+  // Handle option selection - resets times when option changes
   const handleOptionSelect = useCallback((option: PricingOption) => {
+    console.log("[Booking] Option selected:", option.type);
     setSelectedOption(option);
-    setLastOptionType(option.type);
     setFormData((prev) => ({ ...prev, deliveryTime: "", pickupTime: "" }));
   }, []);
 
@@ -674,80 +704,163 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                 </Popover>
               </div>
 
-              {/* Duration Selection - Using Tier 3 nested card pattern for options */}
+              {/* ============================================================= */}
+              {/* DURATION SELECTION - Only show when multiple options exist */}
+              {/* User MUST actively choose - no sneaky auto-upgrades! */}
+              {/* ============================================================= */}
               {hasMultipleOptions && pricingResult && (
                 <div className="space-y-2">
                   <Label>
                     {isSundayEvent
-                      ? "Sunday rental options *"
+                      ? "Choose your rental option *"
+                      : isSaturdayEvent
+                      ? "Saturday rental options *"
                       : "Rental duration *"}
                   </Label>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    {pricingResult.options.map((option) => (
-                      <button
-                        key={option.type}
-                        type="button"
-                        onClick={() => handleOptionSelect(option)}
-                        className={cn(
-                          "relative overflow-hidden rounded-lg border p-4 text-left transition-all duration-200 sm:rounded-xl",
-                          selectedOption?.type === option.type
-                            ? "border-cyan-500/50 bg-cyan-500/10 shadow-[0_0_20px_rgba(6,182,212,0.15)]"
-                            : "border-white/5 bg-white/[0.03] hover:border-white/10 hover:bg-white/[0.05]"
-                        )}
-                      >
-                        {/* Header row: label + badge on left, price on right */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-semibold">{option.label}</span>
-                            {option.badge && (
-                              <Badge className="border-0 bg-gradient-to-r from-fuchsia-500 to-purple-600 text-[10px] text-white shadow-lg shadow-fuchsia-500/20">
-                                {option.badge}
-                              </Badge>
-                            )}
+                    {pricingResult.options.map((option) => {
+                      const isSelected = selectedOption?.type === option.type;
+                      
+                      return (
+                        <button
+                          key={option.type}
+                          type="button"
+                          onClick={() => handleOptionSelect(option)}
+                          className={cn(
+                            "relative overflow-hidden rounded-lg border p-4 text-left transition-all duration-200 sm:rounded-xl",
+                            isSelected
+                              ? "border-cyan-500/50 bg-cyan-500/10 shadow-[0_0_20px_rgba(6,182,212,0.15)]"
+                              : "border-white/5 bg-white/[0.03] hover:border-white/10 hover:bg-white/[0.05]"
+                          )}
+                        >
+                          {/* Header row: label + badge on left, price on right */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold">{option.label}</span>
+                              {option.badge && (
+                                <Badge className="border-0 bg-gradient-to-r from-fuchsia-500 to-purple-600 text-[10px] text-white shadow-lg shadow-fuchsia-500/20">
+                                  {option.badge}
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="shrink-0 text-lg font-semibold">
+                              ${option.price}
+                            </span>
                           </div>
-                          <span className="shrink-0 text-lg font-semibold">
-                            ${option.price}
-                          </span>
-                        </div>
-                        <p className={cn(styles.smallBody, "mt-1")}>
-                          {option.description}
-                        </p>
-                        {/* Inner feather */}
-                        <div className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]" />
-                      </button>
-                    ))}
+                          <p className={cn(styles.smallBody, "mt-1")}>
+                            {option.description}
+                          </p>
+                          
+                          {/* Selection indicator */}
+                          {isSelected && (
+                            <div className="absolute right-3 top-3">
+                              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500">
+                                <Check className="h-3 w-3 text-white" />
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Inner feather */}
+                          <div className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]" />
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {/* Upgrade Nudge */}
-              {showUpgradeNudge && selectedProduct && (
+              {/* ============================================================= */}
+              {/* UPGRADE NUDGE - Shown when base option is selected */}
+              {/* Psychology: Helpful suggestion, not forced upsell */}
+              {/* ============================================================= */}
+              {showUpgradeNudge && selectedProduct && recommendedOption && (
                 <Callout variant="upsell" icon={Sparkles}>
-                  <div className="space-y-2">
-                    <p>
-                      <span className="font-medium text-fuchsia-300">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="font-medium text-fuchsia-300">
                         {isSundayEvent
                           ? "Want the full weekend?"
-                          : "Upgrade to the weekend package?"}
-                      </span>{" "}
-                      <span className="text-foreground/70">
+                          : "Add Sunday for a full weekend!"}
+                      </p>
+                      <p className="mt-1 text-foreground/70">
                         {isSundayEvent
-                          ? `We'll deliver Saturday morning instead — enjoy both days for just $${upgradePriceDiff} more!`
-                          : `Keep it through Sunday and we'll pick up Monday — only $${upgradePriceDiff} more!`}
-                      </span>
+                          ? `Upgrade and we'll deliver Saturday morning instead — enjoy both days for just $${upgradePriceDiff} more!`
+                          : `Keep it through Sunday for just $${upgradePriceDiff} more. We'll pick up Monday morning.`}
+                      </p>
+                    </div>
+                    
+                    {/* Two clear buttons - user always has a choice */}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleOptionSelect(recommendedOption)}
+                        className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-xs text-white shadow-lg shadow-fuchsia-500/20 hover:shadow-xl hover:shadow-fuchsia-500/30"
+                      >
+                        <Sparkles className="mr-1.5 h-3 w-3" />
+                        Upgrade to Weekend — ${recommendedOption.price}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          // User explicitly chose to keep current option - no action needed
+                          // Just collapse the nudge by... it's already their selection
+                          console.log("[Booking] User kept:", selectedOption?.type);
+                        }}
+                        className="text-xs text-foreground/60 hover:text-foreground/80"
+                      >
+                        Keep {selectedOption?.label}
+                      </Button>
+                    </div>
+                  </div>
+                </Callout>
+              )}
+
+              {/* ============================================================= */}
+              {/* SUNDAY-ONLY EXPLANATION */}
+              {/* Shown when user selects Sunday-only option */}
+              {/* Psychology: Reduce anxiety, make logistics feel handled */}
+              {/* ============================================================= */}
+              {showSundayExplanation && (
+                <Callout variant="info" icon={Truck}>
+                  <div>
+                    <p className="font-medium text-cyan-300">
+                      Here&apos;s how Sunday rentals work
                     </p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        if (recommendedOption) {
-                          handleOptionSelect(recommendedOption);
-                        }
-                      }}
-                      className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-xs text-white shadow-lg shadow-fuchsia-500/20 hover:shadow-xl hover:shadow-fuchsia-500/30"
-                    >
-                      Upgrade to Weekend (${recommendedOption?.price})
-                    </Button>
+                    <ul className="mt-2 space-y-1.5 text-foreground/70">
+                      <li className="flex items-start gap-2">
+                        <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400/60" />
+                        <span>We&apos;ll deliver <strong className="text-foreground/90">Saturday evening (5–7 PM)</strong> so it&apos;s ready for your Sunday event</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400/60" />
+                        <span>Pickup is <strong className="text-foreground/90">Monday morning</strong> — no rush!</span>
+                      </li>
+                    </ul>
+                  </div>
+                </Callout>
+              )}
+
+              {/* ============================================================= */}
+              {/* WEEKEND CONFIRMATION (when weekend is selected) */}
+              {/* ============================================================= */}
+              {selectedOption?.type === "weekend" && eventDate && (
+                <Callout variant="info" icon={CalendarIcon}>
+                  <div>
+                    <p className="font-medium text-cyan-300">
+                      Full weekend rental — great choice!
+                    </p>
+                    <p className={cn(styles.bodyText, "mt-1")}>
+                      We&apos;ll deliver on{" "}
+                      <span className="text-foreground/90">
+                        {isSundayEvent ? "Saturday" : format(eventDate, "EEEE")}
+                      </span>{" "}
+                      and pick up on{" "}
+                      <span className="text-foreground/90">Monday</span>.
+                      Enjoy both days!
+                    </p>
                   </div>
                 </Callout>
               )}
@@ -814,23 +927,6 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                   </Select>
                 </div>
               </div>
-
-              {/* Sunday Info Callout */}
-              {isSundayEvent && selectedOption && (
-                <Callout variant="info" icon={CalendarIcon}>
-                  <div>
-                    <p className="font-medium text-cyan-300">
-                      Sunday event? We&apos;ve got you covered!
-                    </p>
-                    <p className={cn(styles.bodyText, "mt-1")}>
-                      We&apos;ll deliver on{" "}
-                      <span className="text-foreground/90">Saturday</span> so
-                      everything is ready for your Sunday event, then pick up on{" "}
-                      <span className="text-foreground/90">Monday</span>.
-                    </p>
-                  </div>
-                </Callout>
-              )}
 
               {/* Address */}
               <div className="space-y-2">

@@ -120,11 +120,14 @@ export function getDayName(date: Date): string {
  * Get pricing options for a product on a specific date
  * 
  * BUSINESS LOGIC:
- * - Sunday (day 0): Offer weekend package (PREFERRED) or Sunday-only
- *   → Weekend: Delivered Saturday morning, pickup Monday
+ * - Sunday (day 0): Offer Sunday-only (BASE) or weekend package (UPGRADE)
  *   → Sunday-only: Delivered Saturday evening, pickup Monday
- * - Saturday (day 6): Offer daily OR weekend package
+ *   → Weekend: Delivered Saturday morning, pickup Monday
+ * - Saturday (day 6): Offer daily (BASE) OR weekend package (UPGRADE)
  * - Mon-Fri (days 1-5): Daily rate only
+ * 
+ * IMPORTANT: The BASE option (non-recommended) should be FIRST in the array.
+ * This prevents auto-upgrading users without their consent.
  */
 export function getPricingOptions(product: ProductDisplay, date: Date): PricingResult {
   const dayOfWeek = date.getDay();
@@ -139,16 +142,31 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
     };
   }
   
-  // SUNDAY - offer weekend (preferred) or Sunday-only
+  // =========================================================================
+  // SUNDAY - offer Sunday-only (base) or weekend (upgrade)
+  // Base option FIRST so user isn't auto-upgraded
+  // =========================================================================
   if (dayOfWeek === 0) {
     return {
       available: true,
       options: [
+        // BASE OPTION FIRST - user's initial selection
+        {
+          type: "sunday",
+          price: product.pricing.sunday,
+          label: "Sunday only",
+          description: "Delivered Saturday evening (5-7 PM), pickup Monday",
+          deliveryDay: "Saturday",
+          deliveryWindows: SCHEDULE.saturdayEveningWindow,
+          pickupDay: "Monday",
+          pickupWindows: SCHEDULE.mondayPickupWindows,
+        },
+        // UPGRADE OPTION - shown via nudge
         {
           type: "weekend",
           price: product.pricing.weekend,
-          label: "Weekend package",
-          description: "Get the full weekend! Delivered Saturday morning, pickup Monday",
+          label: "Full weekend",
+          description: "Delivered Saturday morning, pickup Monday — more time!",
           deliveryDay: "Saturday",
           deliveryWindows: SCHEDULE.deliveryWindows,
           pickupDay: "Monday",
@@ -156,25 +174,19 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
           recommended: true,
           badge: "Best value",
         },
-        {
-          type: "sunday",
-          price: product.pricing.sunday,
-          label: "Sunday only",
-          description: "Delivered Saturday evening, pickup Monday",
-          deliveryDay: "Saturday",
-          deliveryWindows: SCHEDULE.saturdayEveningWindow,
-          pickupDay: "Monday",
-          pickupWindows: SCHEDULE.mondayPickupWindows,
-        },
       ],
     };
   }
   
-  // SATURDAY - offer daily or weekend options
+  // =========================================================================
+  // SATURDAY - offer daily (base) or weekend (upgrade)
+  // Base option FIRST
+  // =========================================================================
   if (dayOfWeek === 6) {
     return {
       available: true,
       options: [
+        // BASE OPTION FIRST
         {
           type: "daily",
           price: product.pricing.daily,
@@ -185,10 +197,11 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
           pickupDay: "Saturday",
           pickupWindows: SCHEDULE.sameDayPickupWindows,
         },
+        // UPGRADE OPTION
         {
           type: "weekend",
           price: product.pricing.weekend,
-          label: "Weekend package",
+          label: "Full weekend",
           description: "Keep it Saturday & Sunday, pickup Monday",
           deliveryDay: "Saturday",
           deliveryWindows: SCHEDULE.deliveryWindows,
@@ -201,7 +214,9 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
     };
   }
   
-  // FRIDAY - offer daily with next-morning option
+  // =========================================================================
+  // FRIDAY - daily with next-morning pickup option
+  // =========================================================================
   if (dayOfWeek === 5) {
     return {
       available: true,
@@ -220,7 +235,9 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
     };
   }
   
+  // =========================================================================
   // MONDAY-THURSDAY - daily rate only
+  // =========================================================================
   return {
     available: true,
     options: [
