@@ -43,6 +43,12 @@ export function SiteHeader() {
               Contact
             </Link>
             <Link
+              href="/my-bookings"
+              className="rounded-lg px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-white/5 hover:text-foreground"
+            >
+              My Bookings
+            </Link>
+            <Link
               href="/bookings"
               className="ml-2 rounded-lg bg-gradient-to-r from-fuchsia-500 to-purple-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-fuchsia-500/20 transition-all hover:shadow-xl hover:shadow-fuchsia-500/30"
             >

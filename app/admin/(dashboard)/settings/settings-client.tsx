@@ -5,7 +5,7 @@
 // app/admin/(dashboard)/settings/settings-client.tsx
 // =============================================================================
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Smartphone, 
   User, 
@@ -28,7 +28,10 @@ import {
   Clock,
   Star,
   Play,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
+import { isAudioEnabled, setAudioEnabled, playNewBookingSound } from "@/lib/admin-sounds";
 import { Button } from "@/components/ui/button";
 import { usePWA } from "@/components/admin/pwa-provider";
 import type { AdminUser } from "@/lib/database-types";
@@ -56,11 +59,33 @@ export function SettingsClient({ admin }: SettingsClientProps) {
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   
+  // Sound state
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  
+  // Initialize sound state from localStorage
+  useEffect(() => {
+    setSoundEnabled(isAudioEnabled());
+  }, []);
+  
+  // Handle sound toggle
+  const handleSoundToggle = () => {
+    const newState = !soundEnabled;
+    setSoundEnabled(newState);
+    setAudioEnabled(newState);
+    
+    // Play a test sound when enabling
+    if (newState) {
+      setTimeout(() => playNewBookingSound(), 100);
+    }
+  };
+  
   // Cron job test states
   const [deliveryReminderLoading, setDeliveryReminderLoading] = useState(false);
   const [deliveryReminderResult, setDeliveryReminderResult] = useState<{ success: boolean; message: string } | null>(null);
   const [followupEmailLoading, setFollowupEmailLoading] = useState(false);
   const [followupEmailResult, setFollowupEmailResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [countdownEmailLoading, setCountdownEmailLoading] = useState(false);
+  const [countdownEmailResult, setCountdownEmailResult] = useState<{ success: boolean; message: string } | null>(null);
   
   const isAndroid = typeof window !== "undefined" && /Android/i.test(navigator.userAgent);
   const notificationsSupported = typeof window !== "undefined" && "Notification" in window;
@@ -149,6 +174,30 @@ export function SettingsClient({ admin }: SettingsClientProps) {
     } finally {
       setFollowupEmailLoading(false);
       setTimeout(() => setFollowupEmailResult(null), 5000);
+    }
+  };
+  
+  // Test countdown email cron
+  const handleTestCountdownEmails = async () => {
+    setCountdownEmailLoading(true);
+    setCountdownEmailResult(null);
+    
+    try {
+      const response = await fetch('/api/cron/event-countdown', { method: 'POST' });
+      const data = await response.json();
+      
+      setCountdownEmailResult({
+        success: data.success,
+        message: data.message || data.error || 'Unknown result',
+      });
+    } catch (error) {
+      setCountdownEmailResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed',
+      });
+    } finally {
+      setCountdownEmailLoading(false);
+      setTimeout(() => setCountdownEmailResult(null), 5000);
     }
   };
 
@@ -402,6 +451,90 @@ export function SettingsClient({ admin }: SettingsClientProps) {
         </details>
       </section>
 
+      {/* ================================================================== */}
+      {/* SOUND NOTIFICATIONS */}
+      {/* ================================================================== */}
+      <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <div className={`flex h-10 w-10 items-center justify-center rounded-full ${
+            soundEnabled ? "bg-cyan-500/20" : "bg-neutral-500/20"
+          }`}>
+            {soundEnabled ? (
+              <Volume2 className="h-5 w-5 text-cyan-400" />
+            ) : (
+              <VolumeX className="h-5 w-5 text-neutral-400" />
+            )}
+          </div>
+          <div>
+            <h2 className="font-semibold">Sound Notifications</h2>
+            <p className="text-sm text-foreground/60">
+              {soundEnabled ? "Play sound when new bookings arrive" : "Sound notifications are off"}
+            </p>
+          </div>
+        </div>
+        
+        {/* Sound Toggle */}
+        <button
+          onClick={handleSoundToggle}
+          className={`flex w-full items-center justify-between rounded-xl p-4 transition-all active:scale-[0.99] ${
+            soundEnabled
+              ? "bg-cyan-500/10 border-2 border-cyan-500/30"
+              : "bg-white/5 border-2 border-white/10 hover:border-white/20"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-full ${
+              soundEnabled ? "bg-cyan-500" : "bg-neutral-700"
+            }`}>
+              {soundEnabled ? (
+                <Volume2 className="h-6 w-6 text-white" />
+              ) : (
+                <VolumeX className="h-6 w-6 text-neutral-400" />
+              )}
+            </div>
+            <div className="text-left">
+              <p className={`font-semibold ${soundEnabled ? "text-cyan-400" : ""}`}>
+                {soundEnabled ? "Sound ON" : "Sound OFF"}
+              </p>
+              <p className="text-xs text-foreground/50">
+                {soundEnabled ? "Tap to disable" : "Tap to enable"}
+              </p>
+            </div>
+          </div>
+          
+          <div className={`h-8 w-14 rounded-full p-1 transition-colors ${
+            soundEnabled ? "bg-cyan-500" : "bg-neutral-600"
+          }`}>
+            <div className={`h-6 w-6 rounded-full bg-white shadow transition-transform ${
+              soundEnabled ? "translate-x-6" : "translate-x-0"
+            }`} />
+          </div>
+        </button>
+        
+        {/* Test Sound Button */}
+        {soundEnabled && (
+          <Button
+            onClick={() => playNewBookingSound()}
+            variant="outline"
+            className="mt-4 w-full border-white/10 hover:bg-white/5"
+          >
+            <Volume2 className="mr-2 h-4 w-4" />
+            Test Sound
+          </Button>
+        )}
+        
+        {/* Info */}
+        <div className="mt-4 flex items-start gap-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+          <Bell className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" />
+          <div>
+            <p className="text-sm font-medium text-cyan-300">Cha-ching! 💰</p>
+            <p className="text-xs text-cyan-300/70">
+              A pleasant sound plays when new bookings come in. The dashboard checks every 30 seconds.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* App Installation Section */}
       <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
         <div className="mb-4 flex items-center gap-3">
@@ -541,6 +674,49 @@ export function SettingsClient({ admin }: SettingsClientProps) {
                   <AlertTriangle className="h-3 w-3 shrink-0" />
                 )}
                 {deliveryReminderResult.message}
+              </div>
+            )}
+          </div>
+
+          {/* Countdown Emails */}
+          <div className="rounded-lg border border-white/5 bg-white/[0.02] p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/20">
+                  <PartyPopper className="h-5 w-5 text-amber-400" />
+                </div>
+                <div>
+                  <p className="font-medium">Event Countdown</p>
+                  <p className="text-xs text-foreground/50">Sends "Your party is tomorrow!" email</p>
+                  <p className="mt-1 text-xs text-foreground/30">Runs daily at 10:00 AM EST</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleTestCountdownEmails}
+                disabled={countdownEmailLoading}
+                className="shrink-0 border-white/10"
+              >
+                {countdownEmailLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <><Play className="mr-1.5 h-3 w-3" /> Run Now</>
+                )}
+              </Button>
+            </div>
+            {countdownEmailResult && (
+              <div className={`mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
+                countdownEmailResult.success 
+                  ? "bg-green-500/10 text-green-400" 
+                  : "bg-red-500/10 text-red-400"
+              }`}>
+                {countdownEmailResult.success ? (
+                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                )}
+                {countdownEmailResult.message}
               </div>
             )}
           </div>

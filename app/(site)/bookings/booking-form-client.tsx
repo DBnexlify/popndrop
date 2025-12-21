@@ -55,7 +55,10 @@ import {
 } from "@/components/site/booking-progress";
 import { TermsCheckbox } from "@/components/site/terms-acceptance";
 import { LiveViewers, RecentBookings, TrustBadges } from "@/components/site/social-proof";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { MobileBookingWizard } from "@/components/site/mobile-booking-wizard";
+import { useCustomerAutofill, saveCustomerInfo } from "@/lib/use-customer-autofill";
+import { useGeolocationCity } from "@/lib/use-geolocation-city";
 
 // =============================================================================
 // MOBILE DETECTION HOOK
@@ -285,6 +288,9 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   
   // Terms acceptance
   const [termsAccepted, setTermsAccepted] = useState(false);
+  
+  // Payment type - deposit or full
+  const [paymentType, setPaymentType] = useState<'deposit' | 'full'>('deposit');
 
   // Track the previous date to detect date changes
   const [prevEventDate, setPrevEventDate] = useState<Date | undefined>();
@@ -301,6 +307,43 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   
   // Scroll state for floating price pill
   const [showFloatingPrice, setShowFloatingPrice] = useState(false);
+
+  // ==========================================================================
+  // CUSTOMER AUTOFILL - Pre-fill form for returning customers
+  // ==========================================================================
+  
+  const { savedInfo, isReturningCustomer } = useCustomerAutofill();
+  
+  // ==========================================================================
+  // GEOLOCATION - Auto-detect city for new customers
+  // ==========================================================================
+  
+  const { city: detectedCity } = useGeolocationCity();
+  
+  // Pre-fill form when saved customer info is available
+  useEffect(() => {
+    if (savedInfo && formData.name === "" && formData.email === "") {
+      setFormData((prev) => ({
+        ...prev,
+        name: savedInfo.name || prev.name,
+        email: savedInfo.email || prev.email,
+        phone: savedInfo.phone || prev.phone,
+        address: savedInfo.address || prev.address,
+        city: savedInfo.city || prev.city,
+      }));
+    }
+  }, [savedInfo]);
+  
+  // Auto-set city from geolocation for new customers (if not already set by autofill)
+  useEffect(() => {
+    if (detectedCity && !savedInfo?.city && formData.city === "Ocala") {
+      // Only update if it's a valid service city
+      const validCity = SERVICE_CITIES.find(c => c === detectedCity);
+      if (validCity) {
+        setFormData((prev) => ({ ...prev, city: validCity }));
+      }
+    }
+  }, [detectedCity, savedInfo?.city, formData.city]);
 
   // ==========================================================================
   // SCROLL DETECTION FOR FLOATING PRICE
@@ -557,6 +600,7 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
           address: formData.address.trim(),
           city: formData.city,
           notes: formData.notes.trim(),
+          paymentType, // NEW: 'deposit' or 'full'
         }),
       });
 
@@ -569,6 +613,15 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
         setIsSubmitting(false);
         return;
       }
+
+      // Save customer info for next time (autofill)
+      saveCustomerInfo({
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        address: formData.address.trim(),
+        city: formData.city,
+      });
 
       if (data.redirectUrl) {
         router.push(data.redirectUrl);
@@ -1135,14 +1188,14 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="phone">Phone *</Label>
-                        <Input
+                        <PhoneInput
                           id="phone"
                           name="phone"
-                          type="tel"
-                          placeholder="(352) 555-1234"
                           required
                           value={formData.phone}
-                          onChange={handleInputChange}
+                          onChange={(value) =>
+                            setFormData((prev) => ({ ...prev, phone: value }))
+                          }
                           className={styles.input}
                         />
                       </div>
@@ -1216,6 +1269,82 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                       className={cn(styles.input, "min-h-[80px]")}
                     />
                   </div>
+
+                  {/* ============================================================= */}
+                  {/* PAYMENT OPTION - Deposit or Pay in Full */}
+                  {/* ============================================================= */}
+                  {selectedOption && (
+                    <div className="space-y-3 border-t border-white/5 pt-4">
+                      <p className={cn(styles.helperText, "uppercase tracking-wide")}>Payment Option</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {/* Deposit Option */}
+                        <button
+                          type="button"
+                          onClick={() => setPaymentType('deposit')}
+                          className={cn(
+                            "relative overflow-hidden rounded-lg border p-4 text-left transition-all duration-200 sm:rounded-xl",
+                            paymentType === 'deposit'
+                              ? "border-cyan-500/50 bg-cyan-500/10 shadow-[0_0_20px_rgba(6,182,212,0.15)]"
+                              : "border-white/5 bg-white/[0.03] hover:border-white/10 hover:bg-white/[0.05]"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                "flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all",
+                                paymentType === 'deposit' 
+                                  ? "border-cyan-400 bg-cyan-400" 
+                                  : "border-white/30"
+                              )}>
+                                {paymentType === 'deposit' && (
+                                  <Check className="h-3 w-3 text-black" />
+                                )}
+                              </div>
+                              <span className="font-semibold">Pay deposit</span>
+                            </div>
+                            <span className="shrink-0 text-lg font-semibold text-cyan-400">$50</span>
+                          </div>
+                          <p className={cn(styles.smallBody, "mt-2 pl-7")}>
+                            Remaining ${selectedOption.price - 50} due on delivery
+                          </p>
+                          <div className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]" />
+                        </button>
+
+                        {/* Pay in Full Option */}
+                        <button
+                          type="button"
+                          onClick={() => setPaymentType('full')}
+                          className={cn(
+                            "relative overflow-hidden rounded-lg border p-4 text-left transition-all duration-200 sm:rounded-xl",
+                            paymentType === 'full'
+                              ? "border-green-500/50 bg-green-500/10 shadow-[0_0_20px_rgba(34,197,94,0.15)]"
+                              : "border-white/5 bg-white/[0.03] hover:border-white/10 hover:bg-white/[0.05]"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                "flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all",
+                                paymentType === 'full' 
+                                  ? "border-green-400 bg-green-400" 
+                                  : "border-white/30"
+                              )}>
+                                {paymentType === 'full' && (
+                                  <Check className="h-3 w-3 text-black" />
+                                )}
+                              </div>
+                              <span className="font-semibold">Pay in full</span>
+                            </div>
+                            <span className="shrink-0 text-lg font-semibold text-green-400">${selectedOption.price}</span>
+                          </div>
+                          <p className={cn(styles.smallBody, "mt-2 pl-7")}>
+                            <span className="text-green-400">✓</span> Nothing due on delivery!
+                          </p>
+                          <div className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* ============================================================= */}
                   {/* TERMS ACCEPTANCE */}

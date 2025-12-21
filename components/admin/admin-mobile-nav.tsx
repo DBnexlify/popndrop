@@ -21,8 +21,9 @@ import {
   Settings,
   ExternalLink,
   LogOut,
+  Ban,
 } from 'lucide-react';
-import { NotificationToggle } from './pwa-provider';
+import { NotificationToggle, SoundToggle } from './pwa-provider';
 
 const navItems = [
   { href: '/admin', label: 'Home', icon: LayoutDashboard },
@@ -32,6 +33,7 @@ const navItems = [
 ];
 
 const menuItems = [
+  { href: '/admin/cancellations', label: 'Cancellations', icon: Ban },
   { href: '/admin/inventory', label: 'Inventory', icon: Package },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
@@ -211,11 +213,19 @@ export function AdminMobileNav() {
             <h3 className="mb-4 text-lg font-semibold">Menu</h3>
             
             {/* Notification toggle */}
-            <div className="mb-4">
+            <div className="mb-2">
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
                 Notifications
               </p>
               <NotificationToggle />
+            </div>
+            
+            {/* Sound toggle */}
+            <div className="mb-4">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
+                Sounds
+              </p>
+              <SoundToggle />
             </div>
             
             {/* Menu links */}

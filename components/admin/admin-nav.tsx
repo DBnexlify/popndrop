@@ -17,9 +17,10 @@ import {
   Settings,
   LogOut,
   ExternalLink,
+  Ban,
 } from 'lucide-react';
 import type { AdminUser } from '@/lib/database-types';
-import { NotificationToggle } from './pwa-provider';
+import { NotificationToggle, SoundToggle } from './pwa-provider';
 
 interface AdminNavProps {
   admin: AdminUser;
@@ -28,6 +29,7 @@ interface AdminNavProps {
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/bookings', label: 'Bookings', icon: CalendarCheck },
+  { href: '/admin/cancellations', label: 'Cancellations', icon: Ban },
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/inventory', label: 'Inventory', icon: Package },
   { href: '/admin/blackout-dates', label: 'Blackout Dates', icon: CalendarOff },
@@ -83,8 +85,13 @@ export function AdminNav({ admin }: AdminNavProps) {
       {/* Bottom section */}
       <div className="border-t border-white/10 p-4">
         {/* Notification toggle */}
-        <div className="mb-3">
+        <div className="mb-2">
           <NotificationToggle />
+        </div>
+        
+        {/* Sound toggle */}
+        <div className="mb-3">
+          <SoundToggle />
         </div>
         
         {/* View site link */}

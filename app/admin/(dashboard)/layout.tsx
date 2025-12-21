@@ -8,6 +8,7 @@ import { getAdminUser } from '@/lib/supabase';
 import { AdminNav } from '@/components/admin/admin-nav';
 import { AdminMobileNav } from '@/components/admin/admin-mobile-nav';
 import { PWAProvider, PWAInstallPrompt, OfflineIndicator } from '@/components/admin/pwa-provider';
+import { NewBookingListener } from '@/components/admin/new-booking-listener';
 import { ScrollToTop } from '@/components/scroll-to-top';
 import type { Metadata, Viewport } from 'next';
 import Image from 'next/image';
@@ -108,6 +109,9 @@ export default async function AdminDashboardLayout({
         
         {/* PWA install prompt */}
         <PWAInstallPrompt />
+        
+        {/* New booking sound notification */}
+        <NewBookingListener />
       </div>
     </PWAProvider>
   );

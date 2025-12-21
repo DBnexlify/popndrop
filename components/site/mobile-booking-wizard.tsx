@@ -50,6 +50,9 @@ import {
 import { hapticSelect, hapticSuccess, hapticNavigate, hapticError, hapticConfirm } from "@/lib/haptics";
 import { TermsCheckbox } from "@/components/site/terms-acceptance";
 import { TrustBadges } from "@/components/site/social-proof";
+import { useCustomerAutofill, saveCustomerInfo } from "@/lib/use-customer-autofill";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { useGeolocationCity } from "@/lib/use-geolocation-city";
 
 // =============================================================================
 // DESIGN SYSTEM STYLES
@@ -742,13 +745,11 @@ function Step3Details({
 
             <div className="space-y-2">
               <Label htmlFor="phone">Phone</Label>
-              <Input
+              <PhoneInput
                 id="phone"
                 name="phone"
-                type="tel"
-                placeholder="(352) 555-1234"
                 value={formData.phone}
-                onChange={handleChange}
+                onChange={(value) => setFormData(prev => ({ ...prev, phone: value }))}
                 className={styles.input}
               />
             </div>
@@ -847,6 +848,8 @@ function Step4Review({
   formData,
   termsAccepted,
   setTermsAccepted,
+  paymentType,
+  setPaymentType,
   isSubmitting,
   submitError,
   onSubmit,
@@ -858,6 +861,8 @@ function Step4Review({
   formData: FormData;
   termsAccepted: boolean;
   setTermsAccepted: (accepted: boolean) => void;
+  paymentType: 'deposit' | 'full';
+  setPaymentType: (type: 'deposit' | 'full') => void;
   isSubmitting: boolean;
   submitError: string | null;
   onSubmit: () => void;
@@ -977,9 +982,89 @@ function Step4Review({
               ${selectedOption.price}
             </span>
           </div>
-          <p className={styles.helperText}>Payment due on delivery</p>
+          <p className={styles.helperText}>Payment selection below</p>
         </div>
         <div className={styles.cardInner} />
+      </div>
+
+      {/* Payment Option */}
+      <div className="space-y-2">
+        <p className={cn(styles.helperText, "uppercase tracking-wide")}>Payment Option</p>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Deposit Option */}
+          <button
+            type="button"
+            onClick={() => {
+              hapticSelect();
+              setPaymentType('deposit');
+            }}
+            className={cn(
+              styles.nestedCard,
+              "p-3 text-left transition-all active:scale-[0.98]",
+              paymentType === 'deposit'
+                ? "ring-2 ring-cyan-500/50 bg-cyan-500/10"
+                : "active:bg-white/5"
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className={cn(
+                  "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all",
+                  paymentType === 'deposit' 
+                    ? "border-cyan-400 bg-cyan-400" 
+                    : "border-white/30"
+                )}>
+                  {paymentType === 'deposit' && (
+                    <Check className="h-2.5 w-2.5 text-black" />
+                  )}
+                </div>
+                <span className="text-sm font-semibold">Deposit</span>
+              </div>
+              <span className="text-lg font-semibold text-cyan-400">$50</span>
+            </div>
+            <p className="mt-1.5 pl-6 text-[10px] text-foreground/50">
+              ${selectedOption.price - 50} due on delivery
+            </p>
+            <div className={styles.nestedCardInner} />
+          </button>
+
+          {/* Pay in Full Option */}
+          <button
+            type="button"
+            onClick={() => {
+              hapticSelect();
+              setPaymentType('full');
+            }}
+            className={cn(
+              styles.nestedCard,
+              "p-3 text-left transition-all active:scale-[0.98]",
+              paymentType === 'full'
+                ? "ring-2 ring-green-500/50 bg-green-500/10"
+                : "active:bg-white/5"
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className={cn(
+                  "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all",
+                  paymentType === 'full' 
+                    ? "border-green-400 bg-green-400" 
+                    : "border-white/30"
+                )}>
+                  {paymentType === 'full' && (
+                    <Check className="h-2.5 w-2.5 text-black" />
+                  )}
+                </div>
+                <span className="text-sm font-semibold">Pay in full</span>
+              </div>
+              <span className="text-lg font-semibold text-green-400">${selectedOption.price}</span>
+            </div>
+            <p className="mt-1.5 pl-6 text-[10px] text-green-400/70">
+              ✓ Nothing due on delivery!
+            </p>
+            <div className={styles.nestedCardInner} />
+          </button>
+        </div>
       </div>
 
       {/* Terms */}
@@ -1065,6 +1150,7 @@ export function MobileBookingWizard({
   const [selectedOption, setSelectedOption] = useState<PricingOption | null>(null);
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [paymentType, setPaymentType] = useState<'deposit' | 'full'>('deposit');
   
   // UI state
   const [unavailableDates, setUnavailableDates] = useState<Date[]>([]);
@@ -1076,8 +1162,45 @@ export function MobileBookingWizard({
     visible: false,
   });
 
-  // Container ref for scroll management
+  // Ref for main container (kept for potential future use)
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // ==========================================================================
+  // CUSTOMER AUTOFILL - Pre-fill form for returning customers
+  // ==========================================================================
+  
+  const { savedInfo, isReturningCustomer } = useCustomerAutofill();
+  
+  // ==========================================================================
+  // GEOLOCATION - Auto-detect city for new customers
+  // ==========================================================================
+  
+  const { city: detectedCity } = useGeolocationCity();
+  
+  // Pre-fill form when saved customer info is available
+  useEffect(() => {
+    if (savedInfo && formData.name === "" && formData.email === "") {
+      setFormData((prev) => ({
+        ...prev,
+        name: savedInfo.name || prev.name,
+        email: savedInfo.email || prev.email,
+        phone: savedInfo.phone || prev.phone,
+        address: savedInfo.address || prev.address,
+        city: savedInfo.city || prev.city,
+      }));
+    }
+  }, [savedInfo]);
+  
+  // Auto-set city from geolocation for new customers (if not already set by autofill)
+  useEffect(() => {
+    if (detectedCity && !savedInfo?.city && formData.city === "Ocala") {
+      // Only update if it's a valid service city
+      const validCity = SERVICE_CITIES.find(c => c === detectedCity);
+      if (validCity) {
+        setFormData((prev) => ({ ...prev, city: validCity }));
+      }
+    }
+  }, [detectedCity, savedInfo?.city, formData.city]);
 
   // Initialize from URL param
   useEffect(() => {
@@ -1135,10 +1258,15 @@ export function MobileBookingWizard({
     setDirection(step > currentStep ? "forward" : "backward");
     setCurrentStep(step);
     
-    // Scroll to top
-    if (containerRef.current) {
-      containerRef.current.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    // Scroll to top of page - use requestAnimationFrame for smooth timing after render
+    // Check reduced motion preference at call time to avoid hydration issues
+    requestAnimationFrame(() => {
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ 
+        top: 0, 
+        behavior: prefersReducedMotion ? "instant" : "smooth" 
+      });
+    });
   };
 
   const goNext = () => {
@@ -1188,6 +1316,7 @@ export function MobileBookingWizard({
           address: formData.address.trim(),
           city: formData.city,
           notes: formData.notes.trim(),
+          paymentType, // NEW: 'deposit' or 'full'
         }),
       });
 
@@ -1201,6 +1330,15 @@ export function MobileBookingWizard({
       }
 
       hapticSuccess();
+
+      // Save customer info for next time (autofill)
+      saveCustomerInfo({
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        address: formData.address.trim(),
+        city: formData.city,
+      });
       
       if (data.redirectUrl) {
         router.push(data.redirectUrl);
@@ -1303,6 +1441,8 @@ export function MobileBookingWizard({
               formData={formData}
               termsAccepted={termsAccepted}
               setTermsAccepted={setTermsAccepted}
+              paymentType={paymentType}
+              setPaymentType={setPaymentType}
               isSubmitting={isSubmitting}
               submitError={submitError}
               onSubmit={handleSubmit}

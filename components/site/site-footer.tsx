@@ -15,6 +15,13 @@ export function SiteFooter() {
               Policies
             </Link>
             <span className="text-foreground/20">·</span>
+            <Link
+              href="/my-bookings"
+              className="text-sm text-foreground/50 transition-colors hover:text-foreground/80"
+            >
+              My Bookings
+            </Link>
+            <span className="text-foreground/20">·</span>
             <a
               href="tel:3524453723"
               className="text-sm text-foreground/50 transition-colors hover:text-foreground/80"
@@ -80,6 +87,12 @@ export function SiteFooter() {
               className="text-foreground/50 transition-colors hover:text-foreground/80"
             >
               Contact
+            </Link>
+            <Link
+              href="/my-bookings"
+              className="text-foreground/50 transition-colors hover:text-foreground/80"
+            >
+              My Bookings
             </Link>
             <a
               href="tel:3524453723"

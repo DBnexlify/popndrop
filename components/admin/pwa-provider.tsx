@@ -6,8 +6,9 @@
 // =============================================================================
 
 import { useEffect, useState, createContext, useContext, useCallback, useRef } from "react";
-import { Bell, BellOff, Download, X, CheckCircle2, Loader2, Share, PlusSquare, AlertTriangle, RefreshCw } from "lucide-react";
+import { Bell, BellOff, Download, X, CheckCircle2, Loader2, Share, PlusSquare, AlertTriangle, RefreshCw, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { isAudioEnabled, setAudioEnabled, playNewBookingSound, testSound } from "@/lib/admin-sounds";
 
 // =============================================================================
 // TYPES
@@ -647,6 +648,77 @@ export function OfflineIndicator() {
   return (
     <div className="fixed left-0 right-0 top-0 z-50 bg-amber-500 py-1 text-center text-sm font-medium text-black">
       You&apos;re offline
+    </div>
+  );
+}
+
+// =============================================================================
+// SOUND TOGGLE - Toggle notification sounds on/off
+// =============================================================================
+
+export function SoundToggle() {
+  const [enabled, setEnabled] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
+  
+  // Initialize from localStorage on mount
+  useEffect(() => {
+    setEnabled(isAudioEnabled());
+  }, []);
+  
+  const handleToggle = () => {
+    const newState = !enabled;
+    setEnabled(newState);
+    setAudioEnabled(newState);
+    
+    // Play test sound when enabling
+    if (newState) {
+      // Small delay to let state update
+      setTimeout(() => playNewBookingSound(), 100);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={handleToggle}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+        className="group flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-white/5"
+        aria-label={enabled ? "Turn off sounds" : "Turn on sounds"}
+      >
+        {/* Toggle Track */}
+        <div className={`relative h-6 w-11 rounded-full p-0.5 transition-all duration-300 ${
+          enabled 
+            ? "bg-gradient-to-r from-cyan-400 to-cyan-600 shadow-[0_0_12px_rgba(6,182,212,0.4)]" 
+            : "bg-neutral-700"
+        }`}>
+          {/* Sliding Circle */}
+          <div className={`flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-md transition-all duration-300 ${
+            enabled ? "translate-x-5" : "translate-x-0"
+          }`}>
+            {enabled ? (
+              <Volume2 className="h-3 w-3 text-cyan-600" />
+            ) : (
+              <VolumeX className="h-3 w-3 text-neutral-400" />
+            )}
+          </div>
+        </div>
+        
+        {/* Label */}
+        <span className={`text-xs font-medium transition-colors ${
+          enabled ? "text-cyan-400" : "text-foreground/50"
+        }`}>
+          {enabled ? "Sound on" : "Sound off"}
+        </span>
+      </button>
+      
+      {/* Tooltip on hover */}
+      {showTooltip && (
+        <div className="absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-neutral-800 px-2 py-1 text-[10px] text-neutral-300 shadow-lg">
+          {enabled ? "Click to mute" : "Click to enable sounds"}
+          <div className="absolute -left-1 top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 bg-neutral-800" />
+        </div>
+      )}
     </div>
   );
 }

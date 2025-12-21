@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Calendar, Phone, Mail, Check, MapPin, Clock, Copy } from "lucide-react";
+import { Calendar, Phone, Mail, Check, MapPin, Clock, Copy, Share2, Facebook, Twitter, MessageCircle } from "lucide-react";
 import { Confetti } from "@/components/ui/confetti";
 import { AddToCalendar } from "@/components/ui/add-to-calendar";
 import { createDateTime, CalendarEvent } from "@/lib/calendar";
@@ -181,6 +181,137 @@ function NextStep({ icon, iconStyle, children, smallBody }: NextStepProps) {
       <div className={iconStyle}>{icon}</div>
       <span className={`pt-2.5 ${smallBody}`}>{children}</span>
     </li>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * Share Section Component
+ * --------------------------------------------------------------------------- */
+function ShareSection({ productName, styles }: { productName: string; styles: Styles }) {
+  const [copied, setCopied] = useState(false);
+  const shareUrl = "https://popndroprentals.com";
+  const shareText = `Just booked a ${productName} from Pop and Drop Party Rentals for our party! 🎉 Check them out for your next event!`;
+  
+  // Check if Web Share API is available
+  const canShare = typeof navigator !== "undefined" && navigator.share;
+  
+  const handleNativeShare = async () => {
+    try {
+      await navigator.share({
+        title: "Pop and Drop Party Rentals",
+        text: shareText,
+        url: shareUrl,
+      });
+    } catch (err) {
+      // User cancelled or error - just ignore
+    }
+  };
+  
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(`${shareText} ${shareUrl}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+  
+  const encodedText = encodeURIComponent(shareText);
+  const encodedUrl = encodeURIComponent(shareUrl);
+  
+  return (
+    <div className={`mt-6 ${styles.sectionCard}`}>
+      <div className="p-5 sm:p-6 lg:p-8">
+        <div className="text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500/20 to-purple-500/20">
+            <Share2 className="h-6 w-6 text-fuchsia-400" />
+          </div>
+          <h2 className={styles.cardHeading}>Spread the fun! 🎈</h2>
+          <p className={`mt-2 ${styles.smallBody}`}>
+            Know someone planning a party? Share the bounce house love!
+          </p>
+        </div>
+        
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          {/* Native Share (Mobile) */}
+          {canShare && (
+            <Button
+              onClick={handleNativeShare}
+              className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20"
+            >
+              <Share2 className="mr-2 h-4 w-4" />
+              Share
+            </Button>
+          )}
+          
+          {/* Facebook */}
+          <Button
+            asChild
+            variant="outline"
+            className="border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
+          >
+            <a
+              href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Facebook className="mr-2 h-4 w-4" />
+              Facebook
+            </a>
+          </Button>
+          
+          {/* Twitter/X */}
+          <Button
+            asChild
+            variant="outline"
+            className="border-white/20 bg-white/5 hover:bg-white/10"
+          >
+            <a
+              href={`https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Twitter className="mr-2 h-4 w-4" />
+              X / Twitter
+            </a>
+          </Button>
+          
+          {/* SMS/Text */}
+          <Button
+            asChild
+            variant="outline"
+            className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
+          >
+            <a href={`sms:?&body=${encodedText}%20${encodedUrl}`}>
+              <MessageCircle className="mr-2 h-4 w-4" />
+              Text
+            </a>
+          </Button>
+          
+          {/* Copy Link */}
+          <Button
+            onClick={handleCopyLink}
+            variant="outline"
+            className="border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20"
+          >
+            {copied ? (
+              <>
+                <Check className="mr-2 h-4 w-4" />
+                Copied!
+              </>
+            ) : (
+              <>
+                <Copy className="mr-2 h-4 w-4" />
+                Copy Link
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+      
+      <div className={styles.sectionCardInner} />
+    </div>
   );
 }
 
@@ -373,6 +504,11 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
         </div>
         <div className={styles.nestedCardInner} />
       </div>
+
+      {/* ================================================================== */}
+      {/* SHARE / REFER SECTION */}
+      {/* ================================================================== */}
+      <ShareSection productName={productName} styles={styles} />
 
       {/* Subtle footer encouragement */}
       <p className={`mt-8 text-center ${styles.helperText}`}>
