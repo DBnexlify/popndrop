@@ -1,27 +1,31 @@
 // =============================================================================
-// PUSH NOTIFICATION UTILITIES
+// PUSH NOTIFICATION SEND UTILITY
 // lib/push-notifications.ts
-// Server-side utilities for sending push notifications
+// Server-side utility to send push notifications to admins
 // =============================================================================
 
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
 
-// =============================================================================
-// CONFIGURATION
-// =============================================================================
+// Initialize web-push with VAPID keys
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY!;
+const VAPID_SUBJECT = 'mailto:bookings@popanddroprentals.com';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Only initialize if keys are present (prevents build errors)
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+  } catch (e) {
+    console.error('[Push] Failed to set VAPID details:', e);
+  }
+}
 
-// Configure web-push if VAPID keys are available
-if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-  webpush.setVapidDetails(
-    'mailto:admin@popanddroppartyrentals.com',
-    process.env.VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
+// Supabase client with service role for server-side operations
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 }
 
@@ -29,107 +33,73 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 // TYPES
 // =============================================================================
 
-export interface PushNotification {
+export type NotificationType = 
+  | 'new_booking'
+  | 'payment_received'
+  | 'booking_cancelled'
+  | 'delivery_reminder'
+  | 'test';
+
+export interface NotificationPayload {
   title: string;
   body: string;
   icon?: string;
   badge?: string;
   tag?: string;
-  url?: string;
-  bookingId?: string;
-  type?: 'new_booking' | 'payment' | 'reminder' | 'alert';
+  data?: {
+    url?: string;
+    type?: NotificationType;
+    bookingId?: string;
+    calendarEvent?: {
+      title: string;
+      start: string;
+      end: string;
+      location: string;
+      description: string;
+    };
+  };
+  actions?: Array<{
+    action: string;
+    title: string;
+    icon?: string;
+  }>;
   requireInteraction?: boolean;
 }
 
-interface PushSubscription {
-  endpoint: string;
-  p256dh: string;
-  auth: string;
-  admin_id: string;
-}
-
-// =============================================================================
-// NOTIFICATION TEMPLATES
-// =============================================================================
-
-export const notificationTemplates = {
-  newBooking: (bookingNumber: string, customerName: string, eventDate: string): PushNotification => ({
-    title: '🎉 New Booking!',
-    body: `${customerName} booked for ${eventDate}`,
-    tag: `booking-${bookingNumber}`,
-    url: `/admin/bookings?search=${bookingNumber}`,
-    type: 'new_booking',
-    requireInteraction: true,
-  }),
-
-  depositPaid: (bookingNumber: string, amount: number): PushNotification => ({
-    title: '💰 Deposit Received',
-    body: `$${amount.toFixed(2)} deposit paid for ${bookingNumber}`,
-    tag: `payment-${bookingNumber}`,
-    url: `/admin/bookings?search=${bookingNumber}`,
-    type: 'payment',
-  }),
-
-  balancePaid: (bookingNumber: string, amount: number): PushNotification => ({
-    title: '✅ Balance Paid',
-    body: `$${amount.toFixed(2)} balance paid for ${bookingNumber}`,
-    tag: `payment-${bookingNumber}`,
-    url: `/admin/bookings?search=${bookingNumber}`,
-    type: 'payment',
-  }),
-
-  deliveryReminder: (count: number): PushNotification => ({
-    title: '🚚 Deliveries Today',
-    body: `You have ${count} deliver${count === 1 ? 'y' : 'ies'} scheduled`,
-    tag: 'daily-reminder',
-    url: '/admin',
-    type: 'reminder',
-  }),
-
-  pickupReminder: (count: number): PushNotification => ({
-    title: '📦 Pickups Today',
-    body: `You have ${count} pickup${count === 1 ? '' : 's'} scheduled`,
-    tag: 'daily-reminder',
-    url: '/admin',
-    type: 'reminder',
-  }),
-
-  bookingCancelled: (bookingNumber: string, reason: string): PushNotification => ({
-    title: '❌ Booking Cancelled',
-    body: `${bookingNumber} was cancelled: ${reason.substring(0, 50)}`,
-    tag: `cancel-${bookingNumber}`,
-    url: `/admin/bookings?search=${bookingNumber}`,
-    type: 'alert',
-  }),
-};
-
-// =============================================================================
-// SEND NOTIFICATION
-// =============================================================================
-
-/**
- * Send a push notification to all subscribed admins
- */
-export async function sendPushNotification(notification: PushNotification): Promise<{
+export interface SendResult {
   success: boolean;
   sent: number;
   failed: number;
-}> {
-  try {
-    // Check if web-push is configured
-    if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
-      console.log('[Push] VAPID keys not configured, skipping notification');
-      return { success: true, sent: 0, failed: 0 };
-    }
+  errors?: string[];
+}
 
-    // Get all subscriptions
+// =============================================================================
+// SEND TO ALL ADMINS
+// =============================================================================
+
+export async function sendPushToAllAdmins(
+  payload: NotificationPayload
+): Promise<SendResult> {
+  // Check if VAPID is configured
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+    console.log('[Push] VAPID keys not configured, skipping notification');
+    return { success: true, sent: 0, failed: 0 };
+  }
+
+  const supabase = getSupabase();
+  const errors: string[] = [];
+  let sent = 0;
+  let failed = 0;
+
+  try {
+    // Get all push subscriptions
     const { data: subscriptions, error } = await supabase
       .from('push_subscriptions')
       .select('*');
 
     if (error) {
       console.error('[Push] Failed to fetch subscriptions:', error);
-      return { success: false, sent: 0, failed: 0 };
+      return { success: false, sent: 0, failed: 0, errors: [error.message] };
     }
 
     if (!subscriptions || subscriptions.length === 0) {
@@ -137,105 +107,310 @@ export async function sendPushNotification(notification: PushNotification): Prom
       return { success: true, sent: 0, failed: 0 };
     }
 
-    // Prepare payload
-    const payload = JSON.stringify({
-      title: notification.title,
-      body: notification.body,
-      icon: notification.icon || '/admin/icon-192.png',
-      badge: notification.badge || '/admin/badge-72.png',
-      tag: notification.tag || notification.type || 'default',
-      data: {
-        url: notification.url || '/admin',
-        bookingId: notification.bookingId,
-        type: notification.type,
-      },
-      requireInteraction: notification.requireInteraction || false,
-    });
+    console.log(`[Push] Sending to ${subscriptions.length} subscription(s)`);
 
-    // Send to all subscriptions
-    const results = await Promise.allSettled(
-      subscriptions.map((sub: PushSubscription) => sendToSubscription(sub, payload))
-    );
+    // Send to each subscription
+    for (const sub of subscriptions) {
+      try {
+        const pushSubscription = {
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: sub.p256dh,
+            auth: sub.auth,
+          },
+        };
 
-    const sent = results.filter((r) => r.status === 'fulfilled').length;
-    const failed = results.filter((r) => r.status === 'rejected').length;
+        await webpush.sendNotification(
+          pushSubscription,
+          JSON.stringify(payload)
+        );
 
-    console.log(`[Push] Notification sent - Success: ${sent}, Failed: ${failed}`);
-    return { success: true, sent, failed };
-  } catch (error) {
-    console.error('[Push] Error sending notification:', error);
-    return { success: false, sent: 0, failed: 0 };
-  }
-}
+        sent++;
+        console.log('[Push] Sent successfully to:', sub.endpoint.slice(0, 50));
+      } catch (err: unknown) {
+        failed++;
+        const error = err as Error & { statusCode?: number };
+        console.error('[Push] Failed to send:', error.message);
+        errors.push(error.message);
 
-/**
- * Send notification to a specific subscription
- */
-async function sendToSubscription(sub: PushSubscription, payload: string): Promise<void> {
-  const pushSubscription = {
-    endpoint: sub.endpoint,
-    keys: {
-      p256dh: sub.p256dh,
-      auth: sub.auth,
-    },
-  };
-
-  try {
-    await webpush.sendNotification(pushSubscription, payload);
-  } catch (err: unknown) {
-    const error = err as { statusCode?: number };
-    // Remove invalid subscriptions
-    if (error.statusCode === 404 || error.statusCode === 410) {
-      console.log('[Push] Removing invalid subscription:', sub.endpoint);
-      await supabase
-        .from('push_subscriptions')
-        .delete()
-        .eq('endpoint', sub.endpoint);
+        // Remove invalid subscriptions (410 Gone or 404 Not Found)
+        if (error.statusCode === 410 || error.statusCode === 404) {
+          console.log('[Push] Removing stale subscription');
+          await supabase
+            .from('push_subscriptions')
+            .delete()
+            .eq('endpoint', sub.endpoint);
+        }
+      }
     }
-    throw err;
+
+    // Log notification (don't fail if this errors)
+    try {
+      await supabase.from('notification_log').insert({
+        title: payload.title,
+        body: payload.body,
+        type: payload.data?.type || 'general',
+        sent_count: sent,
+        failed_count: failed,
+      });
+    } catch (logError) {
+      console.error('[Push] Failed to log notification:', logError);
+    }
+
+    return {
+      success: sent > 0 || subscriptions.length === 0,
+      sent,
+      failed,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+  } catch (err) {
+    console.error('[Push] Unexpected error:', err);
+    return {
+      success: false,
+      sent,
+      failed,
+      errors: [err instanceof Error ? err.message : 'Unknown error'],
+    };
   }
 }
 
 // =============================================================================
-// CONVENIENCE FUNCTIONS
+// CONVENIENCE FUNCTIONS (used by API routes)
 // =============================================================================
 
 /**
- * Notify admins of a new booking
+ * Send a new booking notification to all admins
+ * Called from /api/bookings when a new booking is created
  */
 export async function notifyNewBooking(
   bookingNumber: string,
   customerName: string,
+  eventDateFormatted: string,
+  rentalName?: string,
+  total?: number,
+  address?: string,
+  city?: string
+): Promise<SendResult> {
+  const payload: NotificationPayload = {
+    title: '🎉 New Booking!',
+    body: `${customerName} booked ${rentalName || 'a rental'} for ${eventDateFormatted}`,
+    icon: '/admin/icon-192.png',
+    badge: '/admin/badge-72.png',
+    tag: `booking-${bookingNumber}`,
+    requireInteraction: true,
+    data: {
+      url: `/admin/bookings?search=${bookingNumber}`,
+      type: 'new_booking',
+      bookingId: bookingNumber,
+      ...(address && city && rentalName && total && {
+        calendarEvent: {
+          title: `🎈 ${rentalName} - ${customerName}`,
+          start: eventDateFormatted,
+          end: eventDateFormatted,
+          location: `${address}, ${city}, FL`,
+          description: `Booking #${bookingNumber}\nCustomer: ${customerName}\nTotal: $${total}`,
+        },
+      }),
+    },
+    actions: [
+      { action: 'view', title: 'View Booking' },
+      { action: 'calendar', title: '📅 Calendar' },
+    ],
+  };
+
+  return sendPushToAllAdmins(payload);
+}
+
+/**
+ * Send a payment received notification
+ */
+export async function notifyPaymentReceived(
+  bookingNumber: string,
+  customerName: string,
+  amount: number,
+  paymentType: 'deposit' | 'full' | 'balance'
+): Promise<SendResult> {
+  const typeLabel = {
+    deposit: 'Deposit',
+    full: 'Full payment',
+    balance: 'Balance',
+  }[paymentType];
+
+  const payload: NotificationPayload = {
+    title: '💰 Payment Received',
+    body: `${typeLabel} of $${amount} from ${customerName}`,
+    icon: '/admin/icon-192.png',
+    badge: '/admin/badge-72.png',
+    tag: `payment-${bookingNumber}`,
+    data: {
+      url: `/admin/bookings?search=${bookingNumber}`,
+      type: 'payment_received',
+      bookingId: bookingNumber,
+    },
+    actions: [
+      { action: 'view', title: 'View Booking' },
+    ],
+  };
+
+  return sendPushToAllAdmins(payload);
+}
+
+/**
+ * Send a booking cancelled notification
+ */
+export async function notifyBookingCancelled(
+  bookingNumber: string,
+  customerName: string,
   eventDate: string
-) {
-  return sendPushNotification(
-    notificationTemplates.newBooking(bookingNumber, customerName, eventDate)
-  );
+): Promise<SendResult> {
+  const payload: NotificationPayload = {
+    title: '❌ Booking Cancelled',
+    body: `${customerName}'s booking for ${eventDate} was cancelled`,
+    icon: '/admin/icon-192.png',
+    badge: '/admin/badge-72.png',
+    tag: `cancel-${bookingNumber}`,
+    data: {
+      url: `/admin/bookings?search=${bookingNumber}`,
+      type: 'booking_cancelled',
+      bookingId: bookingNumber,
+    },
+    actions: [
+      { action: 'view', title: 'View Details' },
+    ],
+  };
+
+  return sendPushToAllAdmins(payload);
 }
 
 /**
- * Notify admins of deposit payment
+ * Send test notification
  */
-export async function notifyDepositPaid(bookingNumber: string, amount: number) {
-  return sendPushNotification(
-    notificationTemplates.depositPaid(bookingNumber, amount)
-  );
+export async function sendTestNotification(): Promise<SendResult> {
+  const payload: NotificationPayload = {
+    title: '🔔 Test Notification',
+    body: "Push notifications are working! You'll receive alerts for new bookings.",
+    icon: '/admin/icon-192.png',
+    badge: '/admin/badge-72.png',
+    tag: 'test',
+    data: {
+      url: '/admin/settings',
+      type: 'test',
+    },
+  };
+
+  return sendPushToAllAdmins(payload);
+}
+
+// =============================================================================
+// NOTIFICATION BUILDERS (for more complex use cases)
+// =============================================================================
+
+/**
+ * Build a new booking notification payload
+ */
+export function buildNewBookingNotification(booking: {
+  bookingNumber: string;
+  customerName: string;
+  eventDate: string;
+  rentalName: string;
+  total: number;
+  address: string;
+  city: string;
+}): NotificationPayload {
+  const eventDate = new Date(booking.eventDate);
+  const formattedDate = eventDate.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+
+  return {
+    title: '🎉 New Booking!',
+    body: `${booking.customerName} booked ${booking.rentalName} for ${formattedDate}`,
+    icon: '/admin/icon-192.png',
+    badge: '/admin/badge-72.png',
+    tag: `booking-${booking.bookingNumber}`,
+    requireInteraction: true,
+    data: {
+      url: `/admin/bookings?search=${booking.bookingNumber}`,
+      type: 'new_booking',
+      bookingId: booking.bookingNumber,
+      calendarEvent: {
+        title: `🎈 ${booking.rentalName} - ${booking.customerName}`,
+        start: booking.eventDate,
+        end: booking.eventDate,
+        location: `${booking.address}, ${booking.city}, FL`,
+        description: `Booking #${booking.bookingNumber}\nCustomer: ${booking.customerName}\nTotal: $${booking.total}`,
+      },
+    },
+    actions: [
+      { action: 'view', title: 'View Booking' },
+      { action: 'calendar', title: '📅 Add to Calendar' },
+    ],
+  };
 }
 
 /**
- * Notify admins of balance payment
+ * Build a test notification payload
  */
-export async function notifyBalancePaid(bookingNumber: string, amount: number) {
-  return sendPushNotification(
-    notificationTemplates.balancePaid(bookingNumber, amount)
-  );
+export function buildTestNotification(): NotificationPayload {
+  return {
+    title: '🔔 Test Notification',
+    body: "Push notifications are working! You'll receive alerts for new bookings.",
+    icon: '/admin/icon-192.png',
+    badge: '/admin/badge-72.png',
+    tag: 'test',
+    data: {
+      url: '/admin/settings',
+      type: 'test',
+    },
+  };
 }
 
+// =============================================================================
+// CALENDAR EVENT GENERATOR
+// =============================================================================
+
 /**
- * Notify admins of booking cancellation
+ * Generate an .ics calendar file content
  */
-export async function notifyBookingCancelled(bookingNumber: string, reason: string) {
-  return sendPushNotification(
-    notificationTemplates.bookingCancelled(bookingNumber, reason)
-  );
+export function generateICS(event: {
+  title: string;
+  start: string;
+  end?: string;
+  location?: string;
+  description?: string;
+}): string {
+  const startDate = new Date(event.start + 'T09:00:00');
+  const endDate = event.end 
+    ? new Date(event.end + 'T17:00:00') 
+    : new Date(startDate.getTime() + 8 * 60 * 60 * 1000);
+
+  const formatDate = (date: Date) => {
+    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  };
+
+  const escapeText = (text: string) => {
+    return text.replace(/[,;\\]/g, '\\$&').replace(/\n/g, '\\n');
+  };
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Pop & Drop Rentals//Admin//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `DTSTART:${formatDate(startDate)}`,
+    `DTEND:${formatDate(endDate)}`,
+    `SUMMARY:${escapeText(event.title)}`,
+    event.location ? `LOCATION:${escapeText(event.location)}` : '',
+    event.description ? `DESCRIPTION:${escapeText(event.description)}` : '',
+    `UID:${Date.now()}@popanddroprentals.com`,
+    `DTSTAMP:${formatDate(new Date())}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ];
+
+  return lines.filter(Boolean).join('\r\n');
 }

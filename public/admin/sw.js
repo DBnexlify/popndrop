@@ -1,9 +1,9 @@
 // =============================================================================
-// ADMIN SERVICE WORKER - SIMPLIFIED & ROBUST
+// ADMIN SERVICE WORKER - ROBUST & FEATURE-RICH
 // /public/admin/sw.js
 // =============================================================================
 
-const CACHE_NAME = 'popndrop-admin-v1';
+const CACHE_NAME = 'popndrop-admin-v2';
 
 // Only cache actual static files that we know exist
 const STATIC_ASSETS = [
@@ -23,10 +23,8 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME)
       .then((cache) => {
         console.log('[SW] Caching static assets');
-        // Use addAll but catch errors so install doesn't fail
         return cache.addAll(STATIC_ASSETS).catch((err) => {
           console.warn('[SW] Some assets failed to cache:', err);
-          // Don't throw - let install succeed anyway
         });
       })
       .then(() => {
@@ -64,7 +62,7 @@ self.addEventListener('activate', (event) => {
 });
 
 // =============================================================================
-// FETCH - Network first, don't cache HTML
+// FETCH - Network first for pages, cache first for static assets
 // =============================================================================
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
@@ -79,17 +77,18 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   
   // For static assets, try cache first
-  if (STATIC_ASSETS.some(asset => url.pathname.endsWith(asset.split('/').pop()))) {
+  const isStaticAsset = STATIC_ASSETS.some(asset => 
+    url.pathname === asset || url.pathname.endsWith(asset.split('/').pop())
+  );
+  
+  if (isStaticAsset) {
     event.respondWith(
       caches.match(event.request).then((cached) => {
         return cached || fetch(event.request);
       })
     );
-    return;
   }
-  
-  // For everything else (HTML pages, API calls), use network only
-  // Don't try to cache auth-protected pages
+  // For everything else, use network (don't cache auth-protected pages)
 });
 
 // =============================================================================
@@ -103,54 +102,92 @@ self.addEventListener('push', (event) => {
     body: 'You have a new notification',
     icon: '/admin/icon-192.png',
     badge: '/admin/badge-72.png',
+    tag: 'default',
+    data: { url: '/admin' },
+    actions: [],
   };
   
   if (event.data) {
     try {
       const payload = event.data.json();
       data = { ...data, ...payload };
-      console.log('[SW] Push payload:', data);
+      console.log('[SW] Push payload:', data.title);
     } catch (e) {
       console.error('[SW] Push parse error:', e);
       data.body = event.data.text() || data.body;
     }
   }
   
+  const options = {
+    body: data.body,
+    icon: data.icon || '/admin/icon-192.png',
+    badge: data.badge || '/admin/badge-72.png',
+    tag: data.tag || 'default',
+    data: data.data || { url: '/admin' },
+    vibrate: [200, 100, 200],
+    requireInteraction: data.requireInteraction || false,
+    actions: data.actions || [],
+  };
+  
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: data.icon,
-      badge: data.badge,
-      tag: data.tag || 'default',
-      data: data.data || { url: '/admin' },
-      vibrate: [200, 100, 200],
-      requireInteraction: false,
-    })
+    self.registration.showNotification(data.title, options)
   );
 });
 
 // =============================================================================
-// NOTIFICATION CLICK
+// NOTIFICATION CLICK - Handle actions
 // =============================================================================
 self.addEventListener('notificationclick', (event) => {
-  console.log('[SW] Notification clicked');
+  console.log('[SW] Notification clicked, action:', event.action);
   event.notification.close();
   
-  const url = event.notification.data?.url || '/admin';
+  const notificationData = event.notification.data || {};
+  
+  // Handle "Add to Calendar" action
+  if (event.action === 'calendar' && notificationData.calendarEvent) {
+    const cal = notificationData.calendarEvent;
+    const calendarUrl = `/api/calendar?` + new URLSearchParams({
+      title: cal.title,
+      start: cal.start,
+      end: cal.end || cal.start,
+      location: cal.location || '',
+      description: cal.description || '',
+    }).toString();
+    
+    event.waitUntil(
+      clients.openWindow(calendarUrl)
+    );
+    return;
+  }
+  
+  // Default: open the URL from notification data
+  const urlToOpen = notificationData.url || '/admin';
   
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((windowClients) => {
-        // Focus existing window if found
+        // Focus existing admin window if found
         for (const client of windowClients) {
           if (client.url.includes('/admin') && 'focus' in client) {
-            return client.focus();
+            return client.focus().then((focusedClient) => {
+              // Navigate to the specific URL
+              if (focusedClient && 'navigate' in focusedClient) {
+                return focusedClient.navigate(urlToOpen);
+              }
+            });
           }
         }
         // Open new window
-        return clients.openWindow(url);
+        return clients.openWindow(urlToOpen);
       })
   );
+});
+
+// =============================================================================
+// NOTIFICATION CLOSE
+// =============================================================================
+self.addEventListener('notificationclose', (event) => {
+  console.log('[SW] Notification closed:', event.notification.tag);
 });
 
 // =============================================================================

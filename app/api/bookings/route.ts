@@ -312,8 +312,13 @@ export async function POST(request: NextRequest) {
       await notifyNewBooking(
         booking.booking_number,
         customerName,
-        formatDate(eventDate)
+        formatDate(eventDate),
+        product.name,        // rental name for notification
+        priceTotal,          // total for calendar description
+        address,             // address for calendar location
+        city                 // city for calendar location
       );
+      console.log('[Push] New booking notification sent');
     } catch (pushError) {
       console.error('Failed to send push notification:', pushError);
       // Don't fail the booking if push notification fails

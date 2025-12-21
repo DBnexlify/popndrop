@@ -14,9 +14,19 @@ import {
   CheckCircle2,
   Download,
   MoreVertical,
+  Bell,
+  BellOff,
+  Send,
+  Loader2,
+  AlertTriangle,
+  Calendar,
+  CreditCard,
+  XCircle,
+  Truck,
+  PartyPopper,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { usePWA, NotificationToggle } from "@/components/admin/pwa-provider";
+import { usePWA } from "@/components/admin/pwa-provider";
 import type { AdminUser } from "@/lib/database-types";
 
 interface SettingsClientProps {
@@ -31,10 +41,58 @@ export function SettingsClient({ admin }: SettingsClientProps) {
     install,
     swStatus,
     vapidConfigured,
+    isSubscribed,
+    subscribe,
+    unsubscribe,
+    notificationPermission,
   } = usePWA();
   
   const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  
   const isAndroid = typeof window !== "undefined" && /Android/i.test(navigator.userAgent);
+  const notificationsSupported = typeof window !== "undefined" && "Notification" in window;
+
+  // Handle notification toggle
+  const handleNotificationToggle = async () => {
+    setNotifLoading(true);
+    try {
+      if (isSubscribed) {
+        await unsubscribe();
+      } else {
+        await subscribe();
+      }
+    } finally {
+      setNotifLoading(false);
+    }
+  };
+
+  // Send test notification
+  const handleTestNotification = async () => {
+    setTestLoading(true);
+    setTestResult(null);
+    
+    try {
+      const response = await fetch('/api/push/test', { method: 'POST' });
+      const data = await response.json();
+      
+      setTestResult({
+        success: data.success,
+        message: data.message || data.error || 'Unknown result',
+      });
+    } catch (error) {
+      setTestResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to send',
+      });
+    } finally {
+      setTestLoading(false);
+      // Clear result after 5 seconds
+      setTimeout(() => setTestResult(null), 5000);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -64,6 +122,227 @@ export function SettingsClient({ admin }: SettingsClientProps) {
             <span className="text-sm font-medium capitalize">{admin?.role || "Admin"}</span>
           </div>
         </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* PUSH NOTIFICATIONS - The Main Event */}
+      {/* ================================================================== */}
+      <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <div className={`flex h-10 w-10 items-center justify-center rounded-full ${
+            isSubscribed ? "bg-green-500/20" : "bg-amber-500/20"
+          }`}>
+            {isSubscribed ? (
+              <Bell className="h-5 w-5 text-green-400" />
+            ) : (
+              <BellOff className="h-5 w-5 text-amber-400" />
+            )}
+          </div>
+          <div>
+            <h2 className="font-semibold">Push Notifications</h2>
+            <p className="text-sm text-foreground/60">
+              {isSubscribed ? "You'll receive alerts on this device" : "Enable to get instant alerts"}
+            </p>
+          </div>
+        </div>
+
+        {/* Not Supported */}
+        {!notificationsSupported && (
+          <div className="rounded-lg bg-red-500/10 p-4">
+            <div className="flex items-center gap-3">
+              <XCircle className="h-5 w-5 text-red-400" />
+              <div>
+                <p className="text-sm font-medium text-red-400">Not Supported</p>
+                <p className="text-xs text-red-400/70">
+                  Your browser doesn&apos;t support push notifications
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Permission Denied */}
+        {notificationsSupported && notificationPermission === "denied" && (
+          <div className="rounded-lg bg-red-500/10 p-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-400" />
+              <div>
+                <p className="text-sm font-medium text-red-400">Notifications Blocked</p>
+                <p className="text-xs text-red-400/70">
+                  Enable notifications in your browser settings to receive alerts
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* VAPID Not Configured */}
+        {notificationsSupported && !vapidConfigured && (
+          <div className="rounded-lg bg-amber-500/10 p-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-400" />
+              <div>
+                <p className="text-sm font-medium text-amber-400">Setup Required</p>
+                <p className="text-xs text-amber-400/70">
+                  Push notifications need to be configured on the server
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Service Worker Loading */}
+        {notificationsSupported && vapidConfigured && swStatus === "loading" && (
+          <div className="rounded-lg bg-white/5 p-4">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-foreground/50" />
+              <p className="text-sm text-foreground/60">Setting up notifications...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Ready State - Main Toggle */}
+        {notificationsSupported && vapidConfigured && notificationPermission !== "denied" && swStatus === "ready" && (
+          <div className="space-y-4">
+            {/* Main Toggle Button */}
+            <button
+              onClick={handleNotificationToggle}
+              disabled={notifLoading}
+              className={`flex w-full items-center justify-between rounded-xl p-4 transition-all active:scale-[0.99] ${
+                isSubscribed
+                  ? "bg-green-500/10 border-2 border-green-500/30"
+                  : "bg-white/5 border-2 border-white/10 hover:border-white/20"
+              } ${notifLoading ? "opacity-60" : ""}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                  isSubscribed ? "bg-green-500" : "bg-neutral-700"
+                }`}>
+                  {notifLoading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-white" />
+                  ) : isSubscribed ? (
+                    <Bell className="h-6 w-6 text-white" />
+                  ) : (
+                    <BellOff className="h-6 w-6 text-neutral-400" />
+                  )}
+                </div>
+                <div className="text-left">
+                  <p className={`font-semibold ${isSubscribed ? "text-green-400" : ""}`}>
+                    {notifLoading ? "Please wait..." : isSubscribed ? "Notifications ON" : "Notifications OFF"}
+                  </p>
+                  <p className="text-xs text-foreground/50">
+                    {isSubscribed ? "Tap to disable" : "Tap to enable"}
+                  </p>
+                </div>
+              </div>
+              
+              <div className={`h-8 w-14 rounded-full p-1 transition-colors ${
+                isSubscribed ? "bg-green-500" : "bg-neutral-600"
+              }`}>
+                <div className={`h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                  isSubscribed ? "translate-x-6" : "translate-x-0"
+                }`} />
+              </div>
+            </button>
+
+            {/* Test Notification Button - Only show when subscribed */}
+            {isSubscribed && (
+              <div className="space-y-3">
+                <Button
+                  onClick={handleTestNotification}
+                  disabled={testLoading}
+                  variant="outline"
+                  className="w-full border-white/10 hover:bg-white/5"
+                >
+                  {testLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-4 w-4" />
+                      Send Test Notification
+                    </>
+                  )}
+                </Button>
+                
+                {testResult && (
+                  <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+                    testResult.success 
+                      ? "bg-green-500/10 text-green-400" 
+                      : "bg-red-500/10 text-red-400"
+                  }`}>
+                    {testResult.success ? (
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                    )}
+                    {testResult.message}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* What You'll Be Notified About */}
+            <div className="rounded-lg border border-white/5 bg-white/[0.02] p-4">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-foreground/50">
+                {isSubscribed ? "You'll be notified about:" : "When enabled, you'll get alerts for:"}
+              </p>
+              <div className="space-y-2">
+                <NotificationTypeRow 
+                  icon={PartyPopper} 
+                  label="New bookings" 
+                  description="Instant alert when someone books"
+                  enabled={isSubscribed}
+                />
+                <NotificationTypeRow 
+                  icon={CreditCard} 
+                  label="Payments received" 
+                  description="Know when deposits come in"
+                  enabled={isSubscribed}
+                />
+                <NotificationTypeRow 
+                  icon={XCircle} 
+                  label="Cancellations" 
+                  description="If a booking is cancelled"
+                  enabled={isSubscribed}
+                />
+                <NotificationTypeRow 
+                  icon={Truck} 
+                  label="Tomorrow's deliveries" 
+                  description="Evening reminder at 6 PM"
+                  enabled={isSubscribed}
+                  comingSoon
+                />
+              </div>
+            </div>
+
+            {/* Calendar Integration Note */}
+            <div className="flex items-start gap-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+              <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" />
+              <div>
+                <p className="text-sm font-medium text-cyan-300">Calendar Integration</p>
+                <p className="text-xs text-cyan-300/70">
+                  New booking notifications include an &quot;Add to Calendar&quot; option
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Debug Info - Only in development or for troubleshooting */}
+        <details className="mt-4">
+          <summary className="cursor-pointer text-xs text-foreground/30 hover:text-foreground/50">
+            Debug info
+          </summary>
+          <div className="mt-2 rounded-lg bg-neutral-800/50 p-3 text-xs font-mono text-neutral-500">
+            <p>SW Status: {swStatus}</p>
+            <p>VAPID: {vapidConfigured ? "✓" : "✗"}</p>
+            <p>Permission: {notificationPermission}</p>
+            <p>Subscribed: {isSubscribed ? "✓" : "✗"}</p>
+          </div>
+        </details>
       </section>
 
       {/* App Installation Section */}
@@ -151,22 +430,6 @@ export function SettingsClient({ admin }: SettingsClientProps) {
         </div>
       </section>
 
-      {/* Notifications Section */}
-      <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
-        <div className="mb-4">
-          <h2 className="font-semibold">Push Notifications</h2>
-          <p className="text-sm text-foreground/60">Get notified of new bookings</p>
-        </div>
-        
-        <NotificationToggle />
-        
-        {/* Debug info */}
-        <div className="mt-4 rounded-lg bg-neutral-800/50 p-3 text-xs font-mono text-neutral-500">
-          <p>SW Status: {swStatus}</p>
-          <p>VAPID: {vapidConfigured ? "✓ configured" : "✗ missing"}</p>
-        </div>
-      </section>
-
       {/* Quick Links */}
       <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
         <div className="mb-4 flex items-center gap-3">
@@ -217,6 +480,48 @@ export function SettingsClient({ admin }: SettingsClientProps) {
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+// =============================================================================
+// NOTIFICATION TYPE ROW COMPONENT
+// =============================================================================
+
+function NotificationTypeRow({ 
+  icon: Icon, 
+  label, 
+  description, 
+  enabled,
+  comingSoon,
+}: { 
+  icon: React.ElementType;
+  label: string;
+  description: string;
+  enabled: boolean;
+  comingSoon?: boolean;
+}) {
+  return (
+    <div className={`flex items-center gap-3 ${comingSoon ? "opacity-50" : ""}`}>
+      <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
+        enabled && !comingSoon ? "bg-green-500/20" : "bg-white/5"
+      }`}>
+        <Icon className={`h-4 w-4 ${
+          enabled && !comingSoon ? "text-green-400" : "text-foreground/40"
+        }`} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium">
+          {label}
+          {comingSoon && (
+            <span className="ml-2 text-xs text-foreground/40">(coming soon)</span>
+          )}
+        </p>
+        <p className="text-xs text-foreground/50">{description}</p>
+      </div>
+      {enabled && !comingSoon && (
+        <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
+      )}
     </div>
   );
 }
