@@ -63,10 +63,12 @@ export async function GET(request: NextRequest) {
         unit_id,
         status,
         deposit_paid,
-        total_paid,
+        deposit_amount,
+        balance_paid,
+        balance_due,
         subtotal,
+        final_amount_collected,
         product_snapshot,
-        stripe_payment_intent_id,
         delivery_window,
         customer_id
       `)
@@ -165,11 +167,23 @@ export async function GET(request: NextRequest) {
     const policy: CancellationPolicy = policyData || DEFAULT_POLICY;
 
     // Calculate refund
-    const amountPaid = Number(booking.total_paid) || Number(booking.deposit_paid) || 0;
+    // Calculate actual amount paid based on deposit and balance status
+    let amountPaid = 0;
+    if (booking.final_amount_collected) {
+      amountPaid = Number(booking.final_amount_collected);
+    } else {
+      if (booking.deposit_paid) {
+        amountPaid += Number(booking.deposit_amount) || 0;
+      }
+      if (booking.balance_paid) {
+        amountPaid += Number(booking.balance_due) || 0;
+      }
+    }
+    
     const refundCalc = calculateRefund(booking.event_date, amountPaid, policy);
 
-    // Check if payment exists for refund
-    const hasPayment = !!booking.stripe_payment_intent_id && amountPaid > 0;
+    // Check if any payment exists for refund
+    const hasPayment = amountPaid > 0;
 
     // =========================================================================
     // RESCHEDULE OPTIONS - Get a few available dates to nudge reschedule
@@ -339,10 +353,12 @@ export async function POST(request: NextRequest) {
         event_date,
         status,
         deposit_paid,
-        total_paid,
+        deposit_amount,
+        balance_paid,
+        balance_due,
         subtotal,
+        final_amount_collected,
         product_snapshot,
-        stripe_payment_intent_id,
         customer_id
       `)
       .eq('id', bookingId)
@@ -414,7 +430,20 @@ export async function POST(request: NextRequest) {
       .single();
 
     const policy: CancellationPolicy = policyData || DEFAULT_POLICY;
-    const amountPaid = Number(booking.total_paid) || Number(booking.deposit_paid) || 0;
+    
+    // Calculate actual amount paid
+    let amountPaid = 0;
+    if (booking.final_amount_collected) {
+      amountPaid = Number(booking.final_amount_collected);
+    } else {
+      if (booking.deposit_paid) {
+        amountPaid += Number(booking.deposit_amount) || 0;
+      }
+      if (booking.balance_paid) {
+        amountPaid += Number(booking.balance_due) || 0;
+      }
+    }
+    
     const refundCalc = calculateRefund(booking.event_date, amountPaid, policy, cancellationType);
 
     // Create cancellation request
@@ -430,7 +459,6 @@ export async function POST(request: NextRequest) {
         original_paid: amountPaid,
         suggested_refund: refundCalc.refundAmount,
         processing_fee: refundCalc.processingFee,
-        stripe_payment_intent_id: booking.stripe_payment_intent_id,
       })
       .select()
       .single();
