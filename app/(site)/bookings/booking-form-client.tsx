@@ -232,6 +232,9 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
 
   // Track the previous date to detect date changes
   const [prevEventDate, setPrevEventDate] = useState<Date | undefined>();
+  
+  // Track if user explicitly dismissed the upgrade nudge
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
 
   // Availability state
   const [unavailableDates, setUnavailableDates] = useState<Date[]>([]);
@@ -314,8 +317,9 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
           setSelectedOption(options[0]);
         }
         
-        // Reset time selections when date changes
+        // Reset time selections and nudge dismissed state when date changes
         setFormData((prev) => ({ ...prev, deliveryTime: "", pickupTime: "" }));
+        setNudgeDismissed(false);
       }
     }
     
@@ -336,11 +340,13 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   
   // Show upgrade nudge when user has selected the non-recommended option
   // AND there is a recommended option available
+  // AND user hasn't explicitly dismissed it
   const showUpgradeNudge =
     selectedOption &&
     !selectedOption.recommended &&
     hasMultipleOptions &&
-    recommendedOption;
+    recommendedOption &&
+    !nudgeDismissed;
   
   const upgradePriceDiff = showUpgradeNudge && recommendedOption && selectedOption
     ? recommendedOption.price - selectedOption.price
@@ -751,15 +757,6 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                             {option.description}
                           </p>
                           
-                          {/* Selection indicator */}
-                          {isSelected && (
-                            <div className="absolute right-3 top-3">
-                              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500">
-                                <Check className="h-3 w-3 text-white" />
-                              </div>
-                            </div>
-                          )}
-                          
                           {/* Inner feather */}
                           <div className="pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]" />
                         </button>
@@ -805,9 +802,10 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                         size="sm"
                         variant="ghost"
                         onClick={() => {
-                          // User explicitly chose to keep current option - no action needed
-                          // Just collapse the nudge by... it's already their selection
-                          console.log("[Booking] User kept:", selectedOption?.type);
+                          // User explicitly chose to keep current option
+                          // Dismiss the nudge but keep option cards visible
+                          setNudgeDismissed(true);
+                          console.log("[Booking] User dismissed nudge, keeping:", selectedOption?.type);
                         }}
                         className="text-xs text-foreground/60 hover:text-foreground/80"
                       >
