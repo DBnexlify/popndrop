@@ -7,19 +7,14 @@
 
 import { useState } from "react";
 import { 
-  Bell, 
-  BellOff, 
   Smartphone, 
   User, 
   Shield,
   ExternalLink,
   CheckCircle2,
-  XCircle,
-  Loader2,
   Download,
   MoreVertical,
 } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { usePWA, NotificationToggle } from "@/components/admin/pwa-provider";
 import type { AdminUser } from "@/lib/database-types";
@@ -34,13 +29,11 @@ export function SettingsClient({ admin }: SettingsClientProps) {
     isInstallable, 
     isIOS,
     install,
-    swRegistered,
+    swStatus,
     vapidConfigured,
   } = usePWA();
   
   const [showInstallHelp, setShowInstallHelp] = useState(false);
-
-  // Detect Android
   const isAndroid = typeof window !== "undefined" && /Android/i.test(navigator.userAgent);
 
   return (
@@ -94,7 +87,7 @@ export function SettingsClient({ admin }: SettingsClientProps) {
                 <p className="text-xs text-foreground/50">
                   {isInstalled 
                     ? "App is installed on this device" 
-                    : "Add to your home screen for quick access"}
+                    : "Add to your home screen"}
                 </p>
               </div>
             </div>
@@ -124,57 +117,32 @@ export function SettingsClient({ admin }: SettingsClientProps) {
             )}
           </div>
           
-          {/* Installation Instructions */}
           {showInstallHelp && !isInstalled && (
             <div className="mt-4 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-4">
               {isIOS ? (
                 <>
-                  <p className="mb-3 text-sm font-medium text-cyan-300">To install on iPhone/iPad:</p>
+                  <p className="mb-3 text-sm font-medium text-cyan-300">On iPhone/iPad:</p>
                   <ol className="space-y-2 text-sm text-foreground/70">
-                    <li className="flex items-start gap-2">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-xs text-cyan-400">1</span>
-                      <span>Tap the <strong>Share</strong> button at the bottom of Safari</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-xs text-cyan-400">2</span>
-                      <span>Scroll down and tap <strong>&quot;Add to Home Screen&quot;</strong></span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-xs text-cyan-400">3</span>
-                      <span>Tap <strong>&quot;Add&quot;</strong> in the top right</span>
-                    </li>
+                    <li>1. Tap the <strong>Share</strong> button at the bottom of Safari</li>
+                    <li>2. Scroll down and tap <strong>&quot;Add to Home Screen&quot;</strong></li>
+                    <li>3. Tap <strong>&quot;Add&quot;</strong></li>
                   </ol>
                 </>
               ) : isAndroid ? (
                 <>
-                  <p className="mb-3 text-sm font-medium text-cyan-300">To install on Android:</p>
+                  <p className="mb-3 text-sm font-medium text-cyan-300">On Android:</p>
                   <ol className="space-y-2 text-sm text-foreground/70">
-                    <li className="flex items-start gap-2">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-xs text-cyan-400">1</span>
-                      <span>Tap the <MoreVertical className="inline h-4 w-4" /> <strong>menu</strong> (three dots) in Chrome</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-xs text-cyan-400">2</span>
-                      <span>Tap <strong>&quot;Add to Home screen&quot;</strong> or <strong>&quot;Install app&quot;</strong></span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-xs text-cyan-400">3</span>
-                      <span>Tap <strong>&quot;Add&quot;</strong> or <strong>&quot;Install&quot;</strong></span>
-                    </li>
+                    <li>1. Tap the <MoreVertical className="inline h-4 w-4" /> <strong>menu</strong> in Chrome</li>
+                    <li>2. Tap <strong>&quot;Add to Home screen&quot;</strong> or <strong>&quot;Install app&quot;</strong></li>
+                    <li>3. Tap <strong>&quot;Add&quot;</strong> or <strong>&quot;Install&quot;</strong></li>
                   </ol>
                 </>
               ) : (
                 <>
-                  <p className="mb-3 text-sm font-medium text-cyan-300">To install on Desktop:</p>
+                  <p className="mb-3 text-sm font-medium text-cyan-300">On Desktop:</p>
                   <ol className="space-y-2 text-sm text-foreground/70">
-                    <li className="flex items-start gap-2">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-xs text-cyan-400">1</span>
-                      <span>Look for the <strong>install icon</strong> in Chrome&apos;s address bar</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-xs text-cyan-400">2</span>
-                      <span>Or click <MoreVertical className="inline h-4 w-4" /> menu → <strong>&quot;Install Pop & Drop Admin&quot;</strong></span>
-                    </li>
+                    <li>1. Look for the install icon in Chrome&apos;s address bar</li>
+                    <li>2. Or click the <MoreVertical className="inline h-4 w-4" /> menu → <strong>&quot;Install Pop & Drop Admin&quot;</strong></li>
                   </ol>
                 </>
               )}
@@ -185,37 +153,17 @@ export function SettingsClient({ admin }: SettingsClientProps) {
 
       {/* Notifications Section */}
       <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-500/20">
-            <Bell className="h-5 w-5 text-purple-400" />
-          </div>
-          <div>
-            <h2 className="font-semibold">Push Notifications</h2>
-            <p className="text-sm text-foreground/60">Get notified of new bookings</p>
-          </div>
+        <div className="mb-4">
+          <h2 className="font-semibold">Push Notifications</h2>
+          <p className="text-sm text-foreground/60">Get notified of new bookings</p>
         </div>
         
-        <div className="space-y-4">
-          <NotificationToggle />
-          
-          {/* What you'll get */}
-          <div className="rounded-lg border border-white/5 bg-white/[0.01] p-4">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
-              You&apos;ll be notified about:
-            </p>
-            <ul className="space-y-1 text-sm text-foreground/60">
-              <li>• New booking requests</li>
-              <li>• Payment confirmations</li>
-              <li>• Booking cancellations</li>
-              <li>• Daily delivery reminders</li>
-            </ul>
-          </div>
-          
-          {/* Debug info - helpful for troubleshooting */}
-          <div className="rounded-lg bg-white/[0.02] p-3 text-xs text-foreground/40">
-            <p>Service Worker: {swRegistered ? "✓ Registered" : "✗ Not registered"}</p>
-            <p>Push Config: {vapidConfigured ? "✓ Configured" : "✗ Not configured"}</p>
-          </div>
+        <NotificationToggle />
+        
+        {/* Debug info */}
+        <div className="mt-4 rounded-lg bg-neutral-800/50 p-3 text-xs font-mono text-neutral-500">
+          <p>SW Status: {swStatus}</p>
+          <p>VAPID: {vapidConfigured ? "✓ configured" : "✗ missing"}</p>
         </div>
       </section>
 
@@ -264,7 +212,7 @@ export function SettingsClient({ admin }: SettingsClientProps) {
           <div>
             <p className="text-sm font-medium text-amber-300">Security Reminder</p>
             <p className="text-xs text-amber-300/70">
-              Always log out when using shared devices. Your admin session will expire after 7 days of inactivity.
+              Always log out when using shared devices.
             </p>
           </div>
         </div>
