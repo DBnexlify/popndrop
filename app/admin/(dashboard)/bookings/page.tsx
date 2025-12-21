@@ -183,8 +183,8 @@ export default async function AdminBookingsPage({ searchParams }: PageProps) {
                     </span>
                   </div>
                   
-                  {/* Payment status */}
-                  {!booking.balance_paid && booking.balance_due > 0 && (
+                  {/* Payment status - don't show for cancelled bookings */}
+                  {booking.status !== 'cancelled' && !booking.balance_paid && booking.balance_due > 0 && (
                     <Badge className="mt-2 border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-300">
                       {formatCurrency(booking.balance_due)} balance due
                     </Badge>

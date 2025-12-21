@@ -530,11 +530,11 @@ export function NotificationToggle() {
           </div>
         </div>
         
-        {/* Toggle visual */}
-        <div className={`h-8 w-14 rounded-full p-1 transition-colors ${
+        {/* Toggle visual - fixed width to prevent deformation */}
+        <div className={`h-8 w-14 shrink-0 rounded-full p-1 transition-colors ${
           isSubscribed ? "bg-green-500" : "bg-neutral-600"
         }`}>
-          <div className={`h-6 w-6 rounded-full bg-white shadow transition-transform ${
+          <div className={`h-6 w-6 rounded-full bg-white shadow-md transition-transform duration-200 ${
             isSubscribed ? "translate-x-6" : "translate-x-0"
           }`} />
         </div>
