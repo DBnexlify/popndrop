@@ -52,7 +52,6 @@ import { TermsCheckbox } from "@/components/site/terms-acceptance";
 import { TrustBadges } from "@/components/site/social-proof";
 import { useCustomerAutofill, saveCustomerInfo } from "@/lib/use-customer-autofill";
 import { PhoneInput } from "@/components/ui/phone-input";
-import { useGeolocationCity } from "@/lib/use-geolocation-city";
 
 // =============================================================================
 // DESIGN SYSTEM STYLES
@@ -1171,12 +1170,6 @@ export function MobileBookingWizard({
   
   const { savedInfo, isReturningCustomer } = useCustomerAutofill();
   
-  // ==========================================================================
-  // GEOLOCATION - Auto-detect city for new customers
-  // ==========================================================================
-  
-  const { city: detectedCity } = useGeolocationCity();
-  
   // Pre-fill form when saved customer info is available
   useEffect(() => {
     if (savedInfo && formData.name === "" && formData.email === "") {
@@ -1190,17 +1183,6 @@ export function MobileBookingWizard({
       }));
     }
   }, [savedInfo]);
-  
-  // Auto-set city from geolocation for new customers (if not already set by autofill)
-  useEffect(() => {
-    if (detectedCity && !savedInfo?.city && formData.city === "Ocala") {
-      // Only update if it's a valid service city
-      const validCity = SERVICE_CITIES.find(c => c === detectedCity);
-      if (validCity) {
-        setFormData((prev) => ({ ...prev, city: validCity }));
-      }
-    }
-  }, [detectedCity, savedInfo?.city, formData.city]);
 
   // Initialize from URL param
   useEffect(() => {

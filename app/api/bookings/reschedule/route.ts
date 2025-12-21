@@ -78,18 +78,6 @@ function getBookingType(eventDate: string, originalBookingType?: BookingType): B
   return 'daily';
 }
 
-// Helper to extract customer from Supabase join
-function extractCustomer(customer: unknown): { 
-  email?: string; 
-  id?: string; 
-  first_name?: string; 
-  last_name?: string 
-} | null {
-  if (!customer) return null;
-  if (Array.isArray(customer)) return customer[0] || null;
-  return customer as { email?: string; id?: string; first_name?: string; last_name?: string };
-}
-
 // =============================================================================
 // GET: Check available dates for reschedule
 // =============================================================================
@@ -100,6 +88,8 @@ export async function GET(request: NextRequest) {
     const bookingId = searchParams.get('bookingId');
     const email = searchParams.get('email');
 
+    console.log('[Reschedule GET] Request:', { bookingId, email });
+
     if (!bookingId || !email) {
       return NextResponse.json(
         { error: 'Booking ID and email are required' },
@@ -107,9 +97,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(bookingId)) {
+      console.log('[Reschedule GET] Invalid UUID format:', bookingId);
+      return NextResponse.json(
+        { error: 'Invalid booking ID format' },
+        { status: 400 }
+      );
+    }
+
     const supabase = createServerClient();
 
-    // Get booking with customer verification
+    // STEP 1: Get booking (without join)
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .select(`
@@ -122,21 +122,28 @@ export async function GET(request: NextRequest) {
         pickup_window,
         product_snapshot,
         status,
-        customer:customers!inner (
-          id,
-          email,
-          first_name
-        )
+        customer_id
       `)
       .eq('id', bookingId)
       .single();
 
     if (bookingError || !booking) {
+      console.log('[Reschedule GET] Booking not found:', bookingError);
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     }
 
-    const customer = extractCustomer(booking.customer);
-    if (customer?.email?.toLowerCase() !== email.toLowerCase()) {
+    // STEP 2: Get customer separately
+    let customer: { email?: string; first_name?: string } | null = null;
+    if (booking.customer_id) {
+      const { data: customerData } = await supabase
+        .from('customers')
+        .select('email, first_name')
+        .eq('id', booking.customer_id)
+        .single();
+      customer = customerData;
+    }
+
+    if (!customer?.email || customer.email.toLowerCase() !== email.toLowerCase()) {
       return NextResponse.json({ error: 'Email does not match booking' }, { status: 403 });
     }
 
@@ -159,6 +166,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
     }
 
+    // Get all unit IDs for this product
+    const { data: productUnits } = await supabase
+      .from('units')
+      .select('id')
+      .eq('product_id', unit.product_id);
+
+    const productUnitIds = new Set(productUnits?.map(u => u.id) || []);
+
     // Get available dates for the next 60 days
     const today = new Date();
     const startDate = new Date(today);
@@ -167,36 +182,36 @@ export async function GET(request: NextRequest) {
     const endDate = new Date(today);
     endDate.setDate(endDate.getDate() + 60);
 
-    // Get all booked dates for this product (excluding current booking)
+    // Get all booked dates for this product's units (excluding current booking)
     const { data: existingBookings } = await supabase
       .from('bookings')
-      .select(`
-        event_date,
-        delivery_date,
-        pickup_date,
-        units!inner (product_id)
-      `)
-      .eq('units.product_id', unit.product_id)
+      .select('event_date, delivery_date, pickup_date, unit_id')
       .neq('id', bookingId) // Exclude current booking
-      .not('status', 'in', '("cancelled","pending")') // Only confirmed/paid bookings block
+      .not('status', 'in', '("cancelled","pending")') // Only confirmed bookings block
       .gte('event_date', startDate.toISOString().split('T')[0])
       .lte('event_date', endDate.toISOString().split('T')[0]);
 
     // Get blackout dates
     const { data: blackoutDates } = await supabase
       .from('blackout_dates')
-      .select('date, reason')
-      .gte('date', startDate.toISOString().split('T')[0])
-      .lte('date', endDate.toISOString().split('T')[0]);
+      .select('start_date, end_date')
+      .lte('start_date', endDate.toISOString().split('T')[0])
+      .gte('end_date', startDate.toISOString().split('T')[0]);
 
     // Build set of unavailable dates
     const unavailableDates = new Set<string>();
     
-    // Add blackout dates
-    blackoutDates?.forEach(b => unavailableDates.add(b.date));
+    // Add blackout date ranges
+    blackoutDates?.forEach(b => {
+      const start = new Date(b.start_date + 'T12:00:00');
+      const end = new Date(b.end_date + 'T12:00:00');
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        unavailableDates.add(d.toISOString().split('T')[0]);
+      }
+    });
     
-    // Add booked date ranges (delivery through pickup)
-    existingBookings?.forEach(b => {
+    // Add booked date ranges (delivery through pickup) for same product units
+    existingBookings?.filter(b => productUnitIds.has(b.unit_id)).forEach(b => {
       const delivery = new Date(b.delivery_date + 'T12:00:00');
       const pickup = new Date(b.pickup_date + 'T12:00:00');
       
@@ -215,7 +230,6 @@ export async function GET(request: NextRequest) {
 
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
       const dateStr = d.toISOString().split('T')[0];
-      const dayOfWeek = d.getDay();
       
       // Check if this date (and related delivery/pickup dates) are available
       const potentialBookingType = getBookingType(dateStr, booking.booking_type as BookingType);
@@ -258,7 +272,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error getting reschedule options:', error);
+    console.error('[Reschedule GET] Unexpected error:', error);
     return NextResponse.json(
       { error: 'Failed to get reschedule options' },
       { status: 500 }
@@ -275,6 +289,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { bookingId, email, newEventDate, deliveryWindow, pickupWindow } = body;
 
+    console.log('[Reschedule POST] Request:', { bookingId, email, newEventDate });
+
     if (!bookingId || !email || !newEventDate) {
       return NextResponse.json(
         { error: 'Booking ID, email, and new event date are required' },
@@ -282,9 +298,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(bookingId)) {
+      return NextResponse.json(
+        { error: 'Invalid booking ID format' },
+        { status: 400 }
+      );
+    }
+
     const supabase = createServerClient();
 
-    // Get booking with customer verification
+    // STEP 1: Get booking (without join)
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .select(`
@@ -297,22 +322,28 @@ export async function POST(request: NextRequest) {
         pickup_window,
         product_snapshot,
         status,
-        customer:customers!inner (
-          id,
-          email,
-          first_name,
-          last_name
-        )
+        customer_id
       `)
       .eq('id', bookingId)
       .single();
 
     if (bookingError || !booking) {
+      console.log('[Reschedule POST] Booking not found:', bookingError);
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     }
 
-    const customer = extractCustomer(booking.customer);
-    if (customer?.email?.toLowerCase() !== email.toLowerCase()) {
+    // STEP 2: Get customer separately
+    let customer: { email?: string; first_name?: string; last_name?: string } | null = null;
+    if (booking.customer_id) {
+      const { data: customerData } = await supabase
+        .from('customers')
+        .select('email, first_name, last_name')
+        .eq('id', booking.customer_id)
+        .single();
+      customer = customerData;
+    }
+
+    if (!customer?.email || customer.email.toLowerCase() !== email.toLowerCase()) {
       return NextResponse.json({ error: 'Email does not match booking' }, { status: 403 });
     }
 
@@ -360,9 +391,9 @@ export async function POST(request: NextRequest) {
     // Check blackout dates
     const { data: blackoutCheck } = await supabase
       .from('blackout_dates')
-      .select('date')
-      .gte('date', deliveryDate)
-      .lte('date', pickupDate)
+      .select('start_date')
+      .lte('start_date', pickupDate)
+      .gte('end_date', deliveryDate)
       .limit(1);
 
     if (blackoutCheck && blackoutCheck.length > 0) {
@@ -393,7 +424,7 @@ export async function POST(request: NextRequest) {
       .eq('id', bookingId);
 
     if (updateError) {
-      console.error('Error updating booking:', updateError);
+      console.error('[Reschedule POST] Update error:', updateError);
       
       // Check for exclusion constraint violation (double booking)
       if (updateError.code === '23P01' || updateError.message?.includes('exclusion')) {
@@ -422,15 +453,20 @@ export async function POST(request: NextRequest) {
 
     // Send confirmation email
     if (customer?.email) {
-      await sendRescheduleConfirmationEmail({
-        customerEmail: customer.email,
-        customerFirstName: customer.first_name || 'there',
-        bookingNumber: booking.booking_number,
-        productName: (booking.product_snapshot as { name?: string })?.name || 'Bounce House',
-        eventDate: formatDate(originalEventDate),
-        newEventDate: formatDate(newEventDate),
-        newDeliveryWindow: deliveryWindow || booking.delivery_window,
-      });
+      try {
+        await sendRescheduleConfirmationEmail({
+          customerEmail: customer.email,
+          customerFirstName: customer.first_name || 'there',
+          bookingNumber: booking.booking_number,
+          productName: (booking.product_snapshot as { name?: string })?.name || 'Bounce House',
+          eventDate: formatDate(originalEventDate),
+          newEventDate: formatDate(newEventDate),
+          newDeliveryWindow: deliveryWindow || booking.delivery_window,
+        });
+      } catch (emailError) {
+        console.error('[Reschedule POST] Email error:', emailError);
+        // Don't fail the request for email errors
+      }
     }
 
     return NextResponse.json({
@@ -449,7 +485,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error processing reschedule:', error);
+    console.error('[Reschedule POST] Unexpected error:', error);
     return NextResponse.json(
       { error: 'Failed to process reschedule' },
       { status: 500 }

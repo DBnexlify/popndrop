@@ -31,11 +31,21 @@ export async function GET(request: NextRequest) {
     const bookingId = searchParams.get('bookingId');
     const email = searchParams.get('email');
 
-    console.log('[Cancellation GET] Request:', { bookingId, email });
+    console.log('[Cancellation GET] Request:', { bookingId, email, bookingIdType: typeof bookingId });
 
     if (!bookingId || !email) {
       return NextResponse.json(
         { error: 'Booking ID and email are required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(bookingId)) {
+      console.log('[Cancellation GET] Invalid UUID format:', bookingId);
+      return NextResponse.json(
+        { error: 'Invalid booking ID format' },
         { status: 400 }
       );
     }
@@ -206,13 +216,20 @@ export async function GET(request: NextRequest) {
         // Get blackout dates
         const { data: blackoutDates } = await supabase
           .from('blackout_dates')
-          .select('date')
-          .gte('date', startDate.toISOString().split('T')[0])
-          .lte('date', endDate.toISOString().split('T')[0]);
+          .select('start_date, end_date')
+          .lte('start_date', endDate.toISOString().split('T')[0])
+          .gte('end_date', startDate.toISOString().split('T')[0]);
 
         // Build unavailable set
         const unavailableDates = new Set<string>();
-        blackoutDates?.forEach(b => unavailableDates.add(b.date));
+        blackoutDates?.forEach(b => {
+          // Add all dates in the blackout range
+          const start = new Date(b.start_date + 'T12:00:00');
+          const end = new Date(b.end_date + 'T12:00:00');
+          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            unavailableDates.add(d.toISOString().split('T')[0]);
+          }
+        });
         existingBookings?.filter(b => productUnitIds.has(b.unit_id)).forEach(b => {
           const delivery = new Date(b.delivery_date + 'T12:00:00');
           const pickup = new Date(b.pickup_date + 'T12:00:00');
@@ -292,11 +309,21 @@ export async function POST(request: NextRequest) {
       declinedReschedule = false,
     } = body;
 
-    console.log('[Cancellation POST] Request:', { bookingId, email });
+    console.log('[Cancellation POST] Request:', { bookingId, email, bookingIdType: typeof bookingId });
 
     if (!bookingId || !email) {
       return NextResponse.json(
         { error: 'Booking ID and email are required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(bookingId)) {
+      console.log('[Cancellation POST] Invalid UUID format:', bookingId);
+      return NextResponse.json(
+        { error: 'Invalid booking ID format' },
         { status: 400 }
       );
     }
