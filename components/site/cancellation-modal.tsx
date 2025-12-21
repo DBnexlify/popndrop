@@ -140,6 +140,18 @@ export function CancellationModal({
     }
   }, [isOpen]);
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   const fetchPreview = async () => {
     setStep("loading");
     setError(null);
@@ -252,13 +264,23 @@ export function CancellationModal({
   if (!isOpen) return null;
 
   return (
-    <>
-      {/* Overlay */}
-      <div className={styles.overlay} onClick={onClose} />
+    <div className="fixed inset-0 z-[100] overflow-y-auto">
+      {/* Overlay - clicks close modal */}
+      <div 
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm" 
+        onClick={onClose} 
+        aria-hidden="true"
+      />
 
-      {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className={cn(styles.modal, "w-full max-w-lg max-h-[90vh] overflow-auto")}>
+      {/* Modal Container - centers content */}
+      <div className="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+        <div 
+          className={cn(
+            styles.modal, 
+            "w-full max-w-lg max-h-[85vh] overflow-auto pointer-events-auto"
+          )}
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Header */}
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/5 bg-background/95 px-5 py-4 backdrop-blur-xl">
             <h2 className="text-lg font-semibold">
@@ -685,6 +707,6 @@ export function CancellationModal({
           <div className={styles.modalInner} />
         </div>
       </div>
-    </>
+    </div>
   );
 }

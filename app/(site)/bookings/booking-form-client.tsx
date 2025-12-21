@@ -242,6 +242,18 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   const isMobile = useIsMobile();
 
   // ==========================================================================
+  // LOADING STATE - Prevent hydration mismatch
+  // ==========================================================================
+  
+  if (isMobile === null) {
+    return (
+      <div className="mt-8 flex items-center justify-center py-12 sm:mt-12">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-cyan-400" />
+      </div>
+    );
+  }
+
+  // ==========================================================================
   // MOBILE WIZARD - Render step-by-step wizard on mobile devices
   // ==========================================================================
   
