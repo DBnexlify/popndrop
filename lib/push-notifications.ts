@@ -7,17 +7,38 @@
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize web-push with VAPID keys
-const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!;
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY!;
 const VAPID_SUBJECT = 'mailto:bookings@popanddroprentals.com';
 
-// Only initialize if keys are present (prevents build errors)
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+// Track if VAPID has been initialized
+let vapidInitialized = false;
+
+/**
+ * Initialize VAPID - called at runtime, not module load
+ */
+function initializeVapid(): boolean {
+  // Already initialized
+  if (vapidInitialized) return true;
+  
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  
+  console.log('[Push] Checking VAPID keys...');
+  console.log('[Push] Public key exists:', !!publicKey);
+  console.log('[Push] Private key exists:', !!privateKey);
+  
+  if (!publicKey || !privateKey) {
+    console.error('[Push] VAPID keys missing from environment');
+    return false;
+  }
+  
   try {
-    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    webpush.setVapidDetails(VAPID_SUBJECT, publicKey, privateKey);
+    vapidInitialized = true;
+    console.log('[Push] VAPID initialized successfully');
+    return true;
   } catch (e) {
     console.error('[Push] Failed to set VAPID details:', e);
+    return false;
   }
 }
 
@@ -80,9 +101,9 @@ export interface SendResult {
 export async function sendPushToAllAdmins(
   payload: NotificationPayload
 ): Promise<SendResult> {
-  // Check if VAPID is configured
-  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-    console.log('[Push] VAPID keys not configured, skipping notification');
+  // Initialize VAPID at runtime
+  if (!initializeVapid()) {
+    console.log('[Push] VAPID not configured, skipping notification');
     return { success: true, sent: 0, failed: 0 };
   }
 
