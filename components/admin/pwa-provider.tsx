@@ -9,7 +9,6 @@
 import { useEffect, useState, createContext, useContext, useCallback } from "react";
 import { Bell, BellOff, Download, X, CheckCircle2, Loader2, Share, PlusSquare, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 
 // =============================================================================
 // TYPES
@@ -105,8 +104,6 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setIsIOS(isIOSDevice());
     setIsInstalled(isInStandaloneMode());
-    
-    // Log configuration status
     console.log("[PWA] VAPID configured:", vapidConfigured);
     console.log("[PWA] Is iOS:", isIOSDevice());
     
@@ -133,7 +130,6 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
         setRegistration(reg);
         setSwRegistered(true);
 
-        // Check for existing subscription
         const subscription = await reg.pushManager.getSubscription();
         console.log("[PWA] Existing subscription:", !!subscription);
         setIsSubscribed(!!subscription);
@@ -146,7 +142,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
     registerSW();
   }, []);
 
-  // Listen for install prompt (Android/Desktop Chrome)
+  // Listen for install prompt
   useEffect(() => {
     const handleBeforeInstall = (e: Event) => {
       console.log("[PWA] beforeinstallprompt fired");
@@ -156,9 +152,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstall);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
-    };
+    return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
   }, []);
 
   // Track online/offline status
@@ -184,7 +178,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Install PWA (Android/Desktop)
+  // Install PWA
   const install = useCallback(async () => {
     if (!deferredPrompt) {
       console.log("[PWA] No deferred prompt available");
@@ -329,12 +323,10 @@ export function PWAInstallPrompt() {
   const [dismissed, setDismissed] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
-  // Check localStorage for dismissed state
   useEffect(() => {
     const wasDismissed = localStorage.getItem("pwa-install-dismissed");
     if (wasDismissed) {
       const dismissedAt = parseInt(wasDismissed, 10);
-      // Show again after 7 days
       if (Date.now() - dismissedAt < 7 * 24 * 60 * 60 * 1000) {
         setDismissed(true);
       }
@@ -346,13 +338,9 @@ export function PWAInstallPrompt() {
     localStorage.setItem("pwa-install-dismissed", Date.now().toString());
   };
 
-  // Don't show if already installed or dismissed
   if (isInstalled || dismissed) return null;
-
-  // Don't show if not installable and not iOS
   if (!isInstallable && !isIOS) return null;
 
-  // iOS Instructions Modal
   if (showIOSInstructions) {
     return (
       <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 backdrop-blur-sm p-4 lg:items-center">
@@ -368,46 +356,31 @@ export function PWAInstallPrompt() {
           
           <div className="space-y-4">
             <div className="flex items-start gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">
-                1
-              </div>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">1</div>
               <div>
                 <p className="font-medium">Tap the Share button</p>
-                <p className="text-sm text-foreground/60">
-                  <Share className="mb-0.5 inline h-4 w-4" /> at the bottom of Safari
-                </p>
+                <p className="text-sm text-foreground/60"><Share className="mb-0.5 inline h-4 w-4" /> at the bottom of Safari</p>
               </div>
             </div>
             
             <div className="flex items-start gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">
-                2
-              </div>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">2</div>
               <div>
                 <p className="font-medium">Scroll down and tap</p>
-                <p className="text-sm text-foreground/60">
-                  <PlusSquare className="mb-0.5 inline h-4 w-4" /> &quot;Add to Home Screen&quot;
-                </p>
+                <p className="text-sm text-foreground/60"><PlusSquare className="mb-0.5 inline h-4 w-4" /> &quot;Add to Home Screen&quot;</p>
               </div>
             </div>
             
             <div className="flex items-start gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">
-                3
-              </div>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">3</div>
               <div>
                 <p className="font-medium">Tap &quot;Add&quot;</p>
-                <p className="text-sm text-foreground/60">
-                  The app will appear on your home screen
-                </p>
+                <p className="text-sm text-foreground/60">The app will appear on your home screen</p>
               </div>
             </div>
           </div>
           
-          <Button
-            onClick={() => setShowIOSInstructions(false)}
-            className="mt-6 w-full bg-gradient-to-r from-fuchsia-500 to-purple-600"
-          >
+          <Button onClick={() => setShowIOSInstructions(false)} className="mt-6 w-full bg-gradient-to-r from-fuchsia-500 to-purple-600">
             Got it!
           </Button>
         </div>
@@ -418,10 +391,7 @@ export function PWAInstallPrompt() {
   return (
     <div className="fixed bottom-24 left-4 right-4 z-50 animate-in slide-in-from-bottom-4 lg:bottom-4 lg:left-auto lg:right-4 lg:w-80">
       <div className="relative overflow-hidden rounded-xl border border-white/10 bg-neutral-900/95 p-4 shadow-[0_20px_70px_rgba(0,0,0,0.4)] backdrop-blur-xl">
-        <button
-          onClick={handleDismiss}
-          className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full text-foreground/50 hover:bg-white/10"
-        >
+        <button onClick={handleDismiss} className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full text-foreground/50 hover:bg-white/10">
           <X className="h-4 w-4" />
         </button>
         
@@ -431,14 +401,8 @@ export function PWAInstallPrompt() {
           </div>
           <div className="min-w-0">
             <p className="font-medium">Install Admin App</p>
-            <p className="mt-0.5 text-sm text-foreground/60">
-              Quick access from your home screen
-            </p>
-            <Button
-              onClick={isIOS ? () => setShowIOSInstructions(true) : install}
-              size="sm"
-              className="mt-3 bg-gradient-to-r from-fuchsia-500 to-purple-600"
-            >
+            <p className="mt-0.5 text-sm text-foreground/60">Quick access from your home screen</p>
+            <Button onClick={isIOS ? () => setShowIOSInstructions(true) : install} size="sm" className="mt-3 bg-gradient-to-r from-fuchsia-500 to-purple-600">
               {isIOS ? "Show Me How" : "Install Now"}
             </Button>
           </div>
@@ -451,7 +415,7 @@ export function PWAInstallPrompt() {
 }
 
 // =============================================================================
-// NOTIFICATION TOGGLE COMPONENT
+// NOTIFICATION TOGGLE COMPONENT - SIMPLIFIED BUTTON VERSION
 // =============================================================================
 
 export function NotificationToggle() {
@@ -466,33 +430,47 @@ export function NotificationToggle() {
   } = usePWA();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string>("");
 
-  const handleToggle = async () => {
+  const handleClick = async () => {
+    console.log("[Toggle] Button clicked, isSubscribed:", isSubscribed);
+    setStatus("Working...");
     setLoading(true);
     setError(null);
     
     try {
       if (isSubscribed) {
+        console.log("[Toggle] Unsubscribing...");
         await unsubscribe();
+        setStatus("Turned off!");
       } else {
+        console.log("[Toggle] Subscribing...");
         const result = await subscribe();
-        if (!result.success && result.error) {
-          setError(result.error);
+        console.log("[Toggle] Subscribe result:", result);
+        if (result.success) {
+          setStatus("Turned on!");
+        } else {
+          setError(result.error || "Failed to enable");
+          setStatus("");
         }
       }
     } catch (err) {
+      console.error("[Toggle] Error:", err);
       setError(err instanceof Error ? err.message : "Unknown error");
+      setStatus("");
     } finally {
       setLoading(false);
+      // Clear status after 2 seconds
+      setTimeout(() => setStatus(""), 2000);
     }
   };
 
-  // Don't show if notifications not supported
+  // Not supported
   if (typeof window === "undefined" || !("Notification" in window)) {
     return (
       <div className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2.5 text-sm text-foreground/50">
         <BellOff className="h-4 w-4" />
-        <span>Notifications not supported</span>
+        <span>Notifications not supported on this device</span>
       </div>
     );
   }
@@ -502,7 +480,7 @@ export function NotificationToggle() {
     return (
       <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
         <BellOff className="h-4 w-4" />
-        <span>Blocked in browser settings</span>
+        <span>Blocked - check browser settings</span>
       </div>
     );
   }
@@ -512,7 +490,7 @@ export function NotificationToggle() {
     return (
       <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2.5 text-sm text-amber-400">
         <AlertTriangle className="h-4 w-4" />
-        <span>Not configured yet</span>
+        <span>Push not configured - redeploy needed</span>
       </div>
     );
   }
@@ -522,7 +500,7 @@ export function NotificationToggle() {
     return (
       <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2.5 text-sm text-amber-400">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Loading...</span>
+        <span>Loading service worker...</span>
       </div>
     );
   }
@@ -531,40 +509,64 @@ export function NotificationToggle() {
 
   return (
     <div className="space-y-2">
-      <div className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 ${
-        isSubscribed ? "bg-green-500/10" : "bg-white/5"
-      }`}>
-        <div className="flex items-center gap-2">
+      {/* Big clickable button */}
+      <button
+        onClick={handleClick}
+        disabled={loading}
+        className={`flex w-full items-center justify-between rounded-xl px-4 py-4 transition-all active:scale-[0.98] ${
+          isSubscribed 
+            ? "bg-green-500/20 border-2 border-green-500/50" 
+            : "bg-white/5 border-2 border-white/10 hover:border-white/20"
+        } ${loading ? "opacity-70" : ""}`}
+      >
+        <div className="flex items-center gap-3">
           {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin text-foreground/50" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
           ) : isSubscribed ? (
-            <Bell className="h-4 w-4 text-green-400" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500">
+              <Bell className="h-5 w-5 text-white" />
+            </div>
           ) : (
-            <BellOff className="h-4 w-4 text-foreground/50" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10">
+              <BellOff className="h-5 w-5 text-foreground/50" />
+            </div>
           )}
-          <span className={`text-sm ${
-            isSubscribed ? "text-green-400" : "text-foreground/70"
-          }`}>
-            {loading
-              ? "Processing..."
-              : isSubscribed
-              ? "Notifications On"
-              : "Notifications Off"}
-          </span>
+          
+          <div className="text-left">
+            <p className={`font-medium ${isSubscribed ? "text-green-400" : ""}`}>
+              {loading ? "Please wait..." : isSubscribed ? "Notifications ON" : "Notifications OFF"}
+            </p>
+            <p className="text-xs text-foreground/50">
+              {status || (isSubscribed ? "Tap to turn off" : "Tap to turn on")}
+            </p>
+          </div>
         </div>
         
-        <Switch
-          checked={isSubscribed}
-          onCheckedChange={handleToggle}
-          disabled={loading}
-          className="data-[state=checked]:bg-green-500"
-        />
-      </div>
+        {/* Visual toggle indicator */}
+        <div className={`h-8 w-14 rounded-full p-1 transition-colors ${
+          isSubscribed ? "bg-green-500" : "bg-white/20"
+        }`}>
+          <div className={`h-6 w-6 rounded-full bg-white shadow-md transition-transform ${
+            isSubscribed ? "translate-x-6" : "translate-x-0"
+          }`} />
+        </div>
+      </button>
       
+      {/* Error display */}
       {displayError && (
         <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
           <AlertTriangle className="h-3 w-3 shrink-0" />
           <span>{displayError}</span>
+        </div>
+      )}
+      
+      {/* Success indicator */}
+      {isSubscribed && !loading && (
+        <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs text-green-400">
+          <CheckCircle2 className="h-3 w-3 shrink-0" />
+          <span>You&apos;ll get notified of new bookings</span>
         </div>
       )}
     </div>
