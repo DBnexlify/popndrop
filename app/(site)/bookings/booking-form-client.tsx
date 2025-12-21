@@ -55,6 +55,30 @@ import {
 } from "@/components/site/booking-progress";
 import { TermsCheckbox } from "@/components/site/terms-acceptance";
 import { LiveViewers, RecentBookings, TrustBadges } from "@/components/site/social-proof";
+import { MobileBookingWizard } from "@/components/site/mobile-booking-wizard";
+
+// =============================================================================
+// MOBILE DETECTION HOOK
+// =============================================================================
+
+function useIsMobile(breakpoint: number = 768) {
+  const [isMobile, setIsMobile] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < breakpoint);
+    };
+    
+    // Initial check
+    checkMobile();
+    
+    // Listen for resize
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, [breakpoint]);
+
+  return isMobile;
+}
 
 // =============================================================================
 // DESIGN SYSTEM STYLES
@@ -213,6 +237,37 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   const router = useRouter();
   const productSlug = searchParams.get("r");
   const cancelled = searchParams.get("cancelled");
+  const isMobile = useIsMobile();
+
+  // ==========================================================================
+  // MOBILE WIZARD - Render step-by-step wizard on mobile devices
+  // ==========================================================================
+  
+  if (isMobile === true) {
+    return (
+      <MobileBookingWizard
+        products={products}
+        initialProductSlug={productSlug}
+        cancelled={cancelled === "true"}
+      />
+    );
+  }
+
+  // Show loading state while detecting device
+  if (isMobile === null) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-fuchsia-500 border-t-transparent" />
+          <p className="text-sm text-foreground/50">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================================================
+  // DESKTOP FLOW - Scroll-based form with sidebar
+  // ==========================================================================
 
   // Refs for scroll tracking
   const summaryCardRef = useRef<HTMLDivElement>(null);
