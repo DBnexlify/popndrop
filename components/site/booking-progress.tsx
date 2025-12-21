@@ -1,7 +1,7 @@
 // =============================================================================
 // BOOKING PROGRESS INDICATOR
 // components/site/booking-progress.tsx
-// Visual step-by-step progress with CSS animations (no framer-motion needed)
+// Visual step-by-step progress with clean Apple-level design
 // =============================================================================
 
 "use client";
@@ -18,17 +18,24 @@ interface BookingProgressProps {
 }
 
 export function BookingProgress({ currentStep, steps }: BookingProgressProps) {
-  const progressPercentage = Math.max(0, ((currentStep - 1) / (steps.length - 1)) * 100);
+  // Calculate progress percentage - starts at 0% on step 1
+  // Step 1 = 0%, Step 2 = 33%, Step 3 = 66%, Step 4 = 100%
+  const progressPercentage = Math.max(
+    0,
+    ((currentStep - 1) / (steps.length - 1)) * 100
+  );
 
   return (
-    <div className="relative">
-      {/* Progress bar background */}
-      <div className="absolute left-4 right-4 top-4 h-0.5 bg-white/10 sm:left-5 sm:right-5" />
-      
+    <div className="relative py-2">
+      {/* Background track */}
+      <div className="absolute left-6 right-6 top-[22px] h-[2px] rounded-full bg-white/10 sm:left-8 sm:right-8 sm:top-[26px]" />
+
       {/* Animated progress fill */}
-      <div 
-        className="absolute left-4 top-4 h-0.5 bg-gradient-to-r from-fuchsia-500 to-purple-600 transition-all duration-500 ease-out sm:left-5"
-        style={{ width: `calc(${progressPercentage}% - 2rem)` }}
+      <div
+        className="absolute left-6 top-[22px] h-[2px] rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 transition-all duration-500 ease-out sm:left-8 sm:top-[26px]"
+        style={{
+          width: `calc(${progressPercentage}% - ${progressPercentage > 0 ? "3rem" : "0rem"})`,
+        }}
       />
 
       {/* Steps */}
@@ -40,32 +47,40 @@ export function BookingProgress({ currentStep, steps }: BookingProgressProps) {
           const isPending = currentStep < stepNumber;
 
           return (
-            <div key={step.label} className="flex flex-col items-center">
+            <div
+              key={step.label}
+              className="flex flex-col items-center"
+            >
               {/* Step circle */}
               <div
                 className={cn(
-                  "relative flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-semibold transition-all duration-300 sm:h-10 sm:w-10 sm:text-sm",
-                  isCompleted && "border-transparent bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white scale-100",
-                  isActive && "border-fuchsia-500 bg-fuchsia-500/20 text-fuchsia-400 scale-110",
-                  isPending && "border-white/20 bg-background/50 text-foreground/40 scale-100"
+                  "relative flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold transition-all duration-300 sm:h-11 sm:w-11 sm:text-sm",
+                  isCompleted &&
+                    "border-2 border-transparent bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/25",
+                  isActive &&
+                    "border-2 border-fuchsia-500/50 bg-fuchsia-500/15 text-fuchsia-400 shadow-lg shadow-fuchsia-500/20",
+                  isPending &&
+                    "border-2 border-white/10 bg-background/80 text-foreground/40"
                 )}
               >
                 {isCompleted ? (
                   <Check className="h-4 w-4 animate-in zoom-in-50 duration-200 sm:h-5 sm:w-5" />
                 ) : (
-                  stepNumber
+                  <span className={cn(isActive && "animate-in fade-in duration-300")}>
+                    {stepNumber}
+                  </span>
                 )}
-                
-                {/* Active pulse ring */}
+
+                {/* Active pulse ring - subtle, not overwhelming */}
                 {isActive && (
-                  <span className="absolute inset-0 animate-ping rounded-full border-2 border-fuchsia-500 opacity-30" />
+                  <span className="absolute inset-0 animate-ping rounded-full border border-fuchsia-500/40 opacity-40" />
                 )}
               </div>
 
               {/* Step label */}
               <span
                 className={cn(
-                  "mt-2 text-center text-[9px] font-medium uppercase tracking-wide transition-all duration-300 sm:text-[10px]",
+                  "mt-2.5 text-center text-[10px] font-medium uppercase tracking-wide transition-colors duration-300 sm:text-[11px]",
                   isCompleted && "text-fuchsia-400",
                   isActive && "text-foreground",
                   isPending && "text-foreground/40"
@@ -83,33 +98,50 @@ export function BookingProgress({ currentStep, steps }: BookingProgressProps) {
 }
 
 // =============================================================================
-// COMPACT VERSION FOR MOBILE HEADER
+// COMPACT VERSION FOR MOBILE
+// Now uses the SAME formula as desktop for consistency (0% on step 1)
 // =============================================================================
 
-export function BookingProgressCompact({ 
-  currentStep, 
+export function BookingProgressCompact({
+  currentStep,
   totalSteps,
-  stepLabel 
-}: { 
-  currentStep: number; 
+  stepLabel,
+}: {
+  currentStep: number;
   totalSteps: number;
   stepLabel?: string;
 }) {
-  const percentage = (currentStep / totalSteps) * 100;
-  
+  // FIXED: Use same formula as desktop - starts at 0% on step 1
+  // This is honest and matches user expectations
+  // Step 1 = 0%, Step 2 = 33%, Step 3 = 66%, Step 4 = 100%
+  const percentage = ((currentStep - 1) / (totalSteps - 1)) * 100;
+
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-xs">
-        <span className="font-medium text-foreground/70">
-          {stepLabel || `Step ${currentStep} of ${totalSteps}`}
+    <div className="space-y-2">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {/* Step indicator dot */}
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 text-[10px] font-semibold text-white">
+            {currentStep}
+          </div>
+          <span className="text-xs font-medium text-foreground/80">
+            {stepLabel || `Step ${currentStep}`}
+          </span>
+        </div>
+        <span className="text-xs font-medium text-foreground/50">
+          {currentStep} of {totalSteps}
         </span>
-        <span className="text-fuchsia-400">{Math.round(percentage)}%</span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+
+      {/* Progress bar */}
+      <div className="relative h-1.5 overflow-hidden rounded-full bg-white/10">
         <div
-          className="h-full bg-gradient-to-r from-fuchsia-500 to-purple-600 transition-all duration-500 ease-out"
+          className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 transition-all duration-500 ease-out"
           style={{ width: `${percentage}%` }}
         />
+        {/* Subtle shine effect */}
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
       </div>
     </div>
   );
@@ -119,21 +151,28 @@ export function BookingProgressCompact({
 // MINIMAL DOT PROGRESS FOR VERY TIGHT SPACES
 // =============================================================================
 
-export function BookingProgressDots({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
+export function BookingProgressDots({
+  currentStep,
+  totalSteps,
+}: {
+  currentStep: number;
+  totalSteps: number;
+}) {
   return (
     <div className="flex items-center justify-center gap-2">
       {Array.from({ length: totalSteps }).map((_, i) => {
         const step = i + 1;
         const isCompleted = currentStep > step;
         const isActive = currentStep === step;
-        
+
         return (
           <div
             key={i}
             className={cn(
               "h-2 rounded-full transition-all duration-300",
               isCompleted && "w-2 bg-fuchsia-500",
-              isActive && "w-6 bg-gradient-to-r from-fuchsia-500 to-purple-600",
+              isActive &&
+                "w-6 bg-gradient-to-r from-fuchsia-500 to-purple-600",
               !isCompleted && !isActive && "w-2 bg-white/20"
             )}
           />

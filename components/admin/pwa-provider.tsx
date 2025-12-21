@@ -386,7 +386,8 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 }
 
 // =============================================================================
-// NOTIFICATION TOGGLE - SIMPLIFIED
+// NOTIFICATION TOGGLE - COMPACT VERTICAL BELL SWITCH
+// Bell icon inside a vertical toggle: UP = ON, DOWN = OFF
 // =============================================================================
 
 export function NotificationToggle() {
@@ -403,22 +404,18 @@ export function NotificationToggle() {
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [showTooltip, setShowTooltip] = useState(false);
 
   const handleToggle = async () => {
     setLoading(true);
     setError(null);
-    setSuccess(null);
     
     try {
       if (isSubscribed) {
         await unsubscribe();
-        setSuccess("Notifications turned off");
       } else {
         const result = await subscribe();
-        if (result.success) {
-          setSuccess("Notifications enabled!");
-        } else {
+        if (!result.success) {
           setError(result.error || "Failed");
         }
       }
@@ -426,29 +423,29 @@ export function NotificationToggle() {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
-      setTimeout(() => { setSuccess(null); setError(null); }, 3000);
+      setTimeout(() => setError(null), 3000);
     }
   };
 
-  // Not supported
+  // Not supported - show disabled bell
   if (typeof window === "undefined" || !("Notification" in window)) {
     return (
-      <div className="rounded-lg bg-neutral-800 p-4 text-sm text-neutral-400">
-        <BellOff className="mb-2 h-5 w-5" />
-        <p>Push notifications are not supported on this device.</p>
+      <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/40">
+        <BellOff className="h-5 w-5" />
+        <span className="text-xs">Not supported</span>
       </div>
     );
   }
 
-  // Permission denied
+  // Permission denied - show blocked state
   if (notificationPermission === "denied") {
     return (
-      <div className="rounded-lg bg-red-500/10 p-4 text-sm text-red-400">
-        <BellOff className="mb-2 h-5 w-5" />
-        <p className="font-medium">Notifications Blocked</p>
-        <p className="mt-1 text-xs opacity-70">
-          You&apos;ll need to enable notifications in your browser/phone settings.
-        </p>
+      <div 
+        className="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-400/70"
+        title="Notifications blocked in browser settings"
+      >
+        <BellOff className="h-5 w-5" />
+        <span className="text-xs">Blocked</span>
       </div>
     );
   }
@@ -456,109 +453,90 @@ export function NotificationToggle() {
   // VAPID not configured
   if (!vapidConfigured) {
     return (
-      <div className="rounded-lg bg-amber-500/10 p-4 text-sm text-amber-400">
-        <AlertTriangle className="mb-2 h-5 w-5" />
-        <p className="font-medium">Not Configured</p>
-        <p className="mt-1 text-xs opacity-70">
-          Push notifications haven&apos;t been set up on the server yet.
-        </p>
+      <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-amber-400/70">
+        <AlertTriangle className="h-4 w-4" />
+        <span className="text-xs">Not configured</span>
       </div>
     );
   }
 
-  // Service worker error
+  // Service worker error - show retry option
   if (swStatus === "error") {
     return (
-      <div className="rounded-lg bg-red-500/10 p-4 text-sm text-red-400">
-        <AlertTriangle className="mb-2 h-5 w-5" />
-        <p className="font-medium">Service Worker Error</p>
-        <p className="mt-1 text-xs opacity-70">{swError || "Failed to initialize"}</p>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={retryServiceWorker}
-          className="mt-2 border-red-500/30 text-red-400"
-        >
-          <RefreshCw className="mr-2 h-3 w-3" /> Retry
-        </Button>
-      </div>
+      <button
+        onClick={retryServiceWorker}
+        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-400/70 transition-colors hover:bg-white/5 hover:text-red-400"
+      >
+        <RefreshCw className="h-5 w-5" />
+        <span className="text-xs">Retry</span>
+      </button>
     );
   }
 
   // Loading service worker
   if (swStatus === "loading") {
     return (
-      <div className="rounded-lg bg-neutral-800 p-4 text-sm text-neutral-400">
-        <Loader2 className="mb-2 h-5 w-5 animate-spin" />
-        <p>Setting up notifications...</p>
+      <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/40">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span className="text-xs">Loading...</span>
       </div>
     );
   }
 
-  // Ready - show toggle
+  // Ready - show the vertical bell toggle!
   return (
-    <div className="space-y-3">
+    <div className="relative">
       <button
         onClick={handleToggle}
         disabled={loading}
-        className={`flex w-full items-center justify-between rounded-xl p-4 transition-all active:scale-[0.98] ${
-          isSubscribed
-            ? "bg-green-500/20 border-2 border-green-500/40"
-            : "bg-neutral-800 border-2 border-neutral-700 hover:border-neutral-600"
-        } ${loading ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+        className={`group flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${
+          loading ? "opacity-60 cursor-wait" : "cursor-pointer hover:bg-white/5"
+        }`}
+        aria-label={isSubscribed ? "Turn off notifications" : "Turn on notifications"}
       >
-        <div className="flex items-center gap-3">
-          <div className={`flex h-12 w-12 items-center justify-center rounded-full ${
-            isSubscribed ? "bg-green-500" : "bg-neutral-700"
+        {/* Vertical Toggle Track */}
+        <div className={`relative h-14 w-8 rounded-full p-1 transition-all duration-300 ${
+          isSubscribed 
+            ? "bg-gradient-to-b from-green-400 to-green-600 shadow-[0_0_12px_rgba(34,197,94,0.4)]" 
+            : "bg-neutral-700"
+        }`}>
+          {/* Sliding Bell Button */}
+          <div className={`flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-md transition-all duration-300 ${
+            isSubscribed ? "translate-y-0" : "translate-y-6"
           }`}>
             {loading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-white" />
-            ) : isSubscribed ? (
-              <Bell className="h-6 w-6 text-white" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-neutral-600" />
             ) : (
-              <BellOff className="h-6 w-6 text-neutral-400" />
+              <Bell className={`h-3.5 w-3.5 transition-colors ${
+                isSubscribed ? "text-green-600" : "text-neutral-400"
+              }`} />
             )}
-          </div>
-          
-          <div className="text-left">
-            <p className={`font-semibold ${isSubscribed ? "text-green-400" : "text-white"}`}>
-              {loading ? "Please wait..." : isSubscribed ? "Notifications ON" : "Notifications OFF"}
-            </p>
-            <p className="text-xs text-neutral-400">
-              {isSubscribed ? "Tap to disable" : "Tap to enable"}
-            </p>
           </div>
         </div>
         
-        {/* Toggle visual - fixed width to prevent deformation */}
-        <div className={`h-8 w-14 shrink-0 rounded-full p-1 transition-colors ${
-          isSubscribed ? "bg-green-500" : "bg-neutral-600"
+        {/* Label */}
+        <span className={`text-xs font-medium transition-colors ${
+          isSubscribed ? "text-green-400" : "text-foreground/50"
         }`}>
-          <div className={`h-6 w-6 rounded-full bg-white shadow-md transition-transform duration-200 ${
-            isSubscribed ? "translate-x-6" : "translate-x-0"
-          }`} />
-        </div>
+          {loading ? "..." : isSubscribed ? "Alerts on" : "Alerts off"}
+        </span>
       </button>
       
-      {/* Status messages */}
+      {/* Tooltip on hover */}
+      {showTooltip && !loading && (
+        <div className="absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-neutral-800 px-2 py-1 text-[10px] text-neutral-300 shadow-lg">
+          {isSubscribed ? "Click to disable" : "Click to enable"}
+          <div className="absolute -left-1 top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 bg-neutral-800" />
+        </div>
+      )}
+      
+      {/* Error toast */}
       {error && (
-        <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 rounded-md bg-red-500/20 px-2 py-1 text-[10px] text-red-400">
           {error}
         </div>
-      )}
-      
-      {success && (
-        <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs text-green-400">
-          <CheckCircle2 className="h-4 w-4 shrink-0" />
-          {success}
-        </div>
-      )}
-      
-      {isSubscribed && !loading && !success && (
-        <p className="text-center text-xs text-neutral-500">
-          You&apos;ll receive alerts for new bookings
-        </p>
       )}
     </div>
   );

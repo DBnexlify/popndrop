@@ -509,24 +509,26 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     <div className="space-y-6">
       {/* ===================================================================== */}
       {/* PROGRESS INDICATOR - Desktop */}
+      {/* Clean, minimal container that lets the progress bar breathe */}
       {/* ===================================================================== */}
       <div className="hidden sm:block">
         <div className={styles.card}>
-          <div className="p-4 sm:p-5">
+          <div className="px-6 py-5">
             <BookingProgress currentStep={currentStep} steps={BOOKING_STEPS} />
           </div>
           <div className={styles.cardInner} />
         </div>
       </div>
-      
+
       {/* ===================================================================== */}
       {/* PROGRESS INDICATOR - Mobile (Compact) */}
+      {/* Optimized for smaller screens with clear step indication */}
       {/* ===================================================================== */}
       <div className="sm:hidden">
         <div className={styles.card}>
-          <div className="p-3">
-            <BookingProgressCompact 
-              currentStep={currentStep} 
+          <div className="px-4 py-3">
+            <BookingProgressCompact
+              currentStep={currentStep}
               totalSteps={4}
               stepLabel={BOOKING_STEPS[currentStep - 1]?.label}
             />
@@ -1177,8 +1179,8 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
         {/* RIGHT COLUMN - Sidebar (Tier 2 Standard Cards) */}
         {/* ===================================================================== */}
         <div className="space-y-4">
-          {/* Order Summary */}
-          <div className={cn(styles.card, "sticky top-20")}>
+          {/* Order Summary - Sticky with proper z-index */}
+          <div className={cn(styles.card, "sticky top-20 z-40")}>
             <div className={styles.cardHeader}>
               <span className={styles.cardTitle}>Summary</span>
             </div>
