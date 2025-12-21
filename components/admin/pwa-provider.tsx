@@ -114,7 +114,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
     };
   }, [vapidConfigured]);
 
-  // Register service worker
+  // Register service worker and wait for it to be ready
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
       console.log("[PWA] Service workers not supported");
@@ -123,14 +123,21 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 
     const registerSW = async () => {
       try {
+        // First register the service worker
         const reg = await navigator.serviceWorker.register("/admin/sw.js", {
           scope: "/admin/",
         });
         console.log("[PWA] Service worker registered:", reg.scope);
-        setRegistration(reg);
+        
+        // Wait for the service worker to be ready (active)
+        const readyReg = await navigator.serviceWorker.ready;
+        console.log("[PWA] Service worker is ready/active:", readyReg.scope);
+        
+        setRegistration(readyReg);
         setSwRegistered(true);
 
-        const subscription = await reg.pushManager.getSubscription();
+        // Now check for existing subscription
+        const subscription = await readyReg.pushManager.getSubscription();
         console.log("[PWA] Existing subscription:", !!subscription);
         setIsSubscribed(!!subscription);
       } catch (err) {
