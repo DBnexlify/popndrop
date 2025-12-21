@@ -1,43 +1,17 @@
-// ============================================
-// RENTAL TYPES
-// ============================================
+// ============================================================================
+// RENTAL TYPES & HELPERS
+// Data now comes from database - this file contains only business logic
+// ============================================================================
 
-export interface RentalPricing {
-  daily: number;       // Any single day (Mon-Sat)
-  weekend: number;     // Sat + Sun package (pickup Monday)
-  sunday: number;      // Sunday only (delivered Sat evening, pickup Monday)
-}
+import { ProductDisplay, BookingType } from './database-types';
 
-export interface RentalSpecs {
-  dimensions: string;          // L x W x H
-  footprint: string;           // Space needed for setup
-  maxPlayers: number;          // At one time
-  maxWeightPerPlayer: number;  // lbs
-  totalWeightLimit: number;    // lbs
-  heightRange: string;         // Min-max participant height
-  wetOrDry: "wet" | "dry" | "both";
-  powerRequired: string;
-}
+// Re-export types for backwards compatibility
+export type { ProductDisplay as Rental };
+export type { BookingType };
 
-export interface Rental {
-  id: string;
-  name: string;
-  series?: string;
-  subtitle: string;
-  description: string;
-  pricing: RentalPricing;
-  specs: RentalSpecs;
-  features: string[];
-  image: string;
-  gallery: string[];
-  safetyNotes?: string[];
-}
-
-// ============================================
+// ============================================================================
 // BOOKING TYPES
-// ============================================
-
-export type BookingType = "daily" | "weekend" | "sunday";
+// ============================================================================
 
 // Time window for delivery/pickup selection
 export type TimeWindow = {
@@ -64,9 +38,9 @@ export interface PricingResult {
   options: PricingOption[];
 }
 
-// ============================================
+// ============================================================================
 // SCHEDULE CONFIGURATION
-// ============================================
+// ============================================================================
 
 export const SCHEDULE = {
   // Days we deliver (0 = Sunday, 6 = Saturday)
@@ -106,113 +80,9 @@ export const SCHEDULE = {
 
 export const DEPOSIT_AMOUNT = 50;
 
-// ============================================
-// RENTAL INVENTORY
-// ============================================
-
-export const rentals: Rental[] = [
-  {
-    id: "glitch-combo",
-    name: "Glitch Combo",
-    series: "Glitch Series",
-    subtitle: "Bounce house with slide – wet or dry",
-    description:
-      "The ultimate gamer-themed combo unit! Features a spacious bounce area and an exciting slide that can be used wet or dry. The vibrant gaming graphics and colors make this perfect for birthday parties, school events, and backyard fun. ASTM F2374 certified for safety.",
-    pricing: {
-      daily: 350,
-      weekend: 475,
-      sunday: 375,  // Slight premium for Sunday-only (Sat evening delivery)
-    },
-    specs: {
-      dimensions: "28' L × 13' W × 15' H",
-      footprint: "40' × 25' flat area required",
-      maxPlayers: 2,
-      maxWeightPerPlayer: 180,
-      totalWeightLimit: 360,
-      heightRange: "3' to 6' tall",
-      wetOrDry: "both",
-      powerRequired: "1 standard outlet within 50ft",
-    },
-    features: [
-      "Bounce house + slide combo",
-      "Wet or dry use",
-      "Ages 3–12",
-      "Gaming theme",
-    ],
-    image: "/rentals/glitch/combo/hero.png",
-    gallery: [
-      "/rentals/glitch/combo/hero.png",
-      "/rentals/glitch/combo/photo-1.png",
-      "/rentals/glitch/combo/photo-2.png",
-      "/rentals/glitch/combo/photo-3.png",
-      "/rentals/glitch/combo/photo-4.png",
-      "/rentals/glitch/combo/photo-5.png",
-      "/rentals/glitch/combo/photo-6.jpg",
-      "/rentals/glitch/combo/photo-7.jpg",
-      "/rentals/glitch/combo/photo-8.jpg",
-    ],
-    safetyNotes: [
-      "Adult supervision required at all times",
-      "Max 2 jumpers at once",
-      "No shoes, glasses, or sharp objects",
-      "No flips or rough play",
-    ],
-  },
-  // Placeholder for second rental
-  {
-    id: "coming-soon",
-    name: "Coming Soon",
-    subtitle: "New rental arriving soon",
-    description: "Stay tuned for our next exciting rental!",
-    pricing: {
-      daily: 0,
-      weekend: 0,
-      sunday: 0,
-    },
-    specs: {
-      dimensions: "TBD",
-      footprint: "TBD",
-      maxPlayers: 0,
-      maxWeightPerPlayer: 0,
-      totalWeightLimit: 0,
-      heightRange: "TBD",
-      wetOrDry: "dry",
-      powerRequired: "TBD",
-    },
-    features: [],
-    image: "/rentals/placeholder/hero.png",
-    gallery: [],
-  },
-];
-
-// ============================================
-// HELPER FUNCTIONS
-// ============================================
-
-/**
- * Get a rental by its ID
- */
-export function getRentalById(id: string): Rental | undefined {
-  return rentals.find((r) => r.id === id);
-}
-
-/**
- * Get all rentals in a series
- */
-export function getRentalsBySeries(series: string): Rental[] {
-  return rentals.filter((r) => r.series === series);
-}
-
-/**
- * Get only rentals that are available for booking (not "coming soon")
- */
-export function getAvailableRentals(): Rental[] {
-  return rentals.filter((r) => r.pricing.daily > 0);
-}
-
-// ============================================
-// PRICING & AVAILABILITY LOGIC
-// ============================================
+// ============================================================================
+// AVAILABILITY HELPERS
+// ============================================================================
 
 /**
  * Check if a specific date is available as an EVENT date
@@ -242,8 +112,12 @@ export function getDayName(date: Date): string {
   return date.toLocaleDateString("en-US", { weekday: "long" });
 }
 
+// ============================================================================
+// PRICING LOGIC
+// ============================================================================
+
 /**
- * Get pricing options for a rental on a specific date
+ * Get pricing options for a product on a specific date
  * 
  * BUSINESS LOGIC:
  * - Sunday (day 0): Offer weekend package (PREFERRED) or Sunday-only
@@ -252,12 +126,12 @@ export function getDayName(date: Date): string {
  * - Saturday (day 6): Offer daily OR weekend package
  * - Mon-Fri (days 1-5): Daily rate only
  */
-export function getPricingOptions(rental: Rental, date: Date): PricingResult {
+export function getPricingOptions(product: ProductDisplay, date: Date): PricingResult {
   const dayOfWeek = date.getDay();
   const dayName = getDayName(date);
   
-  // Coming soon rentals
-  if (rental.pricing.daily === 0) {
+  // Coming soon products (price = 0)
+  if (product.pricing.daily === 0) {
     return {
       available: false,
       reason: "This rental is coming soon and not yet available for booking.",
@@ -272,7 +146,7 @@ export function getPricingOptions(rental: Rental, date: Date): PricingResult {
       options: [
         {
           type: "weekend",
-          price: rental.pricing.weekend,
+          price: product.pricing.weekend,
           label: "Weekend package",
           description: "Get the full weekend! Delivered Saturday morning, pickup Monday",
           deliveryDay: "Saturday",
@@ -284,7 +158,7 @@ export function getPricingOptions(rental: Rental, date: Date): PricingResult {
         },
         {
           type: "sunday",
-          price: rental.pricing.sunday,
+          price: product.pricing.sunday,
           label: "Sunday only",
           description: "Delivered Saturday evening, pickup Monday",
           deliveryDay: "Saturday",
@@ -303,7 +177,7 @@ export function getPricingOptions(rental: Rental, date: Date): PricingResult {
       options: [
         {
           type: "daily",
-          price: rental.pricing.daily,
+          price: product.pricing.daily,
           label: "Saturday only",
           description: "Single day rental, pickup Saturday evening",
           deliveryDay: "Saturday",
@@ -313,7 +187,7 @@ export function getPricingOptions(rental: Rental, date: Date): PricingResult {
         },
         {
           type: "weekend",
-          price: rental.pricing.weekend,
+          price: product.pricing.weekend,
           label: "Weekend package",
           description: "Keep it Saturday & Sunday, pickup Monday",
           deliveryDay: "Saturday",
@@ -327,14 +201,14 @@ export function getPricingOptions(rental: Rental, date: Date): PricingResult {
     };
   }
   
-  // FRIDAY - offer daily with next-morning option, or 3-day weekend
+  // FRIDAY - offer daily with next-morning option
   if (dayOfWeek === 5) {
     return {
       available: true,
       options: [
         {
           type: "daily",
-          price: rental.pricing.daily,
+          price: product.pricing.daily,
           label: `${dayName} rental`,
           description: "Single day rental",
           deliveryDay: dayName,
@@ -352,7 +226,7 @@ export function getPricingOptions(rental: Rental, date: Date): PricingResult {
     options: [
       {
         type: "daily",
-        price: rental.pricing.daily,
+        price: product.pricing.daily,
         label: `${dayName} rental`,
         description: "Single day rental",
         deliveryDay: dayName,
@@ -367,14 +241,14 @@ export function getPricingOptions(rental: Rental, date: Date): PricingResult {
 /**
  * Calculate the total price for a booking
  */
-export function calculateTotal(rental: Rental, bookingType: BookingType): number {
+export function calculateTotal(product: ProductDisplay, bookingType: BookingType): number {
   switch (bookingType) {
     case "daily":
-      return rental.pricing.daily;
+      return product.pricing.daily;
     case "weekend":
-      return rental.pricing.weekend;
+      return product.pricing.weekend;
     case "sunday":
-      return rental.pricing.sunday;
+      return product.pricing.sunday;
     default:
       return 0;
   }
@@ -383,8 +257,8 @@ export function calculateTotal(rental: Rental, bookingType: BookingType): number
 /**
  * Calculate the balance due after deposit
  */
-export function calculateBalance(rental: Rental, bookingType: BookingType): number {
-  return calculateTotal(rental, bookingType) - DEPOSIT_AMOUNT;
+export function calculateBalance(product: ProductDisplay, bookingType: BookingType): number {
+  return calculateTotal(product, bookingType) - DEPOSIT_AMOUNT;
 }
 
 /**
@@ -428,9 +302,9 @@ export function formatPrice(amount: number): string {
   return `$${amount.toLocaleString()}`;
 }
 
-// ============================================
+// ============================================================================
 // VALIDATION
-// ============================================
+// ============================================================================
 
 export interface ValidationResult {
   valid: boolean;
@@ -441,7 +315,7 @@ export interface ValidationResult {
  * Validate a booking request
  */
 export function validateBooking(
-  rental: Rental | undefined,
+  product: ProductDisplay | undefined,
   date: Date | undefined,
   bookingType: BookingType,
   deliveryTime: string,
@@ -449,7 +323,7 @@ export function validateBooking(
 ): ValidationResult {
   const errors: string[] = [];
   
-  if (!rental) {
+  if (!product) {
     errors.push("Please select a rental");
   }
   

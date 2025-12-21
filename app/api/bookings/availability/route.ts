@@ -1,63 +1,184 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 
+/**
+ * GET /api/bookings/availability?productSlug=glitch-combo
+ * 
+ * Returns all unavailable dates for a product over the next 6 months.
+ * A date is unavailable if:
+ * - All units of that product are booked (delivery_date to pickup_date range)
+ * - There's a blackout date (global, product-level, or unit-level)
+ */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const rentalId = searchParams.get('rentalId');
+  const productSlug = searchParams.get('productSlug');
+  
+  // Support legacy parameter name too
+  const legacyRentalId = searchParams.get('rentalId');
+  const slug = productSlug || legacyRentalId;
 
-  if (!rentalId) {
+  if (!slug) {
     return NextResponse.json(
-      { error: 'rentalId is required' },
+      { error: 'productSlug is required', unavailableDates: [] },
       { status: 400 }
     );
   }
 
   const supabase = createServerClient();
-  const today = new Date().toISOString().split('T')[0];
 
-  // Get all confirmed bookings for this rental from today onwards
-  const { data: bookings, error } = await supabase
-    .from('bookings')
-    .select('event_date, booking_type, pickup_date')
-    .eq('rental_id', rentalId)
-    .gte('event_date', today)
-    .in('status', ['pending', 'confirmed']);
+  // Get the product first
+  const { data: product, error: productError } = await supabase
+    .from('products')
+    .select('id')
+    .eq('slug', slug)
+    .single();
 
-  if (error) {
-    console.error('Error fetching bookings:', error);
+  if (productError || !product) {
     return NextResponse.json(
-      { error: 'Failed to fetch bookings' },
-      { status: 500 }
+      { error: 'Product not found', unavailableDates: [] },
+      { status: 404 }
     );
   }
 
-  // Build list of unavailable dates
-  const unavailableDates: string[] = [];
+  const today = new Date();
+  const sixMonthsOut = new Date();
+  sixMonthsOut.setMonth(sixMonthsOut.getMonth() + 6);
 
-  if (bookings) {
+  const todayStr = today.toISOString().split('T')[0];
+  const sixMonthsStr = sixMonthsOut.toISOString().split('T')[0];
+
+  // Use the database function to get blocked dates
+  // Parameters use p_ prefix (p_product_id, p_from_date, p_to_date)
+  const { data: blockedDates, error: blockedError } = await supabase
+    .rpc('get_blocked_dates_for_product', {
+      p_product_id: product.id,
+      p_from_date: todayStr,
+      p_to_date: sixMonthsStr,
+    });
+
+  if (blockedError) {
+    console.error('Error fetching blocked dates:', blockedError);
+    
+    // Fallback: manually query bookings and blackouts
+    return await getFallbackUnavailableDates(supabase, product.id, todayStr, sixMonthsStr);
+  }
+
+  return NextResponse.json({
+  unavailableDates: (blockedDates || []).map((d: { blocked_date: string }) => d.blocked_date),
+});
+}
+
+/**
+ * Fallback method if the RPC function fails
+ */
+async function getFallbackUnavailableDates(
+  supabase: ReturnType<typeof createServerClient>,
+  productId: string,
+  fromDate: string,
+  toDate: string
+) {
+  const unavailableDates: Set<string> = new Set();
+
+  // 1. Get all units for this product
+  const { data: units } = await supabase
+    .from('units')
+    .select('id')
+    .eq('product_id', productId)
+    .eq('status', 'available');
+
+  const unitIds = units?.map(u => u.id) || [];
+
+  if (unitIds.length === 0) {
+    // No available units = all dates blocked
+    // Return a message indicating this
+    return NextResponse.json({
+      unavailableDates: [],
+      error: 'No units available for this product',
+    });
+  }
+
+  // 2. Get all bookings for these units
+  const { data: bookings } = await supabase
+    .from('bookings')
+    .select('delivery_date, pickup_date, unit_id')
+    .in('unit_id', unitIds)
+    .gte('pickup_date', fromDate)
+    .lte('delivery_date', toDate)
+    .in('status', ['pending', 'confirmed', 'delivered']);
+
+  // For each date in range, check if ALL units are booked
+  // (We need to check each date individually)
+  if (bookings && bookings.length > 0) {
+    // Group bookings by unit
+    const bookingsByUnit: Map<string, Array<{ start: Date; end: Date }>> = new Map();
+    
     for (const booking of bookings) {
-      const eventDate = new Date(booking.event_date + 'T12:00:00'); // Noon to avoid timezone issues
+      const unitBookings = bookingsByUnit.get(booking.unit_id) || [];
+      unitBookings.push({
+        start: new Date(booking.delivery_date + 'T00:00:00'),
+        end: new Date(booking.pickup_date + 'T23:59:59'),
+      });
+      bookingsByUnit.set(booking.unit_id, unitBookings);
+    }
+
+    // Check each date in the range
+    const checkDate = new Date(fromDate + 'T12:00:00');
+    const endDate = new Date(toDate + 'T12:00:00');
+
+    while (checkDate <= endDate) {
+      const dateStr = checkDate.toISOString().split('T')[0];
       
-      // Always block the event date
-      unavailableDates.push(booking.event_date);
+      // Count how many units are available on this date
+      let availableUnits = 0;
       
-      if (booking.booking_type === 'weekend') {
-        // Weekend booking (Saturday start): block Saturday + Sunday
-        const sunday = new Date(eventDate);
-        sunday.setDate(sunday.getDate() + 1);
-        unavailableDates.push(sunday.toISOString().split('T')[0]);
-      } else if (booking.booking_type === 'sunday') {
-        // Sunday-only booking: also block the preceding Saturday
-        // (equipment is delivered Saturday evening)
-        const saturday = new Date(eventDate);
-        saturday.setDate(saturday.getDate() - 1);
-        unavailableDates.push(saturday.toISOString().split('T')[0]);
+      for (const unitId of unitIds) {
+        const unitBookings = bookingsByUnit.get(unitId) || [];
+        const isBooked = unitBookings.some(
+          b => checkDate >= b.start && checkDate <= b.end
+        );
+        if (!isBooked) {
+          availableUnits++;
+        }
       }
-      // Daily bookings only block the event date itself (already added above)
+
+      // If no units available, date is blocked
+      if (availableUnits === 0) {
+        unavailableDates.add(dateStr);
+      }
+
+      checkDate.setDate(checkDate.getDate() + 1);
+    }
+  }
+
+  // 3. Get blackout dates
+  const { data: blackouts } = await supabase
+    .from('blackout_dates')
+    .select('date, scope, product_id, unit_id')
+    .gte('date', fromDate)
+    .lte('date', toDate);
+
+  if (blackouts) {
+    for (const blackout of blackouts) {
+      // Global blackouts always apply
+      if (blackout.scope === 'global') {
+        unavailableDates.add(blackout.date);
+      }
+      // Product-level blackouts
+      else if (blackout.scope === 'product' && blackout.product_id === productId) {
+        unavailableDates.add(blackout.date);
+      }
+      // Unit-level blackouts (only if it blocks ALL units)
+      else if (blackout.scope === 'unit' && blackout.unit_id && unitIds.includes(blackout.unit_id)) {
+        // Would need to check if all units are blocked - simplified for now
+        // In practice, unit-level blackouts for single-unit products block the date
+        if (unitIds.length === 1) {
+          unavailableDates.add(blackout.date);
+        }
+      }
     }
   }
 
   return NextResponse.json({
-    unavailableDates: [...new Set(unavailableDates)],
+    unavailableDates: Array.from(unavailableDates).sort(),
   });
 }

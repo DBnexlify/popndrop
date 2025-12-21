@@ -1,726 +1,630 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { resend, FROM_EMAIL, NOTIFY_EMAIL } from '@/lib/resend';
+import { notifyNewBooking } from '@/lib/push-notifications';
 
-// Configuration
-const SITE_URL = "https://popndroprentals.com";
-const LOGO_URL = "https://popndroprentals.com/brand/logo.png";
-const POWER_OUTLET_DISTANCE = "50"; // feet - update to match your actual policy
+// ============================================================================
+// CONSTANTS
+// ============================================================================
 
-// Email wrapper with clean, email-safe HTML
-function createEmailWrapper(content: string, previewText: string) {
-  return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pop and Drop Party Rentals</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #111111; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-  
-  <!-- Preview text -->
-  <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">
-    ${previewText}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
-  </div>
-  
-  <!-- Main container -->
-  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #111111;">
-    <tr>
-      <td align="center" style="padding: 32px 16px;">
-        
-        <!-- Content card -->
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 520px; background-color: #1a1a1a; border-radius: 16px;">
-          
-          <!-- Logo header -->
-          <tr>
-            <td align="center" style="padding: 28px 24px 20px 24px; border-bottom: 1px solid #2a2a2a;">
-              <a href="${SITE_URL}" style="text-decoration: none; display: block;">
-                <!--[if mso]>
-                <table cellpadding="0" cellspacing="0" border="0" align="center">
-                  <tr>
-                    <td align="center">
-                <![endif]-->
-                <img 
-                  src="${LOGO_URL}" 
-                  alt="Pop and Drop Party Rentals" 
-                  width="160" 
-                  height="160"
-                  style="display: block; width: 160px; height: auto; max-width: 100%; border: 0; border-radius: 12px;"
-                />
-                <!--[if mso]>
-                    </td>
-                  </tr>
-                </table>
-                <![endif]-->
-              </a>
-            </td>
-          </tr>
-          
-          <!-- Content -->
-          <tr>
-            <td style="padding: 28px 24px;">
-              ${content}
-            </td>
-          </tr>
-          
-          <!-- Footer -->
-          <tr>
-            <td style="padding: 20px 24px; background-color: #141414; border-top: 1px solid #2a2a2a; border-radius: 0 0 16px 16px;">
-              <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td align="center" style="padding-bottom: 12px;">
-                    <a href="tel:3524453723" style="color: #22d3ee; text-decoration: none; font-size: 13px; font-weight: 500;">(352) 445-3723</a>
-                    <span style="color: #444444; margin: 0 8px;">•</span>
-                    <a href="mailto:bookings@popndroprentals.com" style="color: #22d3ee; text-decoration: none; font-size: 13px; font-weight: 500;">bookings@popndroprentals.com</a>
-                  </td>
-                </tr>
-                <tr>
-                  <td align="center">
-                    <span style="font-size: 12px; color: #555555;">Pop and Drop Party Rentals • Ocala, FL</span>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          
-        </table>
-        
-        <!-- Bottom disclaimer -->
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 520px;">
-          <tr>
-            <td align="center" style="padding: 20px 16px;">
-              <span style="font-size: 11px; color: #444444; line-height: 1.5;">
-                You received this email because you booked at <a href="${SITE_URL}" style="color: #555555;">popndroprentals.com</a><br>
-                © ${new Date().getFullYear()} Pop and Drop Party Rentals
-              </span>
-            </td>
-          </tr>
-        </table>
-        
-      </td>
-    </tr>
-  </table>
-  
-</body>
-</html>
-`;
-}
+const DEPOSIT_AMOUNT = 50;
 
-// Customer email content
-function createCustomerEmailContent({
-  customerName,
-  rentalName,
-  formattedDate,
-  bookingType,
-  deliveryTime,
-  pickupTime,
-  address,
-  city,
-  totalPrice,
-  notes,
-}: {
-  customerName: string;
-  rentalName: string;
-  formattedDate: string;
-  bookingType: string;
-  deliveryTime: string;
-  pickupTime: string;
-  address: string;
-  city: string;
-  totalPrice: number;
-  notes: string | null;
-}) {
-  const firstName = customerName.split(' ')[0];
-  
-  return `
-<!-- Success icon - perfectly round -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0">
-  <tr>
-    <td align="center" style="padding-bottom: 20px;">
-      <!--[if mso]>
-      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" style="height:56px;v-text-anchor:middle;width:56px;" arcsize="50%" fillcolor="#22c55e" stroke="f">
-        <w:anchorlock/>
-        <center style="color:#ffffff;font-size:28px;">✓</center>
-      </v:roundrect>
-      <![endif]-->
-      <!--[if !mso]><!-->
-      <div style="display: inline-block; width: 56px; height: 56px; line-height: 56px; background-color: #22c55e; border-radius: 50%; text-align: center; font-size: 28px; color: #ffffff;">✓</div>
-      <!--<![endif]-->
-    </td>
-  </tr>
-</table>
+// ============================================================================
+// TYPES
+// ============================================================================
 
-<!-- Heading -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0">
-  <tr>
-    <td align="center" style="padding-bottom: 6px;">
-      <span style="font-size: 24px; font-weight: 700; color: #ffffff;">You're All Set!</span>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" style="padding-bottom: 24px;">
-      <span style="font-size: 15px; color: #888888;">Get ready for an amazing party, ${firstName}!</span>
-    </td>
-  </tr>
-</table>
+type BookingType = 'daily' | 'weekend' | 'sunday';
 
-<!-- Rental highlight -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: linear-gradient(135deg, #581c87 0%, #0e7490 100%); border-radius: 12px; margin-bottom: 20px;">
-  <tr>
-    <td align="center" style="padding: 16px 20px;">
-      <span style="font-size: 11px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px;">Your Rental</span>
-      <span style="font-size: 18px; font-weight: 600; color: #ffffff;">${rentalName}</span>
-    </td>
-  </tr>
-</table>
-
-<!-- Booking details -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #222222; border-radius: 12px; margin-bottom: 20px;">
-  <tr>
-    <td style="padding: 16px 20px;">
-      
-      <table width="100%" cellpadding="0" cellspacing="0" border="0">
-        <!-- Date & Package row -->
-        <tr>
-          <td width="50%" style="padding: 6px 0; vertical-align: top;">
-            <span style="font-size: 11px; color: #666666; display: block;">📅 Date</span>
-            <span style="font-size: 14px; color: #ffffff; font-weight: 500;">${formattedDate}</span>
-          </td>
-          <td width="50%" style="padding: 6px 0; vertical-align: top;">
-            <span style="font-size: 11px; color: #666666; display: block;">📦 Package</span>
-            <span style="font-size: 14px; color: #ffffff; font-weight: 500;">${bookingType === 'weekend' ? 'Weekend Special' : 'Daily Rental'}</span>
-          </td>
-        </tr>
-        <!-- Times row -->
-        <tr>
-          <td width="50%" style="padding: 6px 0; vertical-align: top;">
-            <span style="font-size: 11px; color: #666666; display: block;">🚚 Delivery</span>
-            <span style="font-size: 14px; color: #ffffff; font-weight: 500;">${deliveryTime}</span>
-          </td>
-          <td width="50%" style="padding: 6px 0; vertical-align: top;">
-            <span style="font-size: 11px; color: #666666; display: block;">📍 Pickup</span>
-            <span style="font-size: 14px; color: #ffffff; font-weight: 500;">${pickupTime}</span>
-          </td>
-        </tr>
-        <!-- Address row -->
-        <tr>
-          <td colspan="2" style="padding: 6px 0; padding-top: 12px; border-top: 1px solid #333333; margin-top: 8px;">
-            <span style="font-size: 11px; color: #666666; display: block;">🏠 Location</span>
-            <span style="font-size: 14px; color: #ffffff; font-weight: 500;">${address}, ${city}</span>
-          </td>
-        </tr>
-      </table>
-      
-    </td>
-  </tr>
-</table>
-
-<!-- Total -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: rgba(34, 211, 238, 0.1); border-radius: 10px; margin-bottom: 24px;">
-  <tr>
-    <td style="padding: 14px 20px;">
-      <table width="100%" cellpadding="0" cellspacing="0" border="0">
-        <tr>
-          <td style="color: #888888; font-size: 14px;">Total (due on delivery)</td>
-          <td align="right" style="color: #22d3ee; font-size: 22px; font-weight: 700;">$${totalPrice}</td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-
-${notes ? `
-<!-- Notes -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
-  <tr>
-    <td style="padding: 12px 16px; background-color: #222222; border-left: 3px solid #a855f7; border-radius: 0 8px 8px 0;">
-      <span style="font-size: 11px; color: #666666; display: block; margin-bottom: 4px;">Your Notes</span>
-      <span style="font-size: 13px; color: #cccccc; line-height: 1.5;">${notes}</span>
-    </td>
-  </tr>
-</table>
-` : ''}
-
-<!-- What's next section -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 20px;">
-  <tr>
-    <td style="padding-bottom: 14px;">
-      <span style="font-size: 16px; font-weight: 600; color: #ffffff;">What Happens Next?</span>
-    </td>
-  </tr>
-</table>
-
-<!-- Steps -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
-  <!-- Step 1 -->
-  <tr>
-    <td style="padding: 10px 0; border-bottom: 1px solid #2a2a2a;">
-      <table cellpadding="0" cellspacing="0" border="0">
-        <tr>
-          <td width="28" valign="top">
-            <table cellpadding="0" cellspacing="0" border="0">
-              <tr>
-                <td width="22" height="22" align="center" valign="middle" style="background-color: #a855f7; border-radius: 11px; font-size: 11px; color: #ffffff; font-weight: 600;">1</td>
-              </tr>
-            </table>
-          </td>
-          <td style="padding-left: 10px;">
-            <span style="font-size: 14px; color: #ffffff; font-weight: 500; display: block;">Day Before Confirmation</span>
-            <span style="font-size: 12px; color: #666666;">We'll text you to confirm our arrival window</span>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-  <!-- Step 2 -->
-  <tr>
-    <td style="padding: 10px 0; border-bottom: 1px solid #2a2a2a;">
-      <table cellpadding="0" cellspacing="0" border="0">
-        <tr>
-          <td width="28" valign="top">
-            <table cellpadding="0" cellspacing="0" border="0">
-              <tr>
-                <td width="22" height="22" align="center" valign="middle" style="background-color: #a855f7; border-radius: 11px; font-size: 11px; color: #ffffff; font-weight: 600;">2</td>
-              </tr>
-            </table>
-          </td>
-          <td style="padding-left: 10px;">
-            <span style="font-size: 14px; color: #ffffff; font-weight: 500; display: block;">Delivery Day</span>
-            <span style="font-size: 12px; color: #666666;">We set up everything and do a safety walkthrough</span>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-  <!-- Step 3 -->
-  <tr>
-    <td style="padding: 10px 0;">
-      <table cellpadding="0" cellspacing="0" border="0">
-        <tr>
-          <td width="28" valign="top">
-            <table cellpadding="0" cellspacing="0" border="0">
-              <tr>
-                <td width="22" height="22" align="center" valign="middle" style="background-color: #a855f7; border-radius: 11px; font-size: 11px; color: #ffffff; font-weight: 600;">3</td>
-              </tr>
-            </table>
-          </td>
-          <td style="padding-left: 10px;">
-            <span style="font-size: 14px; color: #ffffff; font-weight: 500; display: block;">Party Time! 🎈</span>
-            <span style="font-size: 12px; color: #666666;">Enjoy your event — we handle the rest</span>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-
-<!-- Prep tips -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #1f1a2e; border-radius: 10px; margin-bottom: 24px;">
-  <tr>
-    <td style="padding: 14px 18px;">
-      <span style="font-size: 13px; font-weight: 600; color: #c084fc; display: block; margin-bottom: 6px;">💡 Quick Prep Tips</span>
-      <span style="font-size: 13px; color: #a0a0a0; line-height: 1.5;">Clear a flat area at least 5 feet larger than the unit. Have a power outlet within ${POWER_OUTLET_DISTANCE} feet. Remove sharp objects from the setup area.</span>
-    </td>
-  </tr>
-</table>
-
-<!-- CTA -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0">
-  <tr>
-    <td align="center" style="padding-bottom: 8px;">
-      <span style="font-size: 13px; color: #666666;">Questions? We're here to help!</span>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <a href="tel:3524453723" style="display: inline-block; background: linear-gradient(135deg, #d946ef 0%, #a855f7 100%); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 28px; border-radius: 50px;">Call Us: (352) 445-3723</a>
-    </td>
-  </tr>
-</table>
-`;
-}
-
-// Business notification email content
-function createBusinessEmailContent({
-  customerName,
-  customerEmail,
-  customerPhone,
-  rentalName,
-  formattedDate,
-  bookingType,
-  deliveryTime,
-  pickupTime,
-  address,
-  city,
-  totalPrice,
-  depositAmount,
-  balanceDue,
-  notes,
-}: {
+interface CreateBookingRequest {
+  productSlug: string;
+  eventDate: string;
+  bookingType: BookingType;
+  deliveryWindow: string;
+  pickupWindow: string;
   customerName: string;
   customerEmail: string;
   customerPhone: string;
-  rentalName: string;
-  formattedDate: string;
-  bookingType: string;
-  deliveryTime: string;
-  pickupTime: string;
   address: string;
   city: string;
-  totalPrice: number;
-  depositAmount: number;
-  balanceDue: number;
-  notes: string | null;
-}) {
-  return `
-<!-- Alert header -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0">
-  <tr>
-    <td align="center" style="padding-bottom: 8px;">
-      <span style="font-size: 28px;">🎯</span>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" style="padding-bottom: 4px;">
-      <span style="font-size: 22px; font-weight: 700; color: #ffffff;">New Booking!</span>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" style="padding-bottom: 24px;">
-      <span style="font-size: 14px; color: #888888;">${rentalName} • ${formattedDate}</span>
-    </td>
-  </tr>
-</table>
-
-<!-- Quick actions -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 20px;">
-  <tr>
-    <td align="center">
-      <a href="tel:${customerPhone.replace(/\D/g, '')}" style="display: inline-block; background-color: #22c55e; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600; padding: 10px 18px; border-radius: 50px; margin-right: 8px;">📞 Call</a>
-      <a href="mailto:${customerEmail}" style="display: inline-block; background-color: #333333; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600; padding: 10px 18px; border-radius: 50px;">✉️ Email</a>
-    </td>
-  </tr>
-</table>
-
-<!-- Customer info -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: linear-gradient(135deg, #164e63 0%, #0e7490 100%); border-radius: 12px; margin-bottom: 16px;">
-  <tr>
-    <td style="padding: 16px 20px;">
-      <span style="font-size: 10px; color: #67e8f9; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 8px;">Customer</span>
-      <span style="font-size: 17px; color: #ffffff; font-weight: 600; display: block; margin-bottom: 6px;">${customerName}</span>
-      <span style="font-size: 13px; color: #cccccc; display: block; margin-bottom: 2px;">📱 ${customerPhone}</span>
-      <span style="font-size: 13px; color: #cccccc;">✉️ ${customerEmail}</span>
-    </td>
-  </tr>
-</table>
-
-<!-- Booking details -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #222222; border-radius: 12px; margin-bottom: 16px;">
-  <tr>
-    <td style="padding: 16px 20px;">
-      <span style="font-size: 10px; color: #666666; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 12px;">Booking Details</span>
-      
-      <table width="100%" cellpadding="0" cellspacing="0" border="0">
-        <tr>
-          <td style="padding: 6px 0; border-bottom: 1px solid #333333;">
-            <span style="font-size: 13px; color: #888888;">Rental</span>
-          </td>
-          <td align="right" style="padding: 6px 0; border-bottom: 1px solid #333333;">
-            <span style="font-size: 13px; color: #ffffff; font-weight: 500;">${rentalName}</span>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 6px 0; border-bottom: 1px solid #333333;">
-            <span style="font-size: 13px; color: #888888;">Date</span>
-          </td>
-          <td align="right" style="padding: 6px 0; border-bottom: 1px solid #333333;">
-            <span style="font-size: 13px; color: #ffffff; font-weight: 500;">${formattedDate}</span>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 6px 0; border-bottom: 1px solid #333333;">
-            <span style="font-size: 13px; color: #888888;">Package</span>
-          </td>
-          <td align="right" style="padding: 6px 0; border-bottom: 1px solid #333333;">
-            <span style="font-size: 13px; color: #ffffff; font-weight: 500;">${bookingType === 'weekend' ? 'Weekend' : 'Daily'}</span>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 6px 0; border-bottom: 1px solid #333333;">
-            <span style="font-size: 13px; color: #888888;">Delivery</span>
-          </td>
-          <td align="right" style="padding: 6px 0; border-bottom: 1px solid #333333;">
-            <span style="font-size: 13px; color: #ffffff; font-weight: 500;">${deliveryTime}</span>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 6px 0; border-bottom: 1px solid #333333;">
-            <span style="font-size: 13px; color: #888888;">Pickup</span>
-          </td>
-          <td align="right" style="padding: 6px 0; border-bottom: 1px solid #333333;">
-            <span style="font-size: 13px; color: #ffffff; font-weight: 500;">${pickupTime}</span>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 6px 0;">
-            <span style="font-size: 13px; color: #888888;">Address</span>
-          </td>
-          <td align="right" style="padding: 6px 0;">
-            <span style="font-size: 13px; color: #ffffff; font-weight: 500;">${address}, ${city}</span>
-          </td>
-        </tr>
-      </table>
-      
-    </td>
-  </tr>
-</table>
-
-<!-- Pricing -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #14532d; border-radius: 12px; margin-bottom: 16px;">
-  <tr>
-    <td style="padding: 16px 20px;">
-      <span style="font-size: 10px; color: #86efac; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 10px;">Pricing</span>
-      
-      <table width="100%" cellpadding="0" cellspacing="0" border="0">
-        <tr>
-          <td style="padding: 4px 0;">
-            <span style="font-size: 13px; color: #a7f3d0;">Total</span>
-          </td>
-          <td align="right" style="padding: 4px 0;">
-            <span style="font-size: 13px; color: #ffffff;">$${totalPrice}</span>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 4px 0;">
-            <span style="font-size: 13px; color: #a7f3d0;">Deposit</span>
-          </td>
-          <td align="right" style="padding: 4px 0;">
-            <span style="font-size: 13px; color: #ffffff;">$${depositAmount}</span>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 8px 0 0 0; border-top: 1px solid #166534;">
-            <span style="font-size: 14px; color: #4ade80; font-weight: 600;">Balance Due</span>
-          </td>
-          <td align="right" style="padding: 8px 0 0 0; border-top: 1px solid #166534;">
-            <span style="font-size: 18px; color: #4ade80; font-weight: 700;">$${balanceDue}</span>
-          </td>
-        </tr>
-      </table>
-      
-    </td>
-  </tr>
-</table>
-
-${notes ? `
-<!-- Customer notes -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #1f1a2e; border-left: 3px solid #a855f7; border-radius: 0 8px 8px 0; margin-bottom: 16px;">
-  <tr>
-    <td style="padding: 14px 18px;">
-      <span style="font-size: 10px; color: #c084fc; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 6px;">Customer Notes</span>
-      <span style="font-size: 13px; color: #cccccc; line-height: 1.5;">${notes}</span>
-    </td>
-  </tr>
-</table>
-` : ''}
-
-<!-- Checklist -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #222222; border-radius: 10px;">
-  <tr>
-    <td style="padding: 14px 18px;">
-      <span style="font-size: 10px; color: #666666; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 10px;">Action Items</span>
-      <span style="font-size: 13px; color: #aaaaaa; display: block; margin-bottom: 6px;">☐ Add to calendar</span>
-      <span style="font-size: 13px; color: #aaaaaa; display: block; margin-bottom: 6px;">☐ Confirm ${rentalName} availability</span>
-      <span style="font-size: 13px; color: #aaaaaa; display: block;">☐ Text customer day before</span>
-    </td>
-  </tr>
-</table>
-`;
+  notes?: string;
 }
+
+interface Product {
+  id: string;
+  slug: string;
+  name: string;
+  price_daily: number;
+  price_weekend: number;
+  price_sunday: number;
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Split full name into first and last name
+ */
+function splitName(fullName: string): { firstName: string; lastName: string } {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: '' };
+  }
+  const firstName = parts[0];
+  const lastName = parts.slice(1).join(' ');
+  return { firstName, lastName };
+}
+
+/**
+ * Calculate delivery and pickup dates based on event date and booking type
+ */
+function calculateDates(eventDate: string, bookingType: BookingType): {
+  deliveryDate: string;
+  pickupDate: string;
+} {
+  const event = new Date(eventDate + 'T12:00:00'); // Noon to avoid timezone issues
+  const delivery = new Date(event);
+  const pickup = new Date(event);
+
+  if (bookingType === 'sunday') {
+    // Sunday event: deliver Saturday, pickup Monday
+    delivery.setDate(delivery.getDate() - 1);
+    pickup.setDate(pickup.getDate() + 1);
+  } else if (bookingType === 'weekend') {
+    // Saturday event with weekend package: pickup Monday
+    pickup.setDate(pickup.getDate() + 2);
+  }
+  // Daily: delivery and pickup same day
+
+  return {
+    deliveryDate: delivery.toISOString().split('T')[0],
+    pickupDate: pickup.toISOString().split('T')[0],
+  };
+}
+
+/**
+ * Format date for display
+ */
+function formatDate(dateStr: string): string {
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Get price based on booking type
+ */
+function getPrice(product: Product, bookingType: BookingType): number {
+  switch (bookingType) {
+    case 'daily':
+      return Number(product.price_daily);
+    case 'weekend':
+      return Number(product.price_weekend);
+    case 'sunday':
+      return Number(product.price_sunday);
+    default:
+      return Number(product.price_daily);
+  }
+}
+
+// ============================================================================
+// MAIN API HANDLER
+// ============================================================================
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body: CreateBookingRequest = await request.json();
 
     const {
-      rentalId,
-      rentalName,
+      productSlug,
       eventDate,
       bookingType,
-      pickupDate,
+      deliveryWindow,
+      pickupWindow,
       customerName,
       customerEmail,
       customerPhone,
       address,
       city,
-      deliveryTime,
-      pickupTime,
       notes,
-      totalPrice,
-      depositAmount,
-      balanceDue,
     } = body;
 
     // Validate required fields
-    if (!rentalId || !eventDate || !customerEmail) {
+    if (!productSlug || !eventDate || !customerEmail || !customerPhone || !address) {
+      console.error('Missing required fields:', { productSlug, eventDate, customerEmail, customerPhone, address });
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { success: false, error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
     const supabase = createServerClient();
 
-    // Check if date is still available
-    const { data: existingBookings } = await supabase
-      .from('bookings')
-      .select('id')
-      .eq('rental_id', rentalId)
-      .eq('event_date', eventDate)
-      .in('status', ['pending', 'confirmed']);
+    // ========================================================================
+    // 1. GET PRODUCT
+    // ========================================================================
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .select('*')
+      .eq('slug', productSlug)
+      .eq('is_active', true)
+      .single();
 
-    if (existingBookings && existingBookings.length > 0) {
+    if (productError || !product) {
+      console.error('Product not found:', productSlug, productError);
       return NextResponse.json(
-        { error: 'This date is no longer available. Please choose another date.' },
+        { success: false, error: 'Product not found' },
+        { status: 404 }
+      );
+    }
+
+    // ========================================================================
+    // 2. CALCULATE DATES & PRICING
+    // ========================================================================
+    const { deliveryDate, pickupDate } = calculateDates(eventDate, bookingType);
+    const priceTotal = getPrice(product as Product, bookingType);
+    const balanceDue = priceTotal - DEPOSIT_AMOUNT;
+
+    console.log('Booking details:', { 
+      productSlug, 
+      eventDate, 
+      deliveryDate, 
+      pickupDate, 
+      bookingType,
+      priceTotal 
+    });
+
+    // ========================================================================
+    // 3. FIND AVAILABLE UNIT
+    // ========================================================================
+    // Uses p_ prefixed parameters: p_product_id, p_start_date, p_end_date
+    const { data: availableUnitId, error: unitError } = await supabase
+      .rpc('find_available_unit', {
+        p_product_id: product.id,
+        p_start_date: deliveryDate,
+        p_end_date: pickupDate,
+      });
+
+    if (unitError) {
+      console.error('Error finding available unit:', unitError);
+      return NextResponse.json(
+        { success: false, error: 'Error checking availability. Please try again.' },
+        { status: 500 }
+      );
+    }
+
+    if (!availableUnitId) {
+      console.log('No available unit found for dates:', { deliveryDate, pickupDate });
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'This product is not available for the selected dates. Please choose another date.' 
+        },
         { status: 409 }
       );
     }
 
-    // For weekend bookings, check Sunday too
-    if (bookingType === 'weekend') {
-      const eventDateObj = new Date(eventDate);
-      const sunday = new Date(eventDateObj);
-      sunday.setDate(sunday.getDate() + 1);
-      const sundayStr = sunday.toISOString().split('T')[0];
+    console.log('Found available unit:', availableUnitId);
 
-      const { data: sundayBookings } = await supabase
-        .from('bookings')
-        .select('id')
-        .eq('rental_id', rentalId)
-        .eq('event_date', sundayStr)
-        .in('status', ['pending', 'confirmed']);
+    // ========================================================================
+    // 4. FIND OR CREATE CUSTOMER
+    // ========================================================================
+    const { firstName, lastName } = splitName(customerName);
 
-      if (sundayBookings && sundayBookings.length > 0) {
+    // First, try to find existing customer by email
+    const { data: existingCustomer } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('email', customerEmail.toLowerCase())
+      .single();
+
+    let customerId: string;
+
+    if (existingCustomer) {
+      // Update existing customer with latest info
+      const { error: updateError } = await supabase
+        .from('customers')
+        .update({
+          phone: customerPhone,
+          first_name: firstName,
+          last_name: lastName,
+        })
+        .eq('id', existingCustomer.id);
+
+      if (updateError) {
+        console.error('Error updating customer:', updateError);
+      }
+
+      customerId = existingCustomer.id;
+    } else {
+      // Create new customer
+      const { data: newCustomer, error: customerError } = await supabase
+        .from('customers')
+        .insert({
+          email: customerEmail.toLowerCase(),
+          phone: customerPhone,
+          first_name: firstName,
+          last_name: lastName,
+        })
+        .select()
+        .single();
+
+      if (customerError || !newCustomer) {
+        console.error('Error creating customer:', customerError);
         return NextResponse.json(
-          { error: 'Sunday is not available for a weekend booking. Please choose another date.' },
-          { status: 409 }
+          { success: false, error: 'Failed to create customer record' },
+          { status: 500 }
         );
       }
+
+      customerId = newCustomer.id;
     }
 
-    // Create booking
+    // ========================================================================
+    // 5. CREATE BOOKING
+    // ========================================================================
     const bookingData = {
-      rental_id: rentalId,
-      rental_name: rentalName,
-      event_date: eventDate,
+      unit_id: availableUnitId,
+      customer_id: customerId,
       booking_type: bookingType,
+      event_date: eventDate,
+      delivery_date: deliveryDate,
       pickup_date: pickupDate,
-      customer_name: customerName,
-      customer_email: customerEmail,
-      customer_phone: customerPhone,
-      address: address,
-      city: city,
-      delivery_time: deliveryTime,
-      pickup_time: pickupTime,
-      notes: notes || null,
-      total_price: totalPrice,
-      deposit_amount: depositAmount,
+      delivery_window: deliveryWindow,
+      pickup_window: pickupWindow,
+      delivery_address: address,
+      delivery_city: city,
+      subtotal: priceTotal,
+      deposit_amount: DEPOSIT_AMOUNT,
       balance_due: balanceDue,
+      customer_notes: notes || null,
+      product_snapshot: {
+        slug: product.slug,
+        name: product.name,
+        price_daily: product.price_daily,
+        price_weekend: product.price_weekend,
+        price_sunday: product.price_sunday,
+      },
       status: 'confirmed',
     };
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .insert([bookingData])
+      .insert(bookingData)
       .select()
       .single();
 
     if (bookingError || !booking) {
       console.error('Error creating booking:', bookingError);
       return NextResponse.json(
-        { error: 'Failed to create booking' },
+        { success: false, error: 'Failed to create booking' },
         { status: 500 }
       );
     }
 
-    const formattedDate = new Date(eventDate).toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    });
-
-    // Send customer email
+    // ========================================================================
+    // 6. SEND PUSH NOTIFICATION TO ADMIN
+    // ========================================================================
     try {
-      const customerContent = createCustomerEmailContent({
+      await notifyNewBooking(
+        booking.booking_number,
         customerName,
-        rentalName,
-        formattedDate,
-        bookingType,
-        deliveryTime,
-        pickupTime,
-        address,
-        city,
-        totalPrice,
-        notes,
-      });
+        formatDate(eventDate)
+      );
+    } catch (pushError) {
+      console.error('Failed to send push notification:', pushError);
+      // Don't fail the booking if push notification fails
+    }
 
+    // ========================================================================
+    // 7. SEND EMAILS
+    // ========================================================================
+    const formattedEventDate = formatDate(eventDate);
+    const formattedPickupDate = formatDate(pickupDate);
+
+    // Customer confirmation email
+    try {
       await resend.emails.send({
         from: FROM_EMAIL,
         to: customerEmail,
-        subject: `You're booked! ${rentalName} on ${formattedDate}`,
-        html: createEmailWrapper(
-          customerContent,
-          `Your ${rentalName} rental is confirmed for ${formattedDate}. We can't wait to make your party amazing!`
-        ),
+        subject: `Booking Confirmed: ${product.name} on ${formattedEventDate}`,
+        html: createCustomerEmail({
+          customerName: firstName,
+          productName: product.name,
+          bookingNumber: booking.booking_number,
+          eventDate: formattedEventDate,
+          pickupDate: formattedPickupDate,
+          deliveryWindow,
+          pickupWindow,
+          address,
+          city,
+          totalPrice: priceTotal,
+          depositAmount: DEPOSIT_AMOUNT,
+          balanceDue,
+          notes,
+          bookingType,
+        }),
       });
     } catch (emailError) {
       console.error('Failed to send customer email:', emailError);
     }
 
-    // Send business notification
+    // Business notification email
     try {
-      const businessContent = createBusinessEmailContent({
-        customerName,
-        customerEmail,
-        customerPhone,
-        rentalName,
-        formattedDate,
-        bookingType,
-        deliveryTime,
-        pickupTime,
-        address,
-        city,
-        totalPrice,
-        depositAmount,
-        balanceDue,
-        notes,
-      });
-
       await resend.emails.send({
         from: FROM_EMAIL,
         to: NOTIFY_EMAIL,
-        subject: `New Booking: ${rentalName} - ${formattedDate} - $${totalPrice}`,
-        html: createEmailWrapper(
-          businessContent,
-          `New booking from ${customerName} for ${rentalName} on ${formattedDate}. Total: $${totalPrice}`
-        ),
+        subject: `New Booking: ${booking.booking_number} - ${product.name} - ${formattedEventDate}`,
+        html: createBusinessEmail({
+          bookingNumber: booking.booking_number,
+          customerName,
+          customerEmail,
+          customerPhone,
+          productName: product.name,
+          eventDate: formattedEventDate,
+          deliveryDate: formatDate(deliveryDate),
+          pickupDate: formattedPickupDate,
+          deliveryWindow,
+          pickupWindow,
+          address,
+          city,
+          totalPrice: priceTotal,
+          depositAmount: DEPOSIT_AMOUNT,
+          balanceDue,
+          notes,
+          bookingType,
+        }),
       });
     } catch (emailError) {
-      console.error('Failed to send business notification:', emailError);
+      console.error('Failed to send business email:', emailError);
     }
 
+    // ========================================================================
+    // 8. RETURN SUCCESS
+    // ========================================================================
     return NextResponse.json({
       success: true,
       bookingId: booking.id,
+      bookingNumber: booking.booking_number,
       redirectUrl: `/bookings/success?booking_id=${booking.id}`,
     });
+
   } catch (error) {
     console.error('Error in booking creation:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }
+}
+
+// ============================================================================
+// EMAIL TEMPLATES
+// ============================================================================
+
+function createCustomerEmail(data: {
+  customerName: string;
+  productName: string;
+  bookingNumber: string;
+  eventDate: string;
+  pickupDate: string;
+  deliveryWindow: string;
+  pickupWindow: string;
+  address: string;
+  city: string;
+  totalPrice: number;
+  depositAmount: number;
+  balanceDue: number;
+  notes?: string;
+  bookingType: BookingType;
+}): string {
+  const bookingTypeLabel = data.bookingType === 'weekend' 
+    ? 'Weekend Package' 
+    : data.bookingType === 'sunday' 
+    ? 'Sunday Rental' 
+    : 'Daily Rental';
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #111; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 500px; margin: 0 auto; padding: 32px 16px;">
+    <div style="background-color: #1a1a1a; border-radius: 16px; overflow: hidden;">
+      
+      <!-- Header -->
+      <div style="padding: 24px; text-align: center; border-bottom: 1px solid #2a2a2a;">
+        <div style="width: 56px; height: 56px; margin: 0 auto 16px; background-color: #22c55e; border-radius: 50%; line-height: 56px; text-align: center;">
+          <span style="color: white; font-size: 28px;">✓</span>
+        </div>
+        <h1 style="margin: 0; color: white; font-size: 24px; font-weight: 600;">You're All Set!</h1>
+        <p style="margin: 8px 0 0; color: #888;">Booking ${data.bookingNumber}</p>
+      </div>
+      
+      <!-- Content -->
+      <div style="padding: 24px;">
+        <p style="color: #ccc; margin: 0 0 20px;">Hey ${data.customerName}! Your rental is confirmed and ready to go.</p>
+        
+        <!-- Product -->
+        <div style="background: linear-gradient(135deg, #581c87, #0e7490); border-radius: 12px; padding: 16px; margin-bottom: 16px; text-align: center;">
+          <p style="margin: 0 0 4px; color: rgba(255,255,255,0.6); font-size: 11px; text-transform: uppercase;">Your Rental</p>
+          <p style="margin: 0; color: white; font-size: 18px; font-weight: 600;">${data.productName}</p>
+        </div>
+        
+        <!-- Details -->
+        <div style="background-color: #222; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 8px 0; vertical-align: top; width: 50%;">
+                <p style="margin: 0; color: #666; font-size: 11px;">📅 Event Date</p>
+                <p style="margin: 4px 0 0; color: white; font-weight: 500;">${data.eventDate}</p>
+              </td>
+              <td style="padding: 8px 0; vertical-align: top; width: 50%;">
+                <p style="margin: 0; color: #666; font-size: 11px;">📦 Package</p>
+                <p style="margin: 4px 0 0; color: white; font-weight: 500;">${bookingTypeLabel}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; vertical-align: top;">
+                <p style="margin: 0; color: #666; font-size: 11px;">🚚 Delivery</p>
+                <p style="margin: 4px 0 0; color: white; font-weight: 500;">${data.deliveryWindow}</p>
+              </td>
+              <td style="padding: 8px 0; vertical-align: top;">
+                <p style="margin: 0; color: #666; font-size: 11px;">📍 Pickup</p>
+                <p style="margin: 4px 0 0; color: white; font-weight: 500;">${data.pickupWindow}</p>
+              </td>
+            </tr>
+          </table>
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #333;">
+            <p style="margin: 0; color: #666; font-size: 11px;">🏠 Location</p>
+            <p style="margin: 4px 0 0; color: white; font-weight: 500;">${data.address}, ${data.city}</p>
+          </div>
+        </div>
+        
+        <!-- Pricing -->
+        <div style="background-color: rgba(34, 211, 238, 0.1); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+          <table style="width: 100%;">
+            <tr>
+              <td style="color: #888;">Total (due on delivery)</td>
+              <td style="text-align: right; color: #22d3ee; font-size: 22px; font-weight: 700;">$${data.balanceDue}</td>
+            </tr>
+          </table>
+        </div>
+        
+        ${data.notes ? `
+        <div style="margin-bottom: 16px; padding: 12px; background-color: #222; border-left: 3px solid #a855f7; border-radius: 0 8px 8px 0;">
+          <p style="margin: 0 0 4px; color: #666; font-size: 11px;">Your Notes</p>
+          <p style="margin: 0; color: #ccc; font-size: 13px;">${data.notes}</p>
+        </div>
+        ` : ''}
+        
+        <!-- Quick Tips -->
+        <div style="padding: 14px; background-color: #1f1a2e; border-radius: 10px;">
+          <p style="margin: 0 0 6px; color: #c084fc; font-size: 13px; font-weight: 600;">💡 Quick Prep Tips</p>
+          <p style="margin: 0; color: #a0a0a0; font-size: 13px;">Clear a flat area at least 5 feet larger than the unit. Have a power outlet within 50 feet. Remove sharp objects from the setup area.</p>
+        </div>
+      </div>
+      
+      <!-- Footer -->
+      <div style="padding: 20px 24px; background-color: #141414; border-top: 1px solid #2a2a2a; text-align: center;">
+        <p style="margin: 0 0 8px; color: #888; font-size: 13px;">Questions? We're here to help!</p>
+        <a href="tel:3524453723" style="color: #22d3ee; text-decoration: none; font-weight: 500;">(352) 445-3723</a>
+      </div>
+      
+    </div>
+    
+    <p style="margin: 20px 0 0; text-align: center; color: #444; font-size: 11px;">
+      Pop and Drop Party Rentals • Ocala, FL
+    </p>
+  </div>
+</body>
+</html>
+  `;
+}
+
+function createBusinessEmail(data: {
+  bookingNumber: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  productName: string;
+  eventDate: string;
+  deliveryDate: string;
+  pickupDate: string;
+  deliveryWindow: string;
+  pickupWindow: string;
+  address: string;
+  city: string;
+  totalPrice: number;
+  depositAmount: number;
+  balanceDue: number;
+  notes?: string;
+  bookingType: BookingType;
+}): string {
+  const bookingTypeLabel = data.bookingType === 'weekend' 
+    ? 'Weekend' 
+    : data.bookingType === 'sunday' 
+    ? 'Sunday' 
+    : 'Daily';
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+</head>
+<body style="margin: 0; padding: 0; background-color: #111; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 500px; margin: 0 auto; padding: 32px 16px;">
+    <div style="background-color: #1a1a1a; border-radius: 16px; overflow: hidden;">
+      
+      <!-- Header -->
+      <div style="padding: 24px; text-align: center;">
+        <p style="margin: 0 0 8px; font-size: 28px;">🎯</p>
+        <h1 style="margin: 0; color: white; font-size: 22px;">New Booking!</h1>
+        <p style="margin: 8px 0 0; color: #888;">${data.bookingNumber} • ${data.productName}</p>
+      </div>
+      
+      <!-- Quick Actions -->
+      <div style="padding: 0 24px 20px; text-align: center;">
+        <a href="tel:${data.customerPhone.replace(/\D/g, '')}" style="display: inline-block; background-color: #22c55e; color: white; text-decoration: none; padding: 10px 18px; border-radius: 50px; font-size: 13px; font-weight: 600; margin-right: 8px;">📞 Call</a>
+        <a href="mailto:${data.customerEmail}" style="display: inline-block; background-color: #333; color: white; text-decoration: none; padding: 10px 18px; border-radius: 50px; font-size: 13px; font-weight: 600;">✉️ Email</a>
+      </div>
+      
+      <!-- Customer -->
+      <div style="margin: 0 24px 16px; background: linear-gradient(135deg, #164e63, #0e7490); border-radius: 12px; padding: 16px;">
+        <p style="margin: 0 0 8px; color: #67e8f9; font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">Customer</p>
+        <p style="margin: 0 0 6px; color: white; font-size: 17px; font-weight: 600;">${data.customerName}</p>
+        <p style="margin: 0 0 2px; color: #ccc; font-size: 13px;">📱 ${data.customerPhone}</p>
+        <p style="margin: 0; color: #ccc; font-size: 13px;">✉️ ${data.customerEmail}</p>
+      </div>
+      
+      <!-- Details -->
+      <div style="margin: 0 24px 16px; background-color: #222; border-radius: 12px; padding: 16px;">
+        <p style="margin: 0 0 12px; color: #666; font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">Booking Details</p>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr><td style="padding: 6px 0; color: #888; font-size: 13px;">Rental</td><td style="padding: 6px 0; color: white; font-size: 13px; font-weight: 500; text-align: right;">${data.productName}</td></tr>
+          <tr><td style="padding: 6px 0; color: #888; font-size: 13px; border-top: 1px solid #333;">Event Date</td><td style="padding: 6px 0; color: white; font-size: 13px; font-weight: 500; text-align: right; border-top: 1px solid #333;">${data.eventDate}</td></tr>
+          <tr><td style="padding: 6px 0; color: #888; font-size: 13px; border-top: 1px solid #333;">Package</td><td style="padding: 6px 0; color: white; font-size: 13px; font-weight: 500; text-align: right; border-top: 1px solid #333;">${bookingTypeLabel}</td></tr>
+          <tr><td style="padding: 6px 0; color: #888; font-size: 13px; border-top: 1px solid #333;">Delivery</td><td style="padding: 6px 0; color: white; font-size: 13px; font-weight: 500; text-align: right; border-top: 1px solid #333;">${data.deliveryDate} (${data.deliveryWindow})</td></tr>
+          <tr><td style="padding: 6px 0; color: #888; font-size: 13px; border-top: 1px solid #333;">Pickup</td><td style="padding: 6px 0; color: white; font-size: 13px; font-weight: 500; text-align: right; border-top: 1px solid #333;">${data.pickupDate} (${data.pickupWindow})</td></tr>
+          <tr><td style="padding: 6px 0; color: #888; font-size: 13px; border-top: 1px solid #333;">Address</td><td style="padding: 6px 0; color: white; font-size: 13px; font-weight: 500; text-align: right; border-top: 1px solid #333;">${data.address}, ${data.city}</td></tr>
+        </table>
+      </div>
+      
+      <!-- Pricing -->
+      <div style="margin: 0 24px 16px; background-color: #14532d; border-radius: 12px; padding: 16px;">
+        <p style="margin: 0 0 10px; color: #86efac; font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">Pricing</p>
+        <table style="width: 100%;">
+          <tr><td style="padding: 4px 0; color: #a7f3d0; font-size: 13px;">Total</td><td style="text-align: right; color: white; font-size: 13px;">$${data.totalPrice}</td></tr>
+          <tr><td style="padding: 4px 0; color: #a7f3d0; font-size: 13px;">Deposit</td><td style="text-align: right; color: white; font-size: 13px;">$${data.depositAmount}</td></tr>
+          <tr><td style="padding: 8px 0 0 0; border-top: 1px solid #166534; color: #4ade80; font-size: 14px; font-weight: 600;">Balance Due</td><td style="text-align: right; padding: 8px 0 0 0; border-top: 1px solid #166534; color: #4ade80; font-size: 18px; font-weight: 700;">$${data.balanceDue}</td></tr>
+        </table>
+      </div>
+      
+      ${data.notes ? `
+      <div style="margin: 0 24px 16px; background-color: #1f1a2e; border-left: 3px solid #a855f7; border-radius: 0 8px 8px 0; padding: 14px;">
+        <p style="margin: 0 0 6px; color: #c084fc; font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">Customer Notes</p>
+        <p style="margin: 0; color: #ccc; font-size: 13px;">${data.notes}</p>
+      </div>
+      ` : ''}
+      
+      <!-- Checklist -->
+      <div style="margin: 0 24px 24px; background-color: #222; border-radius: 10px; padding: 14px;">
+        <p style="margin: 0 0 10px; color: #666; font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">Action Items</p>
+        <p style="margin: 0 0 6px; color: #aaa; font-size: 13px;">☐ Add to calendar</p>
+        <p style="margin: 0 0 6px; color: #aaa; font-size: 13px;">☐ Confirm unit availability</p>
+        <p style="margin: 0; color: #aaa; font-size: 13px;">☐ Text customer day before</p>
+      </div>
+      
+    </div>
+  </div>
+</body>
+</html>
+  `;
 }

@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Calendar, Phone, Mail, Check, MapPin, Clock } from "lucide-react";
+import { Calendar, Phone, Mail, Check, MapPin, Clock, Copy } from "lucide-react";
 import { Confetti } from "@/components/ui/confetti";
 import { AddToCalendar } from "@/components/ui/add-to-calendar";
 import { createDateTime, CalendarEvent } from "@/lib/calendar";
@@ -12,19 +13,29 @@ import { createDateTime, CalendarEvent } from "@/lib/calendar";
  * --------------------------------------------------------------------------- */
 interface BookingData {
   id: string;
-  rental_name: string;
+  booking_number: string;
+  product_snapshot: {
+    slug: string;
+    name: string;
+    price_daily: number;
+    price_weekend: number;
+    price_sunday: number;
+  };
   event_date: string;
   pickup_date: string;
-  booking_type: "daily" | "weekend";
-  delivery_time: string;
-  pickup_time: string;
-  address: string;
-  city: string;
-  customer_name: string;
-  customer_email: string;
-  total_price: number;
+  booking_type: "daily" | "weekend" | "sunday";
+  delivery_window: string;
+  pickup_window: string;
+  delivery_address: string;
+  delivery_city: string;
+  subtotal: number;
   deposit_amount: number;
   balance_due: number;
+  customers: {
+    first_name: string;
+    last_name: string;
+    email: string;
+  } | null;
 }
 
 interface Styles {
@@ -100,6 +111,37 @@ function AnimatedCheckmark() {
 }
 
 /* ---------------------------------------------------------------------------
+ * Booking Number Display with Copy
+ * --------------------------------------------------------------------------- */
+function BookingNumber({ number }: { number: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(number);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="group inline-flex items-center gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-sm font-mono transition-colors hover:bg-white/10"
+    >
+      <span className="text-foreground/70">{number}</span>
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-green-400" />
+      ) : (
+        <Copy className="h-3.5 w-3.5 text-foreground/40 transition-colors group-hover:text-foreground/70" />
+      )}
+    </button>
+  );
+}
+
+/* ---------------------------------------------------------------------------
  * Detail Row Component
  * --------------------------------------------------------------------------- */
 interface DetailRowProps {
@@ -146,13 +188,21 @@ function NextStep({ icon, iconStyle, children, smallBody }: NextStepProps) {
  * Main Content Component
  * --------------------------------------------------------------------------- */
 export function SuccessContent({ booking, eventDate, pickupDate, styles }: SuccessContentProps) {
+  // Get product name from snapshot
+  const productName = booking.product_snapshot?.name || "Bounce House Rental";
+  
+  // Get customer name
+  const customerName = booking.customers 
+    ? `${booking.customers.first_name} ${booking.customers.last_name}`
+    : "Valued Customer";
+
   // Build calendar event
   const calendarEvent: CalendarEvent = {
-    title: `🎉 ${booking.rental_name} - Party Day!`,
-    description: `Your bounce house rental from Pop and Drop Party Rentals!\n\nDelivery: ${booking.delivery_time}\nPickup: ${pickupDate} at ${booking.pickup_time}\n\nBalance due on delivery: $${booking.balance_due}\n\nQuestions? Call 352-445-3723`,
-    location: `${booking.address}, ${booking.city}`,
-    startDate: createDateTime(booking.event_date, booking.delivery_time),
-    endDate: createDateTime(booking.pickup_date, booking.pickup_time),
+    title: `🎉 ${productName} - Party Day!`,
+    description: `Your bounce house rental from Pop and Drop Party Rentals!\n\nBooking: ${booking.booking_number}\nDelivery: ${booking.delivery_window}\nPickup: ${pickupDate} at ${booking.pickup_window}\n\nBalance due on delivery: $${booking.balance_due}\n\nQuestions? Call 352-445-3723`,
+    location: `${booking.delivery_address}, ${booking.delivery_city}`,
+    startDate: createDateTime(booking.event_date, booking.delivery_window),
+    endDate: createDateTime(booking.pickup_date, booking.pickup_window),
   };
 
   return (
@@ -166,16 +216,22 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
 
         <h1 className={styles.pageTitle}>You&apos;re All Set!</h1>
         <p className={`mx-auto mt-3 max-w-md ${styles.bodyText}`}>
-          Your deposit has been received and your date is locked in. Get ready for an amazing party!
+          Your rental is confirmed. Get ready for an amazing party, {booking.customers?.first_name || "friend"}!
         </p>
+        
+        {/* Booking Number */}
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <span className={styles.helperText}>Booking</span>
+          <BookingNumber number={booking.booking_number} />
+        </div>
       </div>
 
       {/* Booking Summary Card */}
       <div className={`mt-8 sm:mt-10 ${styles.sectionCard}`}>
         <div className="p-5 sm:p-6 lg:p-8">
-          <h2 className={styles.sectionHeading}>{booking.rental_name}</h2>
+          <h2 className={styles.sectionHeading}>{productName}</h2>
           <p className={`mt-1 ${styles.smallBody}`}>
-            {booking.booking_type === "weekend" ? "Weekend Package" : "Daily Rental"}
+            {booking.booking_type === "weekend" ? "Weekend Package" : booking.booking_type === "sunday" ? "Sunday Rental" : "Daily Rental"}
           </p>
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -191,7 +247,7 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
               icon={<Clock className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />}
               iconStyle={styles.iconCyan}
               label="Delivery Time"
-              value={booking.delivery_time}
+              value={booking.delivery_window}
               labelClass={styles.label}
               valueClass="text-sm sm:text-base"
             />
@@ -199,7 +255,7 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
               icon={<MapPin className="h-4 w-4 text-purple-400 sm:h-5 sm:w-5" />}
               iconStyle={styles.iconPurple}
               label="Delivery Address"
-              value={`${booking.address}, ${booking.city}`}
+              value={`${booking.delivery_address}, ${booking.delivery_city}`}
               labelClass={styles.label}
               valueClass="text-sm sm:text-base"
             />
@@ -207,7 +263,7 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
               icon={<Calendar className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />}
               iconStyle={styles.iconCyan}
               label="Pickup"
-              value={`${pickupDate} at ${booking.pickup_time}`}
+              value={`${pickupDate} at ${booking.pickup_window}`}
               labelClass={styles.label}
               valueClass="text-sm sm:text-base"
             />
@@ -217,7 +273,7 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
           <div className={`mt-6 p-4 sm:p-5 ${styles.nestedCard}`}>
             <div className="flex items-center justify-between">
               <span className={styles.smallBody}>Total</span>
-              <span className="font-semibold text-foreground">${booking.total_price}</span>
+              <span className="font-semibold text-foreground">${booking.subtotal}</span>
             </div>
             <div className="mt-2 flex items-center justify-between">
               <span className={styles.smallBody}>Deposit paid</span>
@@ -292,7 +348,7 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
       {/* Contact Section */}
       <div className={`mt-8 p-4 sm:p-5 ${styles.nestedCard}`}>
         <p className={`text-center ${styles.smallBody}`}>
-          Questions or need to make changes? We&apos;re here to help!
+          Questions or need to make changes? Reference booking <strong>{booking.booking_number}</strong>
         </p>
         <div className="mt-3 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-6">
           <a
@@ -303,11 +359,11 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
             352-445-3723
           </a>
           <a
-            href="mailto:bookings@popanddroprentals.com"
+            href="mailto:bookings@popndroprentals.com"
             className="flex items-center gap-2 text-sm text-cyan-400 transition-colors hover:text-cyan-300"
           >
             <Mail className="h-4 w-4" />
-            bookings@popanddroprentals.com
+            bookings@popndroprentals.com
           </a>
         </div>
         <div className={styles.nestedCardInner} />

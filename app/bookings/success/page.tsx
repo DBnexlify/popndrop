@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Calendar, Phone, Mail, Check, MapPin, Clock } from "lucide-react";
 import { createServerClient } from "@/lib/supabase";
 import { SuccessContent } from "./success-content";
 
@@ -51,19 +50,29 @@ const styles = {
  * --------------------------------------------------------------------------- */
 interface BookingData {
   id: string;
-  rental_name: string;
+  booking_number: string;
+  product_snapshot: {
+    slug: string;
+    name: string;
+    price_daily: number;
+    price_weekend: number;
+    price_sunday: number;
+  };
   event_date: string;
   pickup_date: string;
-  booking_type: "daily" | "weekend";
-  delivery_time: string;
-  pickup_time: string;
-  address: string;
-  city: string;
-  customer_name: string;
-  customer_email: string;
-  total_price: number;
+  booking_type: "daily" | "weekend" | "sunday";
+  delivery_window: string;
+  pickup_window: string;
+  delivery_address: string;
+  delivery_city: string;
+  subtotal: number;
   deposit_amount: number;
   balance_due: number;
+  customers: {
+    first_name: string;
+    last_name: string;
+    email: string;
+  } | null;
 }
 
 interface PageProps {
@@ -78,24 +87,26 @@ async function getBooking(bookingId: string): Promise<BookingData | null> {
 
   const { data, error } = await supabase
     .from("bookings")
-    .select(
-      `
+    .select(`
       id,
-      rental_name,
+      booking_number,
+      product_snapshot,
       event_date,
       pickup_date,
       booking_type,
-      delivery_time,
-      pickup_time,
-      address,
-      city,
-      customer_name,
-      customer_email,
-      total_price,
+      delivery_window,
+      pickup_window,
+      delivery_address,
+      delivery_city,
+      subtotal,
       deposit_amount,
-      balance_due
-    `
-    )
+      balance_due,
+      customers (
+        first_name,
+        last_name,
+        email
+      )
+    `)
     .eq("id", bookingId)
     .single();
 
@@ -104,7 +115,9 @@ async function getBooking(bookingId: string): Promise<BookingData | null> {
     return null;
   }
 
-  return data as BookingData;
+  // Supabase returns joined data - customers is the related record
+  // With .single() and a foreign key, it returns the object directly (not array)
+  return data as unknown as BookingData;
 }
 
 /* ---------------------------------------------------------------------------
