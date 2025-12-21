@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { useEffect, useState, createContext, useContext, useCallback } from "react";
-import { Bell, BellOff, Download, X, CheckCircle2, Loader2, Share, PlusSquare } from "lucide-react";
+import { Bell, BellOff, Download, X, CheckCircle2, Loader2, Share, PlusSquare, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
@@ -22,8 +22,11 @@ interface PWAContextType {
   isOnline: boolean;
   notificationPermission: NotificationPermission | "default";
   isSubscribed: boolean;
+  swRegistered: boolean;
+  vapidConfigured: boolean;
+  error: string | null;
   install: () => Promise<void>;
-  subscribe: () => Promise<void>;
+  subscribe: () => Promise<{ success: boolean; error?: string }>;
   unsubscribe: () => Promise<void>;
 }
 
@@ -91,24 +94,35 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
   const [isOnline, setIsOnline] = useState(true);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [swRegistered, setSwRegistered] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
+
+  const vapidConfigured = !!VAPID_PUBLIC_KEY;
 
   // Check platform and install status
   useEffect(() => {
     setIsIOS(isIOSDevice());
     setIsInstalled(isInStandaloneMode());
     
+    // Log configuration status
+    console.log("[PWA] VAPID configured:", vapidConfigured);
+    console.log("[PWA] Is iOS:", isIOSDevice());
+    
     const handleChange = () => setIsInstalled(isInStandaloneMode());
     window.matchMedia("(display-mode: standalone)").addEventListener("change", handleChange);
     return () => {
       window.matchMedia("(display-mode: standalone)").removeEventListener("change", handleChange);
     };
-  }, []);
+  }, [vapidConfigured]);
 
   // Register service worker
   useEffect(() => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      console.log("[PWA] Service workers not supported");
+      return;
+    }
 
     const registerSW = async () => {
       try {
@@ -117,12 +131,15 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
         });
         console.log("[PWA] Service worker registered:", reg.scope);
         setRegistration(reg);
+        setSwRegistered(true);
 
         // Check for existing subscription
         const subscription = await reg.pushManager.getSubscription();
+        console.log("[PWA] Existing subscription:", !!subscription);
         setIsSubscribed(!!subscription);
-      } catch (error) {
-        console.error("[PWA] Service worker registration failed:", error);
+      } catch (err) {
+        console.error("[PWA] Service worker registration failed:", err);
+        setError("Service worker failed to register");
       }
     };
 
@@ -132,6 +149,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
   // Listen for install prompt (Android/Desktop Chrome)
   useEffect(() => {
     const handleBeforeInstall = (e: Event) => {
+      console.log("[PWA] beforeinstallprompt fired");
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
       setIsInstallable(true);
@@ -162,16 +180,21 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window) {
       setNotificationPermission(Notification.permission);
+      console.log("[PWA] Notification permission:", Notification.permission);
     }
   }, []);
 
   // Install PWA (Android/Desktop)
   const install = useCallback(async () => {
-    if (!deferredPrompt) return;
+    if (!deferredPrompt) {
+      console.log("[PWA] No deferred prompt available");
+      return;
+    }
 
     try {
       await deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
+      console.log("[PWA] Install outcome:", outcome);
       
       if (outcome === "accepted") {
         setIsInstalled(true);
@@ -179,34 +202,52 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
       }
       
       setDeferredPrompt(null);
-    } catch (error) {
-      console.error("[PWA] Install failed:", error);
+    } catch (err) {
+      console.error("[PWA] Install failed:", err);
     }
   }, [deferredPrompt]);
 
   // Subscribe to push notifications
-  const subscribe = useCallback(async () => {
-    if (!registration || !VAPID_PUBLIC_KEY) {
-      console.error("[PWA] No service worker registration or VAPID key");
-      return;
+  const subscribe = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    console.log("[PWA] Subscribe called");
+    console.log("[PWA] Registration:", !!registration);
+    console.log("[PWA] VAPID key configured:", vapidConfigured);
+    
+    if (!registration) {
+      const msg = "Service worker not registered. Please refresh the page.";
+      console.error("[PWA]", msg);
+      setError(msg);
+      return { success: false, error: msg };
+    }
+    
+    if (!vapidConfigured) {
+      const msg = "Push notifications not configured. Contact support.";
+      console.error("[PWA]", msg);
+      setError(msg);
+      return { success: false, error: msg };
     }
 
     try {
+      console.log("[PWA] Requesting notification permission...");
       const permission = await Notification.requestPermission();
+      console.log("[PWA] Permission result:", permission);
       setNotificationPermission(permission);
 
       if (permission !== "granted") {
-        console.log("[PWA] Notification permission denied");
-        return;
+        const msg = "Notification permission denied";
+        console.log("[PWA]", msg);
+        return { success: false, error: msg };
       }
 
+      console.log("[PWA] Creating push subscription...");
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       });
 
-      console.log("[PWA] Push subscription:", subscription);
+      console.log("[PWA] Push subscription created:", subscription.endpoint);
 
+      console.log("[PWA] Saving to server...");
       const response = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -215,14 +256,23 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 
       if (response.ok) {
         setIsSubscribed(true);
-        console.log("[PWA] Subscription saved to server");
+        setError(null);
+        console.log("[PWA] Subscription saved successfully");
+        return { success: true };
       } else {
-        throw new Error("Failed to save subscription");
+        const data = await response.json().catch(() => ({}));
+        const msg = data.error || "Failed to save subscription to server";
+        console.error("[PWA]", msg);
+        setError(msg);
+        return { success: false, error: msg };
       }
-    } catch (error) {
-      console.error("[PWA] Subscribe failed:", error);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.error("[PWA] Subscribe failed:", err);
+      setError(msg);
+      return { success: false, error: msg };
     }
-  }, [registration]);
+  }, [registration, vapidConfigured]);
 
   // Unsubscribe from push notifications
   const unsubscribe = useCallback(async () => {
@@ -240,10 +290,11 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 
         await subscription.unsubscribe();
         setIsSubscribed(false);
+        setError(null);
         console.log("[PWA] Unsubscribed from push notifications");
       }
-    } catch (error) {
-      console.error("[PWA] Unsubscribe failed:", error);
+    } catch (err) {
+      console.error("[PWA] Unsubscribe failed:", err);
     }
   }, [registration]);
 
@@ -256,6 +307,9 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
         isOnline,
         notificationPermission,
         isSubscribed,
+        swRegistered,
+        vapidConfigured,
+        error,
         install,
         subscribe,
         unsubscribe,
@@ -401,17 +455,33 @@ export function PWAInstallPrompt() {
 // =============================================================================
 
 export function NotificationToggle() {
-  const { notificationPermission, isSubscribed, subscribe, unsubscribe } = usePWA();
+  const { 
+    notificationPermission, 
+    isSubscribed, 
+    subscribe, 
+    unsubscribe,
+    swRegistered,
+    vapidConfigured,
+    error: contextError,
+  } = usePWA();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleToggle = async () => {
     setLoading(true);
+    setError(null);
+    
     try {
       if (isSubscribed) {
         await unsubscribe();
       } else {
-        await subscribe();
+        const result = await subscribe();
+        if (!result.success && result.error) {
+          setError(result.error);
+        }
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
@@ -437,35 +507,66 @@ export function NotificationToggle() {
     );
   }
 
+  // Not configured
+  if (!vapidConfigured) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2.5 text-sm text-amber-400">
+        <AlertTriangle className="h-4 w-4" />
+        <span>Not configured yet</span>
+      </div>
+    );
+  }
+
+  // Service worker not ready
+  if (!swRegistered) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2.5 text-sm text-amber-400">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span>Loading...</span>
+      </div>
+    );
+  }
+
+  const displayError = error || contextError;
+
   return (
-    <div className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 ${
-      isSubscribed ? "bg-green-500/10" : "bg-white/5"
-    }`}>
-      <div className="flex items-center gap-2">
-        {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-foreground/50" />
-        ) : isSubscribed ? (
-          <Bell className="h-4 w-4 text-green-400" />
-        ) : (
-          <BellOff className="h-4 w-4 text-foreground/50" />
-        )}
-        <span className={`text-sm ${
-          isSubscribed ? "text-green-400" : "text-foreground/70"
-        }`}>
-          {loading
-            ? "Processing..."
-            : isSubscribed
-            ? "Notifications On"
-            : "Notifications Off"}
-        </span>
+    <div className="space-y-2">
+      <div className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 ${
+        isSubscribed ? "bg-green-500/10" : "bg-white/5"
+      }`}>
+        <div className="flex items-center gap-2">
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin text-foreground/50" />
+          ) : isSubscribed ? (
+            <Bell className="h-4 w-4 text-green-400" />
+          ) : (
+            <BellOff className="h-4 w-4 text-foreground/50" />
+          )}
+          <span className={`text-sm ${
+            isSubscribed ? "text-green-400" : "text-foreground/70"
+          }`}>
+            {loading
+              ? "Processing..."
+              : isSubscribed
+              ? "Notifications On"
+              : "Notifications Off"}
+          </span>
+        </div>
+        
+        <Switch
+          checked={isSubscribed}
+          onCheckedChange={handleToggle}
+          disabled={loading}
+          className="data-[state=checked]:bg-green-500"
+        />
       </div>
       
-      <Switch
-        checked={isSubscribed}
-        onCheckedChange={handleToggle}
-        disabled={loading}
-        className="data-[state=checked]:bg-green-500"
-      />
+      {displayError && (
+        <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
+          <AlertTriangle className="h-3 w-3 shrink-0" />
+          <span>{displayError}</span>
+        </div>
+      )}
     </div>
   );
 }
