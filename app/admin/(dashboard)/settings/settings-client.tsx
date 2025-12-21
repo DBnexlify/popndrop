@@ -24,6 +24,10 @@ import {
   XCircle,
   Truck,
   PartyPopper,
+  Mail,
+  Clock,
+  Star,
+  Play,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePWA } from "@/components/admin/pwa-provider";
@@ -51,6 +55,12 @@ export function SettingsClient({ admin }: SettingsClientProps) {
   const [notifLoading, setNotifLoading] = useState(false);
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  
+  // Cron job test states
+  const [deliveryReminderLoading, setDeliveryReminderLoading] = useState(false);
+  const [deliveryReminderResult, setDeliveryReminderResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [followupEmailLoading, setFollowupEmailLoading] = useState(false);
+  const [followupEmailResult, setFollowupEmailResult] = useState<{ success: boolean; message: string } | null>(null);
   
   const isAndroid = typeof window !== "undefined" && /Android/i.test(navigator.userAgent);
   const notificationsSupported = typeof window !== "undefined" && "Notification" in window;
@@ -91,6 +101,54 @@ export function SettingsClient({ admin }: SettingsClientProps) {
       setTestLoading(false);
       // Clear result after 5 seconds
       setTimeout(() => setTestResult(null), 5000);
+    }
+  };
+
+  // Test delivery reminder cron
+  const handleTestDeliveryReminder = async () => {
+    setDeliveryReminderLoading(true);
+    setDeliveryReminderResult(null);
+    
+    try {
+      const response = await fetch('/api/cron/delivery-reminder', { method: 'POST' });
+      const data = await response.json();
+      
+      setDeliveryReminderResult({
+        success: data.success,
+        message: data.message || data.error || 'Unknown result',
+      });
+    } catch (error) {
+      setDeliveryReminderResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed',
+      });
+    } finally {
+      setDeliveryReminderLoading(false);
+      setTimeout(() => setDeliveryReminderResult(null), 5000);
+    }
+  };
+
+  // Test follow-up email cron
+  const handleTestFollowupEmails = async () => {
+    setFollowupEmailLoading(true);
+    setFollowupEmailResult(null);
+    
+    try {
+      const response = await fetch('/api/cron/followup-emails', { method: 'POST' });
+      const data = await response.json();
+      
+      setFollowupEmailResult({
+        success: data.success,
+        message: data.message || data.error || 'Unknown result',
+      });
+    } catch (error) {
+      setFollowupEmailResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed',
+      });
+    } finally {
+      setFollowupEmailLoading(false);
+      setTimeout(() => setFollowupEmailResult(null), 5000);
     }
   };
 
@@ -313,7 +371,6 @@ export function SettingsClient({ admin }: SettingsClientProps) {
                   label="Tomorrow's deliveries" 
                   description="Evening reminder at 6 PM"
                   enabled={isSubscribed}
-                  comingSoon
                 />
               </div>
             </div>
@@ -427,6 +484,120 @@ export function SettingsClient({ admin }: SettingsClientProps) {
               )}
             </div>
           )}
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* AUTOMATED JOBS - Delivery Reminders & Follow-up Emails */}
+      {/* ================================================================== */}
+      <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-500/20">
+            <Clock className="h-5 w-5 text-purple-400" />
+          </div>
+          <div>
+            <h2 className="font-semibold">Automated Jobs</h2>
+            <p className="text-sm text-foreground/60">Daily tasks that run automatically</p>
+          </div>
+        </div>
+        
+        <div className="space-y-4">
+          {/* Delivery Reminder */}
+          <div className="rounded-lg border border-white/5 bg-white/[0.02] p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-500/20">
+                  <Truck className="h-5 w-5 text-cyan-400" />
+                </div>
+                <div>
+                  <p className="font-medium">Delivery Reminders</p>
+                  <p className="text-xs text-foreground/50">Push notification at 6 PM with tomorrow&apos;s schedule</p>
+                  <p className="mt-1 text-xs text-foreground/30">Runs daily at 6:00 PM EST</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleTestDeliveryReminder}
+                disabled={deliveryReminderLoading}
+                className="shrink-0 border-white/10"
+              >
+                {deliveryReminderLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <><Play className="mr-1.5 h-3 w-3" /> Run Now</>
+                )}
+              </Button>
+            </div>
+            {deliveryReminderResult && (
+              <div className={`mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
+                deliveryReminderResult.success 
+                  ? "bg-green-500/10 text-green-400" 
+                  : "bg-red-500/10 text-red-400"
+              }`}>
+                {deliveryReminderResult.success ? (
+                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                )}
+                {deliveryReminderResult.message}
+              </div>
+            )}
+          </div>
+
+          {/* Follow-up Emails */}
+          <div className="rounded-lg border border-white/5 bg-white/[0.02] p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fuchsia-500/20">
+                  <Mail className="h-5 w-5 text-fuchsia-400" />
+                </div>
+                <div>
+                  <p className="font-medium">Follow-up Emails</p>
+                  <p className="text-xs text-foreground/50">Sends review request 2 days after event</p>
+                  <p className="mt-1 text-xs text-foreground/30">Runs daily at 10:00 AM EST</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleTestFollowupEmails}
+                disabled={followupEmailLoading}
+                className="shrink-0 border-white/10"
+              >
+                {followupEmailLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <><Play className="mr-1.5 h-3 w-3" /> Run Now</>
+                )}
+              </Button>
+            </div>
+            {followupEmailResult && (
+              <div className={`mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
+                followupEmailResult.success 
+                  ? "bg-green-500/10 text-green-400" 
+                  : "bg-red-500/10 text-red-400"
+              }`}>
+                {followupEmailResult.success ? (
+                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                )}
+                {followupEmailResult.message}
+              </div>
+            )}
+          </div>
+
+          {/* Info about automated jobs */}
+          <div className="flex items-start gap-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+            <Star className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" />
+            <div>
+              <p className="text-sm font-medium text-cyan-300">Fully Automated</p>
+              <p className="text-xs text-cyan-300/70">
+                These jobs run automatically via Vercel Cron. Use &quot;Run Now&quot; to test or trigger manually.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 

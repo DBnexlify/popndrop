@@ -253,6 +253,7 @@ export interface Booking {
   stripe_refund_id: string | null;
   delivered_by: string | null;
   picked_up_by: string | null;
+  followup_sent_at: string | null;
 }
 
 export interface BookingInsert {
@@ -301,6 +302,7 @@ export interface BookingUpdate extends Partial<Omit<BookingInsert, 'unit_id' | '
   stripe_refund_id?: string | null;
   delivered_by?: string | null;
   picked_up_by?: string | null;
+  followup_sent_at?: string | null;
 }
 
 // Booking with joined relations

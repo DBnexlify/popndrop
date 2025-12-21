@@ -14,8 +14,8 @@ const CRON_SECRET = process.env.CRON_SECRET;
 // Days after event to send follow-up
 const DAYS_AFTER_EVENT = 2;
 
-// Google review link - replace with your actual Google Business link
-const GOOGLE_REVIEW_URL = 'https://g.page/r/YOUR_GOOGLE_BUSINESS_ID/review';
+// Google review link - set via environment variable or default
+const GOOGLE_REVIEW_URL = process.env.GOOGLE_REVIEW_URL || 'https://g.page/r/YOUR_GOOGLE_BUSINESS_ID/review';
 
 export async function GET(request: NextRequest) {
   // Verify authorization
@@ -79,12 +79,13 @@ export async function GET(request: NextRequest) {
     const results: { booking: string; status: string; error?: string }[] = [];
 
     for (const booking of bookings) {
-      const customer = booking.customers as { 
+      const customerData = booking.customers as unknown as { 
         id: string;
         first_name: string; 
         last_name: string;
         email: string;
-      } | null;
+      } | { id: string; first_name: string; last_name: string; email: string; }[] | null;
+      const customer = Array.isArray(customerData) ? customerData[0] : customerData;
 
       if (!customer?.email) {
         console.log(`[Cron] Skipping ${booking.booking_number} - no customer email`);

@@ -75,7 +75,8 @@ export async function GET(request: NextRequest) {
     
     // Format delivery list for notification body
     const deliveryList = bookings.slice(0, 3).map(b => {
-      const customer = b.customers as { first_name: string; last_name: string } | null;
+      const customerData = b.customers as unknown as { first_name: string; last_name: string } | { first_name: string; last_name: string }[] | null;
+      const customer = Array.isArray(customerData) ? customerData[0] : customerData;
       const name = customer ? `${customer.first_name} ${customer.last_name?.charAt(0) || ''}`.trim() : 'Unknown';
       const product = (b.product_snapshot as { name?: string })?.name || 'Rental';
       return `• ${b.delivery_window}: ${name} - ${product}`;
