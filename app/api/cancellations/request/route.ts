@@ -10,13 +10,6 @@ import { createServerClient } from '@/lib/supabase';
 import { calculateRefund, DEFAULT_POLICY, type CancellationPolicy } from '@/lib/cancellations';
 import { resend, FROM_EMAIL, NOTIFY_EMAIL } from '@/lib/resend';
 
-// Helper to extract customer from Supabase join (handles array vs object)
-function extractCustomer(customer: unknown): { email?: string; id?: string; first_name?: string; last_name?: string } | null {
-  if (!customer) return null;
-  if (Array.isArray(customer)) return customer[0] || null;
-  return customer as { email?: string; id?: string; first_name?: string; last_name?: string };
-}
-
 /**
  * Format date for display
  */
@@ -38,6 +31,8 @@ export async function GET(request: NextRequest) {
     const bookingId = searchParams.get('bookingId');
     const email = searchParams.get('email');
 
+    console.log('[Cancellation GET] Request:', { bookingId, email });
+
     if (!bookingId || !email) {
       return NextResponse.json(
         { error: 'Booking ID and email are required' },
@@ -47,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Get booking with customer verification
+    // STEP 1: Get the booking first (without join to avoid failure)
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .select(`
@@ -63,26 +58,57 @@ export async function GET(request: NextRequest) {
         product_snapshot,
         stripe_payment_intent_id,
         delivery_window,
-        customer:customers!inner (
-          email,
-          first_name
-        )
+        customer_id
       `)
       .eq('id', bookingId)
       .single();
 
-    if (bookingError || !booking) {
+    console.log('[Cancellation GET] Booking query result:', { 
+      found: !!booking, 
+      error: bookingError?.message,
+      bookingNumber: booking?.booking_number 
+    });
+
+    if (bookingError) {
+      console.error('[Cancellation GET] Booking error:', bookingError);
       return NextResponse.json(
         { error: 'Booking not found' },
         { status: 404 }
       );
     }
 
-    // Extract customer from join result
-    const customer = extractCustomer(booking.customer);
-    const customerEmail = customer?.email;
+    if (!booking) {
+      return NextResponse.json(
+        { error: 'Booking not found' },
+        { status: 404 }
+      );
+    }
+
+    // STEP 2: Get the customer separately
+    let customer: { email?: string; first_name?: string; last_name?: string } | null = null;
     
-    if (customerEmail?.toLowerCase() !== email.toLowerCase()) {
+    if (booking.customer_id) {
+      const { data: customerData, error: customerError } = await supabase
+        .from('customers')
+        .select('email, first_name, last_name')
+        .eq('id', booking.customer_id)
+        .single();
+      
+      if (customerError) {
+        console.error('[Cancellation GET] Customer lookup error:', customerError);
+      } else {
+        customer = customerData;
+      }
+    }
+
+    console.log('[Cancellation GET] Customer lookup:', { 
+      customerId: booking.customer_id,
+      customerEmail: customer?.email,
+      providedEmail: email 
+    });
+
+    // Verify email matches
+    if (!customer?.email || customer.email.toLowerCase() !== email.toLowerCase()) {
       return NextResponse.json(
         { error: 'Email does not match booking' },
         { status: 403 }
@@ -145,7 +171,7 @@ export async function GET(request: NextRequest) {
     }> = [];
 
     // Only show reschedule if policy allows it
-    if (policy.allow_reschedule !== false) {
+    if (policy.allow_reschedule !== false && booking.unit_id) {
       // Get unit's product
       const { data: unit } = await supabase
         .from('units')
@@ -164,11 +190,18 @@ export async function GET(request: NextRequest) {
         // Get booked dates
         const { data: existingBookings } = await supabase
           .from('bookings')
-          .select('delivery_date, pickup_date, units!inner(product_id)')
-          .eq('units.product_id', unit.product_id)
+          .select('delivery_date, pickup_date, unit_id')
           .neq('id', bookingId)
           .not('status', 'in', '("cancelled","pending")')
           .gte('event_date', startDate.toISOString().split('T')[0]);
+
+        // Filter to same product's units
+        const { data: productUnits } = await supabase
+          .from('units')
+          .select('id')
+          .eq('product_id', unit.product_id);
+        
+        const productUnitIds = new Set(productUnits?.map(u => u.id) || []);
 
         // Get blackout dates
         const { data: blackoutDates } = await supabase
@@ -180,7 +213,7 @@ export async function GET(request: NextRequest) {
         // Build unavailable set
         const unavailableDates = new Set<string>();
         blackoutDates?.forEach(b => unavailableDates.add(b.date));
-        existingBookings?.forEach(b => {
+        existingBookings?.filter(b => productUnitIds.has(b.unit_id)).forEach(b => {
           const delivery = new Date(b.delivery_date + 'T12:00:00');
           const pickup = new Date(b.pickup_date + 'T12:00:00');
           for (let d = new Date(delivery); d <= pickup; d.setDate(d.getDate() + 1)) {
@@ -236,7 +269,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error getting cancellation preview:', error);
+    console.error('[Cancellation GET] Unexpected error:', error);
     return NextResponse.json(
       { error: 'Failed to get cancellation details' },
       { status: 500 }
@@ -256,8 +289,10 @@ export async function POST(request: NextRequest) {
       email, 
       reason, 
       cancellationType = 'customer_request',
-      declinedReschedule = false, // Track if they saw reschedule option
+      declinedReschedule = false,
     } = body;
+
+    console.log('[Cancellation POST] Request:', { bookingId, email });
 
     if (!bookingId || !email) {
       return NextResponse.json(
@@ -268,7 +303,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Get booking with customer verification
+    // STEP 1: Get booking first
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .select(`
@@ -281,27 +316,33 @@ export async function POST(request: NextRequest) {
         subtotal,
         product_snapshot,
         stripe_payment_intent_id,
-        customer:customers!inner (
-          id,
-          email,
-          first_name,
-          last_name
-        )
+        customer_id
       `)
       .eq('id', bookingId)
       .single();
 
     if (bookingError || !booking) {
+      console.error('[Cancellation POST] Booking not found:', bookingError);
       return NextResponse.json(
         { error: 'Booking not found' },
         { status: 404 }
       );
     }
 
-    // Extract customer from join result
-    const customer = extractCustomer(booking.customer);
+    // STEP 2: Get customer
+    let customer: { id?: string; email?: string; first_name?: string; last_name?: string } | null = null;
     
-    if (customer?.email?.toLowerCase() !== email.toLowerCase()) {
+    if (booking.customer_id) {
+      const { data: customerData } = await supabase
+        .from('customers')
+        .select('id, email, first_name, last_name')
+        .eq('id', booking.customer_id)
+        .single();
+      customer = customerData;
+    }
+
+    // Verify email
+    if (!customer?.email || customer.email.toLowerCase() !== email.toLowerCase()) {
       return NextResponse.json(
         { error: 'Email does not match booking' },
         { status: 403 }
@@ -368,7 +409,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
-      console.error('Error creating cancellation request:', insertError);
+      console.error('[Cancellation POST] Insert error:', insertError);
       return NextResponse.json(
         { error: 'Failed to submit cancellation request' },
         { status: 500 }
@@ -404,7 +445,7 @@ export async function POST(request: NextRequest) {
           }),
         });
       } catch (emailError) {
-        console.error('Failed to send cancellation request email:', emailError);
+        console.error('[Cancellation POST] Email error:', emailError);
       }
     }
 
@@ -427,7 +468,7 @@ export async function POST(request: NextRequest) {
           }),
         });
       } catch (emailError) {
-        console.error('Failed to send admin notification:', emailError);
+        console.error('[Cancellation POST] Admin email error:', emailError);
       }
     }
 
@@ -443,7 +484,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error submitting cancellation request:', error);
+    console.error('[Cancellation POST] Unexpected error:', error);
     return NextResponse.json(
       { error: 'Failed to submit cancellation request' },
       { status: 500 }

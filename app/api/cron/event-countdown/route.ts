@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('event_date', targetDateStr)
-      .in('status', ['confirmed', 'paid'])
+      .eq('status', 'confirmed')
       .is('countdown_sent_at', null);
 
     if (error) {
