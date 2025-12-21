@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Calendar, Phone, Mail, Check, MapPin, Clock, Copy } from "lucide-react";
@@ -188,6 +188,11 @@ function NextStep({ icon, iconStyle, children, smallBody }: NextStepProps) {
  * Main Content Component
  * --------------------------------------------------------------------------- */
 export function SuccessContent({ booking, eventDate, pickupDate, styles }: SuccessContentProps) {
+  // Scroll to top on mount - ensures page loads at the top after redirect
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   // Get product name from snapshot
   const productName = booking.product_snapshot?.name || "Bounce House Rental";
   
