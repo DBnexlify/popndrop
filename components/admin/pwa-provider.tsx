@@ -9,6 +9,7 @@
 import { useEffect, useState, createContext, useContext, useCallback } from "react";
 import { Bell, BellOff, Download, X, CheckCircle2, Loader2, Share, PlusSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 
 // =============================================================================
 // TYPES
@@ -437,30 +438,35 @@ export function NotificationToggle() {
   }
 
   return (
-    <button
-      onClick={handleToggle}
-      disabled={loading}
-      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors ${
-        isSubscribed
-          ? "bg-green-500/10 text-green-400 hover:bg-green-500/20"
-          : "bg-white/5 text-foreground/70 hover:bg-white/10"
-      }`}
-    >
-      {loading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
-      ) : isSubscribed ? (
-        <CheckCircle2 className="h-4 w-4" />
-      ) : (
-        <Bell className="h-4 w-4" />
-      )}
-      <span>
-        {loading
-          ? "Processing..."
-          : isSubscribed
-          ? "Notifications On"
-          : "Enable Notifications"}
-      </span>
-    </button>
+    <div className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 ${
+      isSubscribed ? "bg-green-500/10" : "bg-white/5"
+    }`}>
+      <div className="flex items-center gap-2">
+        {loading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-foreground/50" />
+        ) : isSubscribed ? (
+          <Bell className="h-4 w-4 text-green-400" />
+        ) : (
+          <BellOff className="h-4 w-4 text-foreground/50" />
+        )}
+        <span className={`text-sm ${
+          isSubscribed ? "text-green-400" : "text-foreground/70"
+        }`}>
+          {loading
+            ? "Processing..."
+            : isSubscribed
+            ? "Notifications On"
+            : "Notifications Off"}
+        </span>
+      </div>
+      
+      <Switch
+        checked={isSubscribed}
+        onCheckedChange={handleToggle}
+        disabled={loading}
+        className="data-[state=checked]:bg-green-500"
+      />
+    </div>
   );
 }
 
