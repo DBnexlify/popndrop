@@ -182,11 +182,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     stripe_payment_intent_id: session.payment_intent as string || null,
   };
 
-  // If full payment, mark balance as paid too
+  // If full payment, mark balance as paid too AND set balance_due to 0
   if (isFullPayment) {
     bookingUpdate.balance_paid = true;
     bookingUpdate.balance_paid_at = now;
     bookingUpdate.balance_payment_method = 'stripe';
+    bookingUpdate.balance_due = 0; // Critical: Clear balance when paid in full
   }
 
   const { error: bookingError } = await supabase
@@ -284,6 +285,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         notes: booking.customer_notes || undefined,
         bookingType: booking.booking_type as 'daily' | 'weekend' | 'sunday',
         paidInFull: isFullPayment,
+        deliveryDate: booking.delivery_date, // For calendar link generation
       }),
     });
     console.log('✅ Customer confirmation email sent');

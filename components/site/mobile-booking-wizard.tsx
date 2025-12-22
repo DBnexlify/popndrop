@@ -55,32 +55,50 @@ import { PhoneInput } from "@/components/ui/phone-input";
 
 // =============================================================================
 // DESIGN SYSTEM STYLES - Premium Glassmorphism (matching desktop)
+// Following PROJECT-DESIGN-SYSTEM.md exactly
 // =============================================================================
 
 const styles = {
-  // Tier 2: Standard Cards (Grid Items)
-  card: "relative overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl",
-  cardInner: "pointer-events-none absolute inset-0 rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]",
+  // Tier 1: Section Cards (Primary Containers) - for floating step cards
+  sectionCard: "relative overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl",
+  sectionCardInner: "pointer-events-none absolute inset-0 rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_70px_rgba(0,0,0,0.2)]",
+  
+  // Tier 2: Standard Cards (Grid Items) - for product cards
+  card: "relative overflow-hidden rounded-xl border border-white/10 bg-background/50 shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl",
+  cardInner: "pointer-events-none absolute inset-0 rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]",
   
   // Tier 3: Nested Cards (Inside Other Cards)
-  nestedCard: "relative overflow-hidden rounded-xl border border-white/5 bg-white/[0.03]",
-  nestedCardInner: "pointer-events-none absolute inset-0 rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]",
+  nestedCard: "relative overflow-hidden rounded-lg border border-white/5 bg-white/[0.03]",
+  nestedCardInner: "pointer-events-none absolute inset-0 rounded-lg [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]",
   
   // Selected state with fuchsia glow (matching desktop)
   cardSelected: "ring-2 ring-fuchsia-500/50 shadow-[0_0_30px_rgba(217,70,239,0.15)]",
   nestedCardSelected: "ring-2 ring-fuchsia-500/50 bg-fuchsia-500/5",
   
-  // Typography
+  // Typography (from design system)
+  pageTitle: "text-2xl font-semibold tracking-tight",
+  sectionHeading: "text-lg font-semibold",
+  cardHeading: "text-sm font-semibold sm:text-base",
   heading: "text-xl font-semibold",
   subheading: "text-sm text-foreground/60",
   bodyText: "text-sm leading-relaxed text-foreground/70",
+  smallBody: "text-xs leading-relaxed text-foreground/70",
+  label: "text-[10px] font-medium uppercase tracking-wide text-foreground/50",
   helperText: "text-xs text-foreground/50",
   
-  // Inputs
+  // Inputs (from design system)
   input: "border-white/10 bg-white/5 placeholder:text-foreground/40 focus:border-white/20 focus:ring-1 focus:ring-white/10",
   selectTrigger: "w-full border-white/10 bg-white/5 focus:border-white/20 focus:ring-1 focus:ring-white/10",
   selectContent: "border-white/10 bg-background/95 backdrop-blur-xl",
   selectItem: "focus:bg-fuchsia-500/10",
+  
+  // Icon containers (from design system)
+  iconFuchsia: "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fuchsia-500/10",
+  iconCyan: "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-500/10",
+  iconPurple: "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-500/10",
+  
+  // Primary button (from design system)
+  primaryButton: "w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20 transition-all hover:shadow-xl hover:shadow-fuchsia-500/30",
 } as const;
 
 // =============================================================================
@@ -187,51 +205,57 @@ function WizardHeader({
   const progressPercentage = ((currentStep - 1) / (totalSteps - 1)) * 100;
 
   return (
-    <div className="sticky top-0 z-50 border-b border-white/5 bg-background/90 backdrop-blur-xl">
-      <div className="flex items-center gap-3 px-4 py-3">
-        {/* Back button */}
-        <button
-          onClick={() => {
-            if (canGoBack) {
-              hapticNavigate();
-              onBack();
-            }
-          }}
-          disabled={!canGoBack}
-          className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-full transition-all",
-            canGoBack
-              ? "bg-white/10 text-foreground active:scale-95"
-              : "text-foreground/20"
+    <div className="sticky top-0 z-50 px-4 pt-4 pb-2">
+      {/* Floating glassmorphism header */}
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-background/70 shadow-[0_14px_50px_rgba(0,0,0,0.25)] backdrop-blur-xl">
+        <div className="flex items-center gap-3 px-4 py-3">
+          {/* Back button */}
+          <button
+            onClick={() => {
+              if (canGoBack) {
+                hapticNavigate();
+                onBack();
+              }
+            }}
+            disabled={!canGoBack}
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-full transition-all",
+              canGoBack
+                ? "bg-white/10 text-foreground active:scale-95"
+                : "text-foreground/20"
+            )}
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+
+          {/* Progress section */}
+          <div className="flex-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-foreground/80">{stepLabel}</span>
+              <span className="text-foreground/50">
+                {currentStep} of {totalSteps}
+              </span>
+            </div>
+            
+            {/* Progress bar with fuchsia gradient */}
+            <div className="mt-1.5 relative h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(217,70,239,0.5)]"
+                style={{ width: `${progressPercentage}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Price pill */}
+          {price !== undefined && price > 0 && (
+            <div className="shrink-0 rounded-full bg-gradient-to-r from-fuchsia-500/20 to-purple-600/20 border border-fuchsia-500/30 px-3 py-1.5 text-sm font-semibold text-fuchsia-300">
+              ${price}
+            </div>
           )}
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-
-        {/* Progress section */}
-        <div className="flex-1">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-medium text-foreground/80">{stepLabel}</span>
-            <span className="text-foreground/50">
-              {currentStep} of {totalSteps}
-            </span>
-          </div>
-          
-          {/* Progress bar with fuchsia gradient */}
-          <div className="mt-1.5 relative h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div
-              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(217,70,239,0.5)]"
-              style={{ width: `${progressPercentage}%` }}
-            />
-          </div>
         </div>
-
-        {/* Price pill */}
-        {price !== undefined && price > 0 && (
-          <div className="shrink-0 rounded-full bg-gradient-to-r from-fuchsia-500/20 to-purple-600/20 border border-fuchsia-500/30 px-3 py-1.5 text-sm font-semibold text-fuchsia-300">
-            ${price}
-          </div>
-        )}
+        
+        {/* Inner feather overlay */}
+        <div className="pointer-events-none absolute inset-0 rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]" />
       </div>
     </div>
   );
@@ -255,39 +279,42 @@ function MiniSummary({
   if (!product) return null;
 
   return (
-    <div className="border-b border-white/5 bg-white/[0.02] px-4 py-3">
-      <div className="flex items-center gap-3">
-        {/* Product thumbnail */}
-        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-slate-900 via-purple-950/50 to-slate-900">
-          <Image
-            src={product.image}
-            alt={product.name}
-            fill
-            className="object-contain p-1"
-          />
-        </div>
-        
-        {/* Info */}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{product.name}</p>
-          {eventDate && (
-            <p className="text-xs text-foreground/50">
-              {format(eventDate, "EEE, MMM d")}
-              {selectedOption && ` · ${selectedOption.label}`}
-            </p>
-          )}
-        </div>
+    <div className="mx-4 mt-3">
+      <div className={cn(styles.nestedCard, "p-3")}>
+        <div className="flex items-center gap-3">
+          {/* Product thumbnail */}
+          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-slate-900 via-purple-950/50 to-slate-900">
+            <Image
+              src={product.image}
+              alt={product.name}
+              fill
+              className="object-contain p-1"
+            />
+          </div>
+          
+          {/* Info */}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{product.name}</p>
+            {eventDate && (
+              <p className="text-xs text-foreground/50">
+                {format(eventDate, "EEE, MMM d")}
+                {selectedOption && ` · ${selectedOption.label}`}
+              </p>
+            )}
+          </div>
 
-        {/* Edit button */}
-        <button
-          onClick={() => {
-            hapticSelect();
-            onEdit(1);
-          }}
-          className="shrink-0 text-xs text-cyan-400 active:text-cyan-300"
-        >
-          Edit
-        </button>
+          {/* Edit button */}
+          <button
+            onClick={() => {
+              hapticSelect();
+              onEdit(1);
+            }}
+            className="shrink-0 text-xs text-cyan-400 active:text-cyan-300"
+          >
+            Edit
+          </button>
+        </div>
+        <div className={styles.nestedCardInner} />
       </div>
     </div>
   );
@@ -309,91 +336,102 @@ function Step1SelectRental({
   availableUnitsCount?: number | null;
 }) {
   return (
-    <div className="space-y-4 p-4">
-      <div className="text-center">
-        <h2 className={styles.heading}>Pick Your Rental</h2>
-        <p className={cn(styles.subheading, "mt-1")}>
-          Tap to select your bounce house
-        </p>
-      </div>
+    <div className="px-4 pt-2 pb-6">
+      {/* Floating Section Card */}
+      <div className={styles.sectionCard}>
+        <div className="p-5">
+          {/* Header */}
+          <div className="text-center mb-5">
+            <h2 className={styles.heading}>Pick Your Rental</h2>
+            <p className={cn(styles.subheading, "mt-1")}>
+              Tap to select your bounce house
+            </p>
+          </div>
 
-      <div className="space-y-3">
-        {products.map((product) => {
-          const isSelected = selectedProduct?.slug === product.slug;
-          
-          return (
-            <button
-              key={product.slug}
-              onClick={() => {
-                hapticSelect();
-                onSelect(product);
-              }}
-              className={cn(
-                styles.card,
-                "w-full p-4 text-left transition-all duration-200 active:scale-[0.98]",
-                isSelected && styles.cardSelected
-              )}
-            >
-              <div className="flex items-center gap-4">
-                {/* Image */}
-                <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-slate-900 via-purple-950/50 to-slate-900">
-                  <Image
-                    src={product.image}
-                    alt={product.name}
-                    fill
-                    className="object-contain p-2"
-                  />
-                  {isSelected && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-fuchsia-500/20 backdrop-blur-[2px]">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 shadow-lg shadow-fuchsia-500/30">
-                        <Check className="h-5 w-5 text-white" />
+          {/* Product Cards */}
+          <div className="space-y-3">
+            {products.map((product) => {
+              const isSelected = selectedProduct?.slug === product.slug;
+              
+              return (
+                <button
+                  key={product.slug}
+                  onClick={() => {
+                    hapticSelect();
+                    onSelect(product);
+                  }}
+                  className={cn(
+                    styles.nestedCard,
+                    "w-full p-4 text-left transition-all duration-200 active:scale-[0.98]",
+                    isSelected && styles.nestedCardSelected
+                  )}
+                >
+                  <div className="flex items-center gap-4">
+                    {/* Image */}
+                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-slate-900 via-purple-950/50 to-slate-900">
+                      <Image
+                        src={product.image}
+                        alt={product.name}
+                        fill
+                        className="object-contain p-2"
+                      />
+                      {isSelected && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-fuchsia-500/20 backdrop-blur-[2px]">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 shadow-lg shadow-fuchsia-500/30">
+                            <Check className="h-5 w-5 text-white" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold">{product.name}</p>
+                      <p className={cn(styles.bodyText, "mt-0.5 line-clamp-2")}>
+                        {product.subtitle}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Badge variant="secondary" className="text-xs">
+                          ${product.pricing.daily}/day
+                        </Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          ${product.pricing.weekend} weekend
+                        </Badge>
                       </div>
                     </div>
-                  )}
-                </div>
 
-                {/* Info */}
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{product.name}</p>
-                  <p className={cn(styles.bodyText, "mt-0.5 line-clamp-2")}>
-                    {product.subtitle}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Badge variant="secondary" className="text-xs">
-                      ${product.pricing.daily}/day
-                    </Badge>
-                    <Badge variant="secondary" className="text-xs">
-                      ${product.pricing.weekend} weekend
-                    </Badge>
+                    {/* Chevron */}
+                    <ChevronRight className={cn(
+                      "h-5 w-5 shrink-0 transition-colors",
+                      isSelected ? "text-fuchsia-400" : "text-foreground/30"
+                    )} />
                   </div>
-                </div>
+                  
+                  {/* Real scarcity indicator - only shows when selected and genuinely limited */}
+                  {isSelected && availableUnitsCount === 1 && (
+                    <div className="mt-3 pt-3 border-t border-white/5">
+                      <LowStockIndicator 
+                        availableUnits={availableUnitsCount} 
+                        productName={product.name}
+                      />
+                    </div>
+                  )}
+                  
+                  <div className={styles.nestedCardInner} />
+                </button>
+              );
+            })}
+          </div>
 
-                {/* Chevron */}
-                <ChevronRight className={cn(
-                  "h-5 w-5 shrink-0 transition-colors",
-                  isSelected ? "text-fuchsia-400" : "text-foreground/30"
-                )} />
-              </div>
-              
-              {/* Real scarcity indicator - only shows when selected and genuinely limited */}
-              {isSelected && availableUnitsCount === 1 && (
-                <div className="mt-3 pt-3 border-t border-white/5">
-                  <LowStockIndicator 
-                    availableUnits={availableUnitsCount} 
-                    productName={product.name}
-                  />
-                </div>
-              )}
-              
-              <div className={styles.cardInner} />
-            </button>
-          );
-        })}
+          {/* Helper text */}
+          <p className={cn(styles.helperText, "text-center mt-5")}>
+            All rentals include delivery, setup & pickup
+          </p>
+        </div>
+        
+        {/* Section card inner feather */}
+        <div className={styles.sectionCardInner} />
       </div>
-
-      <p className={cn(styles.helperText, "text-center")}>
-        All rentals include delivery, setup & pickup
-      </p>
     </div>
   );
 }
@@ -463,239 +501,248 @@ function Step2DateTime({
   const canContinue = eventDate && selectedOption && formData.deliveryTime && formData.pickupTime;
 
   return (
-    <div className="space-y-4 p-4">
-      <div className="text-center">
-        <h2 className={styles.heading}>When&apos;s Your Event?</h2>
-        <p className={cn(styles.subheading, "mt-1")}>
-          Pick your date and delivery times
-        </p>
-      </div>
-
-      {/* Calendar */}
-      <div className={styles.card}>
-        <div className="p-4">
-          {/* Month navigation */}
-          <div className="mb-3 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => {
-                hapticSelect();
-                const newMonth = new Date(calendarMonth);
-                newMonth.setMonth(newMonth.getMonth() - 1);
-                if (newMonth >= new Date(new Date().getFullYear(), new Date().getMonth(), 1)) {
-                  setCalendarMonth(newMonth);
-                }
-              }}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 active:bg-white/10"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="text-sm font-semibold">
-              {format(calendarMonth, "MMMM yyyy")}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                hapticSelect();
-                const newMonth = new Date(calendarMonth);
-                newMonth.setMonth(newMonth.getMonth() + 1);
-                if (newMonth <= maxDate) {
-                  setCalendarMonth(newMonth);
-                }
-              }}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 active:bg-white/10"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+    <div className="px-4 pt-4 pb-6">
+      {/* Floating Section Card */}
+      <div className={styles.sectionCard}>
+        <div className="p-5">
+          {/* Header */}
+          <div className="text-center mb-5">
+            <h2 className={styles.heading}>When&apos;s Your Event?</h2>
+            <p className={cn(styles.subheading, "mt-1")}>
+              Pick your date and delivery times
+            </p>
           </div>
 
-          <Calendar
-            mode="single"
-            selected={eventDate}
-            onSelect={(date) => {
-              if (date) {
-                hapticSuccess();
-              }
-              setEventDate(date);
-            }}
-            month={calendarMonth}
-            onMonthChange={setCalendarMonth}
-            disabled={(date) =>
-              date < minDate ||
-              date > maxDate ||
-              !isDeliveryAvailable(date) ||
-              isDateUnavailable(date)
-            }
-            className="mx-auto"
-            classNames={{
-              caption: "hidden",
-              nav: "hidden",
-              day_selected: "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white hover:from-fuchsia-600 hover:to-purple-700",
-              day_today: "bg-cyan-500/20 text-cyan-400",
-              day_disabled: "text-foreground/20 line-through",
-            }}
-          />
-
-          {/* Legend */}
-          <div className="mt-3 flex items-center justify-center gap-4 text-[10px] text-foreground/50">
-            <span className="flex items-center gap-1">
-              <div className="h-2 w-2 rounded-full bg-cyan-500/50" />
-              Today
-            </span>
-            <span className="flex items-center gap-1">
-              <div className="h-2 w-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600" />
-              Selected
-            </span>
-          </div>
-        </div>
-        <div className={styles.cardInner} />
-      </div>
-
-      {/* Date selected feedback */}
-      {eventDate && (
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <div className="flex items-center justify-center gap-2 text-sm text-green-400">
-            <Check className="h-4 w-4" />
-            <span>{format(eventDate, "EEEE, MMMM d, yyyy")}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Duration options */}
-      {hasMultipleOptions && pricingResult && (
-        <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <Label>Choose duration</Label>
-          <div className="grid grid-cols-2 gap-3">
-            {pricingResult.options.map((option) => {
-              const isSelected = selectedOption?.type === option.type;
-              
-              return (
+          {/* Calendar Card */}
+          <div className={styles.nestedCard}>
+            <div className="p-4">
+              {/* Month navigation */}
+              <div className="mb-3 flex items-center justify-between">
                 <button
-                  key={option.type}
                   type="button"
                   onClick={() => {
                     hapticSelect();
-                    setSelectedOption(option);
-                    setFormData(prev => ({ ...prev, deliveryTime: "", pickupTime: "" }));
+                    const newMonth = new Date(calendarMonth);
+                    newMonth.setMonth(newMonth.getMonth() - 1);
+                    if (newMonth >= new Date(new Date().getFullYear(), new Date().getMonth(), 1)) {
+                      setCalendarMonth(newMonth);
+                    }
                   }}
-                  className={cn(
-                    styles.nestedCard,
-                    "p-3 text-left transition-all active:scale-[0.98]",
-                    isSelected
-                      ? styles.nestedCardSelected
-                      : "active:bg-white/5"
-                  )}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 active:bg-white/10"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold">{option.label}</span>
-                    {option.badge && (
-                      <Badge className="border-0 bg-gradient-to-r from-fuchsia-500 to-purple-600 text-[9px] text-white">
-                        {option.badge}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className={cn(
-                    "mt-1 text-lg font-semibold",
-                    isSelected ? "text-fuchsia-400" : "text-cyan-400"
-                  )}>
-                    ${option.price}
-                  </p>
-                  <p className="mt-0.5 text-[10px] text-foreground/50 line-clamp-2">
-                    {option.description}
-                  </p>
-                  <div className={styles.nestedCardInner} />
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                <span className="text-sm font-semibold">
+                  {format(calendarMonth, "MMMM yyyy")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    hapticSelect();
+                    const newMonth = new Date(calendarMonth);
+                    newMonth.setMonth(newMonth.getMonth() + 1);
+                    if (newMonth <= maxDate) {
+                      setCalendarMonth(newMonth);
+                    }
+                  }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 active:bg-white/10"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
 
-      {/* Sunday explanation */}
-      {selectedOption?.type === "sunday" && (
-        <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/20 p-3 animate-in fade-in duration-300">
-          <div className="flex gap-2 text-xs">
-            <Truck className="h-4 w-4 shrink-0 text-cyan-400" />
-            <div>
-              <p className="font-medium text-cyan-300">Sunday rental:</p>
-              <p className="mt-0.5 text-foreground/60">
-                Delivered Saturday evening, picked up Monday morning
-              </p>
+              <Calendar
+                mode="single"
+                selected={eventDate}
+                onSelect={(date) => {
+                  if (date) {
+                    hapticSuccess();
+                  }
+                  setEventDate(date);
+                }}
+                month={calendarMonth}
+                onMonthChange={setCalendarMonth}
+                disabled={(date) =>
+                  date < minDate ||
+                  date > maxDate ||
+                  !isDeliveryAvailable(date) ||
+                  isDateUnavailable(date)
+                }
+                className="mx-auto"
+                classNames={{
+                  caption: "hidden",
+                  nav: "hidden",
+                  day_selected: "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white hover:from-fuchsia-600 hover:to-purple-700",
+                  day_today: "bg-cyan-500/20 text-cyan-400",
+                  day_disabled: "text-foreground/20 line-through",
+                }}
+              />
+
+              {/* Legend */}
+              <div className="mt-3 flex items-center justify-center gap-4 text-[10px] text-foreground/50">
+                <span className="flex items-center gap-1">
+                  <div className="h-2 w-2 rounded-full bg-cyan-500/50" />
+                  Today
+                </span>
+                <span className="flex items-center gap-1">
+                  <div className="h-2 w-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600" />
+                  Selected
+                </span>
+              </div>
             </div>
+            <div className={styles.nestedCardInner} />
           </div>
+
+          {/* Date selected feedback */}
+          {eventDate && (
+            <div className="mt-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="flex items-center justify-center gap-2 text-sm text-green-400">
+                <Check className="h-4 w-4" />
+                <span>{format(eventDate, "EEEE, MMMM d, yyyy")}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Duration options */}
+          {hasMultipleOptions && pricingResult && (
+            <div className="mt-5 space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <Label>Choose duration</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {pricingResult.options.map((option) => {
+                  const isSelected = selectedOption?.type === option.type;
+                  
+                  return (
+                    <button
+                      key={option.type}
+                      type="button"
+                      onClick={() => {
+                        hapticSelect();
+                        setSelectedOption(option);
+                        setFormData(prev => ({ ...prev, deliveryTime: "", pickupTime: "" }));
+                      }}
+                      className={cn(
+                        styles.nestedCard,
+                        "p-3 text-left transition-all active:scale-[0.98]",
+                        isSelected
+                          ? styles.nestedCardSelected
+                          : "active:bg-white/5"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold">{option.label}</span>
+                        {option.badge && (
+                          <Badge className="border-0 bg-gradient-to-r from-fuchsia-500 to-purple-600 text-[9px] text-white">
+                            {option.badge}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className={cn(
+                        "mt-1 text-lg font-semibold",
+                        isSelected ? "text-fuchsia-400" : "text-cyan-400"
+                      )}>
+                        ${option.price}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-foreground/50 line-clamp-2">
+                        {option.description}
+                      </p>
+                      <div className={styles.nestedCardInner} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Sunday explanation */}
+          {selectedOption?.type === "sunday" && (
+            <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-950/20 p-3 animate-in fade-in duration-300">
+              <div className="flex gap-2 text-xs">
+                <Truck className="h-4 w-4 shrink-0 text-cyan-400" />
+                <div>
+                  <p className="font-medium text-cyan-300">Sunday rental:</p>
+                  <p className="mt-0.5 text-foreground/60">
+                    Delivered Saturday evening, picked up Monday morning
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Time selection */}
+          {selectedOption && (
+            <div className="mt-5 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="space-y-2">
+                <Label>{selectedOption.deliveryDay} delivery time</Label>
+                <Select
+                  value={formData.deliveryTime}
+                  onValueChange={(value) => {
+                    hapticSelect();
+                    setFormData(prev => ({ ...prev, deliveryTime: value }));
+                  }}
+                >
+                  <SelectTrigger className={styles.selectTrigger}>
+                    <SelectValue placeholder="Select time..." />
+                  </SelectTrigger>
+                  <SelectContent className={styles.selectContent}>
+                    {selectedOption.deliveryWindows.map((window) => (
+                      <SelectItem key={window.value} value={window.value} className={styles.selectItem}>
+                        {window.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{selectedOption.pickupDay} pickup time</Label>
+                <Select
+                  value={formData.pickupTime}
+                  onValueChange={(value) => {
+                    hapticSelect();
+                    setFormData(prev => ({ ...prev, pickupTime: value }));
+                  }}
+                >
+                  <SelectTrigger className={styles.selectTrigger}>
+                    <SelectValue placeholder="Select time..." />
+                  </SelectTrigger>
+                  <SelectContent className={styles.selectContent}>
+                    {selectedOption.pickupWindows.map((window) => (
+                      <SelectItem key={window.value} value={window.value} className={styles.selectItem}>
+                        {window.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {/* Continue button */}
+          <Button
+            onClick={() => {
+              if (canContinue) {
+                hapticSuccess();
+                onContinue();
+              } else {
+                hapticError();
+              }
+            }}
+            disabled={!canContinue}
+            className={cn(
+              "w-full py-6 text-base font-semibold transition-all mt-6",
+              canContinue
+                ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20"
+                : "bg-white/10 text-foreground/50"
+            )}
+          >
+            Continue
+            <ChevronRight className="ml-2 h-5 w-5" />
+          </Button>
         </div>
-      )}
-
-      {/* Time selection */}
-      {selectedOption && (
-        <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <div className="space-y-2">
-            <Label>{selectedOption.deliveryDay} delivery time</Label>
-            <Select
-              value={formData.deliveryTime}
-              onValueChange={(value) => {
-                hapticSelect();
-                setFormData(prev => ({ ...prev, deliveryTime: value }));
-              }}
-            >
-              <SelectTrigger className={styles.selectTrigger}>
-                <SelectValue placeholder="Select time..." />
-              </SelectTrigger>
-              <SelectContent className={styles.selectContent}>
-                {selectedOption.deliveryWindows.map((window) => (
-                  <SelectItem key={window.value} value={window.value} className={styles.selectItem}>
-                    {window.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>{selectedOption.pickupDay} pickup time</Label>
-            <Select
-              value={formData.pickupTime}
-              onValueChange={(value) => {
-                hapticSelect();
-                setFormData(prev => ({ ...prev, pickupTime: value }));
-              }}
-            >
-              <SelectTrigger className={styles.selectTrigger}>
-                <SelectValue placeholder="Select time..." />
-              </SelectTrigger>
-              <SelectContent className={styles.selectContent}>
-                {selectedOption.pickupWindows.map((window) => (
-                  <SelectItem key={window.value} value={window.value} className={styles.selectItem}>
-                    {window.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      )}
-
-      {/* Continue button */}
-      <Button
-        onClick={() => {
-          if (canContinue) {
-            hapticSuccess();
-            onContinue();
-          } else {
-            hapticError();
-          }
-        }}
-        disabled={!canContinue}
-        className={cn(
-          "w-full py-6 text-base font-semibold transition-all",
-          canContinue
-            ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20"
-            : "bg-white/10 text-foreground/50"
-        )}
-      >
-        Continue
-        <ChevronRight className="ml-2 h-5 w-5" />
-      </Button>
+        
+        {/* Section card inner feather */}
+        <div className={styles.sectionCardInner} />
+      </div>
     </div>
   );
 }
@@ -724,137 +771,144 @@ function Step3Details({
   const canContinue = formData.name && formData.email && formData.phone && formData.address;
 
   return (
-    <div className="space-y-4 p-4">
-      <div className="text-center">
-        <h2 className={styles.heading}>Your Details</h2>
-        <p className={cn(styles.subheading, "mt-1")}>
-          Where should we deliver?
-        </p>
-      </div>
-
-      <div className={styles.card}>
-        <div className="space-y-4 p-4">
-          {/* Contact section */}
-          <div className="space-y-3">
-            <p className={cn(styles.helperText, "uppercase tracking-wide")}>
-              Contact Info
+    <div className="px-4 pt-4 pb-6">
+      {/* Floating Section Card */}
+      <div className={styles.sectionCard}>
+        <div className="p-5">
+          {/* Header */}
+          <div className="text-center mb-5">
+            <h2 className={styles.heading}>Your Details</h2>
+            <p className={cn(styles.subheading, "mt-1")}>
+              Where should we deliver?
             </p>
-            
-            <div className="space-y-2">
-              <Label htmlFor="name">Your name</Label>
-              <Input
-                id="name"
-                name="name"
-                placeholder="Jane Smith"
-                value={formData.name}
-                onChange={handleChange}
-                className={styles.input}
-              />
+          </div>
+
+          {/* Form Content */}
+          <div className="space-y-4">
+            {/* Contact section */}
+            <div className="space-y-3">
+              <p className={cn(styles.label)}>
+                Contact Info
+              </p>
+              
+              <div className="space-y-2">
+                <Label htmlFor="name">Your name</Label>
+                <Input
+                  id="name"
+                  name="name"
+                  placeholder="Jane Smith"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className={styles.input}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  placeholder="jane@example.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className={styles.input}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone</Label>
+                <PhoneInput
+                  id="phone"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={(value) => setFormData(prev => ({ ...prev, phone: value }))}
+                  className={styles.input}
+                />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="jane@example.com"
-                value={formData.email}
-                onChange={handleChange}
-                className={styles.input}
-              />
+            {/* Address section */}
+            <div className="space-y-3 border-t border-white/5 pt-4">
+              <p className={cn(styles.label)}>
+                Delivery Address
+              </p>
+
+              <div className="space-y-2">
+                <Label htmlFor="address">Street address</Label>
+                <Input
+                  id="address"
+                  name="address"
+                  placeholder="123 Main Street"
+                  value={formData.address}
+                  onChange={handleChange}
+                  className={styles.input}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="city">City</Label>
+                <Select
+                  value={formData.city}
+                  onValueChange={(value) => {
+                    hapticSelect();
+                    setFormData(prev => ({ ...prev, city: value }));
+                  }}
+                >
+                  <SelectTrigger className={styles.selectTrigger}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className={styles.selectContent}>
+                    {SERVICE_CITIES.map((city) => (
+                      <SelectItem key={city} value={city} className={styles.selectItem}>
+                        {city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
-              <PhoneInput
-                id="phone"
-                name="phone"
-                value={formData.phone}
-                onChange={(value) => setFormData(prev => ({ ...prev, phone: value }))}
-                className={styles.input}
+            {/* Notes */}
+            <div className="space-y-2 border-t border-white/5 pt-4">
+              <Label htmlFor="notes">Special requests (optional)</Label>
+              <Textarea
+                id="notes"
+                name="notes"
+                placeholder="Gate codes, setup location, wet or dry..."
+                value={formData.notes}
+                onChange={handleChange}
+                className={cn(styles.input, "min-h-[80px]")}
               />
             </div>
           </div>
 
-          {/* Address section */}
-          <div className="space-y-3 border-t border-white/5 pt-4">
-            <p className={cn(styles.helperText, "uppercase tracking-wide")}>
-              Delivery Address
-            </p>
-
-            <div className="space-y-2">
-              <Label htmlFor="address">Street address</Label>
-              <Input
-                id="address"
-                name="address"
-                placeholder="123 Main Street"
-                value={formData.address}
-                onChange={handleChange}
-                className={styles.input}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="city">City</Label>
-              <Select
-                value={formData.city}
-                onValueChange={(value) => {
-                  hapticSelect();
-                  setFormData(prev => ({ ...prev, city: value }));
-                }}
-              >
-                <SelectTrigger className={styles.selectTrigger}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className={styles.selectContent}>
-                  {SERVICE_CITIES.map((city) => (
-                    <SelectItem key={city} value={city} className={styles.selectItem}>
-                      {city}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div className="space-y-2 border-t border-white/5 pt-4">
-            <Label htmlFor="notes">Special requests (optional)</Label>
-            <Textarea
-              id="notes"
-              name="notes"
-              placeholder="Gate codes, setup location, wet or dry..."
-              value={formData.notes}
-              onChange={handleChange}
-              className={cn(styles.input, "min-h-[80px]")}
-            />
-          </div>
+          {/* Continue button */}
+          <Button
+            onClick={() => {
+              if (canContinue) {
+                hapticSuccess();
+                onContinue();
+              } else {
+                hapticError();
+              }
+            }}
+            disabled={!canContinue}
+            className={cn(
+              "w-full py-6 text-base font-semibold transition-all mt-6",
+              canContinue
+                ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20"
+                : "bg-white/10 text-foreground/50"
+            )}
+          >
+            Review Booking
+            <ChevronRight className="ml-2 h-5 w-5" />
+          </Button>
         </div>
-        <div className={styles.cardInner} />
+        
+        {/* Section card inner feather */}
+        <div className={styles.sectionCardInner} />
       </div>
-
-      {/* Continue button */}
-      <Button
-        onClick={() => {
-          if (canContinue) {
-            hapticSuccess();
-            onContinue();
-          } else {
-            hapticError();
-          }
-        }}
-        disabled={!canContinue}
-        className={cn(
-          "w-full py-6 text-base font-semibold transition-all",
-          canContinue
-            ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20"
-            : "bg-white/10 text-foreground/50"
-        )}
-      >
-        Review Booking
-        <ChevronRight className="ml-2 h-5 w-5" />
-      </Button>
     </div>
   );
 }
@@ -891,271 +945,284 @@ function Step4Review({
   onEdit: (step: number) => void;
 }) {
   return (
-    <div className="space-y-4 p-4">
-      <div className="text-center">
-        <h2 className={styles.heading}>Review Your Booking</h2>
-        <p className={cn(styles.subheading, "mt-1")}>
-          Make sure everything looks good
-        </p>
-      </div>
-
-      {/* Booking summary */}
-      <div className={styles.card}>
-        <div className="space-y-4 p-4">
-          {/* Rental */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-slate-900 via-purple-950/50 to-slate-900">
-                <Image
-                  src={selectedProduct.image}
-                  alt={selectedProduct.name}
-                  fill
-                  className="object-contain p-1"
-                />
-              </div>
-              <div>
-                <p className="font-semibold">{selectedProduct.name}</p>
-                <p className="text-xs text-foreground/50">{selectedOption.label}</p>
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                hapticSelect();
-                onEdit(1);
-              }}
-              className="text-xs text-cyan-400"
-            >
-              Edit
-            </button>
-          </div>
-
-          <div className="h-px bg-white/5" />
-
-          {/* Date & Time */}
-          <div>
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Date & Time</p>
-              <button
-                onClick={() => {
-                  hapticSelect();
-                  onEdit(2);
-                }}
-                className="text-xs text-cyan-400"
-              >
-                Edit
-              </button>
-            </div>
-            <div className="mt-2 space-y-1 text-sm text-foreground/70">
-              <p>{format(eventDate, "EEEE, MMMM d, yyyy")}</p>
-              <p>Delivery: {selectedOption.deliveryDay} {formData.deliveryTime}</p>
-              <p>Pickup: {selectedOption.pickupDay} {formData.pickupTime}</p>
-            </div>
-          </div>
-
-          <div className="h-px bg-white/5" />
-
-          {/* Contact */}
-          <div>
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Contact</p>
-              <button
-                onClick={() => {
-                  hapticSelect();
-                  onEdit(3);
-                }}
-                className="text-xs text-cyan-400"
-              >
-                Edit
-              </button>
-            </div>
-            <div className="mt-2 space-y-1 text-sm text-foreground/70">
-              <p>{formData.name}</p>
-              <p>{formData.email}</p>
-              <p>{formData.phone}</p>
-            </div>
-          </div>
-
-          <div className="h-px bg-white/5" />
-
-          {/* Address */}
-          <div>
-            <p className="text-sm font-medium">Delivery Address</p>
-            <p className="mt-2 text-sm text-foreground/70">
-              {formData.address}, {formData.city}
+    <div className="px-4 pt-4 pb-6">
+      {/* Floating Section Card */}
+      <div className={styles.sectionCard}>
+        <div className="p-5">
+          {/* Header */}
+          <div className="text-center mb-5">
+            <h2 className={styles.heading}>Review Your Booking</h2>
+            <p className={cn(styles.subheading, "mt-1")}>
+              Make sure everything looks good
             </p>
           </div>
 
-          {formData.notes && (
-            <>
-              <div className="h-px bg-white/5" />
-              <div>
-                <p className="text-sm font-medium">Notes</p>
-                <p className="mt-2 text-sm text-foreground/70">{formData.notes}</p>
+          {/* Booking summary - Nested Card */}
+          <div className={styles.nestedCard}>
+            <div className="p-4 space-y-4">
+              {/* Rental */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-slate-900 via-purple-950/50 to-slate-900">
+                    <Image
+                      src={selectedProduct.image}
+                      alt={selectedProduct.name}
+                      fill
+                      className="object-contain p-1"
+                    />
+                  </div>
+                  <div>
+                    <p className="font-semibold">{selectedProduct.name}</p>
+                    <p className="text-xs text-foreground/50">{selectedOption.label}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    hapticSelect();
+                    onEdit(1);
+                  }}
+                  className="text-xs text-cyan-400"
+                >
+                  Edit
+                </button>
               </div>
-            </>
+
+              <div className="h-px bg-white/5" />
+
+              {/* Date & Time */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Date & Time</p>
+                  <button
+                    onClick={() => {
+                      hapticSelect();
+                      onEdit(2);
+                    }}
+                    className="text-xs text-cyan-400"
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div className="mt-2 space-y-1 text-sm text-foreground/70">
+                  <p>{format(eventDate, "EEEE, MMMM d, yyyy")}</p>
+                  <p>Delivery: {selectedOption.deliveryDay} {formData.deliveryTime}</p>
+                  <p>Pickup: {selectedOption.pickupDay} {formData.pickupTime}</p>
+                </div>
+              </div>
+
+              <div className="h-px bg-white/5" />
+
+              {/* Contact */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Contact</p>
+                  <button
+                    onClick={() => {
+                      hapticSelect();
+                      onEdit(3);
+                    }}
+                    className="text-xs text-cyan-400"
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div className="mt-2 space-y-1 text-sm text-foreground/70">
+                  <p>{formData.name}</p>
+                  <p>{formData.email}</p>
+                  <p>{formData.phone}</p>
+                </div>
+              </div>
+
+              <div className="h-px bg-white/5" />
+
+              {/* Address */}
+              <div>
+                <p className="text-sm font-medium">Delivery Address</p>
+                <p className="mt-2 text-sm text-foreground/70">
+                  {formData.address}, {formData.city}
+                </p>
+              </div>
+
+              {formData.notes && (
+                <>
+                  <div className="h-px bg-white/5" />
+                  <div>
+                    <p className="text-sm font-medium">Notes</p>
+                    <p className="mt-2 text-sm text-foreground/70">{formData.notes}</p>
+                  </div>
+                </>
+              )}
+
+              <div className="h-px bg-white/5" />
+
+              {/* Total */}
+              <div className="flex items-center justify-between">
+                <span className="text-lg font-semibold">Total</span>
+                <span className="text-2xl font-semibold text-cyan-400">
+                  ${selectedOption.price}
+                </span>
+              </div>
+              <p className={styles.helperText}>Payment selection below</p>
+            </div>
+            <div className={styles.nestedCardInner} />
+          </div>
+
+          {/* Payment Option */}
+          <div className="mt-5 space-y-2">
+            <p className={cn(styles.label)}>Payment Option</p>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Deposit Option */}
+              <button
+                type="button"
+                onClick={() => {
+                  hapticSelect();
+                  setPaymentType('deposit');
+                }}
+                className={cn(
+                  styles.nestedCard,
+                  "p-3 text-left transition-all active:scale-[0.98]",
+                  paymentType === 'deposit'
+                    ? styles.nestedCardSelected
+                    : "active:bg-white/5"
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all",
+                      paymentType === 'deposit' 
+                        ? "border-fuchsia-400 bg-fuchsia-400" 
+                        : "border-white/30"
+                    )}>
+                      {paymentType === 'deposit' && (
+                        <Check className="h-2.5 w-2.5 text-white" />
+                      )}
+                    </div>
+                    <span className="text-sm font-semibold">Deposit</span>
+                  </div>
+                  <span className={cn(
+                    "text-lg font-semibold",
+                    paymentType === 'deposit' ? "text-fuchsia-400" : "text-cyan-400"
+                  )}>$50</span>
+                </div>
+                <p className="mt-1.5 pl-6 text-[10px] text-foreground/50">
+                  ${selectedOption.price - 50} due on delivery
+                </p>
+                <div className={styles.nestedCardInner} />
+              </button>
+
+              {/* Pay in Full Option */}
+              <button
+                type="button"
+                onClick={() => {
+                  hapticSelect();
+                  setPaymentType('full');
+                }}
+                className={cn(
+                  styles.nestedCard,
+                  "p-3 text-left transition-all active:scale-[0.98]",
+                  paymentType === 'full'
+                    ? "ring-2 ring-green-500/50 bg-green-500/10"
+                    : "active:bg-white/5"
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all",
+                      paymentType === 'full' 
+                        ? "border-green-400 bg-green-400" 
+                        : "border-white/30"
+                    )}>
+                      {paymentType === 'full' && (
+                        <Check className="h-2.5 w-2.5 text-white" />
+                      )}
+                    </div>
+                    <span className="text-sm font-semibold">Pay in full</span>
+                  </div>
+                  <span className={cn(
+                    "text-lg font-semibold",
+                    paymentType === 'full' ? "text-green-400" : "text-foreground/50"
+                  )}>${selectedOption.price}</span>
+                </div>
+                <p className={cn(
+                  "mt-1.5 pl-6 text-[10px]",
+                  paymentType === 'full' ? "text-green-400/70" : "text-foreground/50"
+                )}>
+                  ✓ Nothing due on delivery!
+                </p>
+                <div className={styles.nestedCardInner} />
+              </button>
+            </div>
+          </div>
+
+          {/* Terms */}
+          <div className="mt-5">
+            <TermsCheckbox
+              checked={termsAccepted}
+              onChange={(checked) => {
+                hapticSelect();
+                setTermsAccepted(checked);
+              }}
+              hasError={false}
+            />
+          </div>
+
+          {/* Trust badges */}
+          <div className="mt-4">
+            <TrustBadges />
+          </div>
+
+          {/* Error */}
+          {submitError && (
+            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-950/30 p-3">
+              <div className="flex items-center gap-2 text-sm text-red-400">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {submitError}
+              </div>
+            </div>
           )}
 
-          <div className="h-px bg-white/5" />
-
-          {/* Total */}
-          <div className="flex items-center justify-between">
-            <span className="text-lg font-semibold">Total</span>
-            <span className="text-2xl font-semibold text-cyan-400">
-              ${selectedOption.price}
-            </span>
-          </div>
-          <p className={styles.helperText}>Payment selection below</p>
-        </div>
-        <div className={styles.cardInner} />
-      </div>
-
-      {/* Payment Option */}
-      <div className="space-y-2">
-        <p className={cn(styles.helperText, "uppercase tracking-wide")}>Payment Option</p>
-        <div className="grid grid-cols-2 gap-3">
-          {/* Deposit Option */}
-          <button
-            type="button"
+          {/* Submit button */}
+          <Button
             onClick={() => {
-              hapticSelect();
-              setPaymentType('deposit');
+              if (termsAccepted && !isSubmitting) {
+                hapticConfirm();
+                onSubmit();
+              } else {
+                hapticError();
+              }
             }}
+            disabled={!termsAccepted || isSubmitting}
             className={cn(
-              styles.nestedCard,
-              "p-3 text-left transition-all active:scale-[0.98]",
-              paymentType === 'deposit'
-                ? styles.nestedCardSelected
-                : "active:bg-white/5"
+              "w-full py-6 text-base font-semibold transition-all mt-6",
+              termsAccepted && !isSubmitting
+                ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20 animate-pulse"
+                : "bg-white/10 text-foreground/50"
             )}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className={cn(
-                  "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all",
-                  paymentType === 'deposit' 
-                    ? "border-fuchsia-400 bg-fuchsia-400" 
-                    : "border-white/30"
-                )}>
-                  {paymentType === 'deposit' && (
-                    <Check className="h-2.5 w-2.5 text-white" />
-                  )}
-                </div>
-                <span className="text-sm font-semibold">Deposit</span>
-              </div>
-              <span className={cn(
-                "text-lg font-semibold",
-                paymentType === 'deposit' ? "text-fuchsia-400" : "text-cyan-400"
-              )}>$50</span>
-            </div>
-            <p className="mt-1.5 pl-6 text-[10px] text-foreground/50">
-              ${selectedOption.price - 50} due on delivery
-            </p>
-            <div className={styles.nestedCardInner} />
-          </button>
-
-          {/* Pay in Full Option */}
-          <button
-            type="button"
-            onClick={() => {
-              hapticSelect();
-              setPaymentType('full');
-            }}
-            className={cn(
-              styles.nestedCard,
-              "p-3 text-left transition-all active:scale-[0.98]",
-              paymentType === 'full'
-                ? "ring-2 ring-green-500/50 bg-green-500/10"
-                : "active:bg-white/5"
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Processing...
+              </span>
+            ) : (
+              <>
+                <PartyPopper className="mr-2 h-5 w-5" />
+                Complete Booking
+              </>
             )}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className={cn(
-                  "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all",
-                  paymentType === 'full' 
-                    ? "border-green-400 bg-green-400" 
-                    : "border-white/30"
-                )}>
-                  {paymentType === 'full' && (
-                    <Check className="h-2.5 w-2.5 text-white" />
-                  )}
-                </div>
-                <span className="text-sm font-semibold">Pay in full</span>
-              </div>
-              <span className={cn(
-                "text-lg font-semibold",
-                paymentType === 'full' ? "text-green-400" : "text-foreground/50"
-              )}>${selectedOption.price}</span>
-            </div>
-            <p className={cn(
-              "mt-1.5 pl-6 text-[10px]",
-              paymentType === 'full' ? "text-green-400/70" : "text-foreground/50"
-            )}>
-              ✓ Nothing due on delivery!
-            </p>
-            <div className={styles.nestedCardInner} />
-          </button>
+          </Button>
+
+          <p className={cn(styles.helperText, "text-center mt-4")}>
+            <Shield className="mr-1 inline h-3 w-3" />
+            Secure booking · Confirmation via email
+          </p>
         </div>
+        
+        {/* Section card inner feather */}
+        <div className={styles.sectionCardInner} />
       </div>
-
-      {/* Terms */}
-      <TermsCheckbox
-        checked={termsAccepted}
-        onChange={(checked) => {
-          hapticSelect();
-          setTermsAccepted(checked);
-        }}
-        hasError={false}
-      />
-
-      {/* Trust badges */}
-      <TrustBadges />
-
-      {/* Error */}
-      {submitError && (
-        <div className="rounded-xl border border-red-500/30 bg-red-950/30 p-3">
-          <div className="flex items-center gap-2 text-sm text-red-400">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            {submitError}
-          </div>
-        </div>
-      )}
-
-      {/* Submit button */}
-      <Button
-        onClick={() => {
-          if (termsAccepted && !isSubmitting) {
-            hapticConfirm();
-            onSubmit();
-          } else {
-            hapticError();
-          }
-        }}
-        disabled={!termsAccepted || isSubmitting}
-        className={cn(
-          "w-full py-6 text-base font-semibold transition-all",
-          termsAccepted && !isSubmitting
-            ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20 animate-pulse"
-            : "bg-white/10 text-foreground/50"
-        )}
-      >
-        {isSubmitting ? (
-          <span className="flex items-center gap-2">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Processing...
-          </span>
-        ) : (
-          <>
-            <PartyPopper className="mr-2 h-5 w-5" />
-            Complete Booking
-          </>
-        )}
-      </Button>
-
-      <p className={cn(styles.helperText, "text-center")}>
-        <Shield className="mr-1 inline h-3 w-3" />
-        Secure booking · Confirmation via email
-      </p>
     </div>
   );
 }
@@ -1378,7 +1445,7 @@ export function MobileBookingWizard({
   const stepLabel = STEPS[currentStep - 1]?.label || "";
 
   return (
-    <div ref={containerRef} className="min-h-screen bg-background">
+    <div ref={containerRef} className="min-h-screen">
       {/* Toast */}
       <Toast message={toast.message} visible={toast.visible} icon={Check} />
 
@@ -1404,10 +1471,12 @@ export function MobileBookingWizard({
 
       {/* Cancelled alert */}
       {cancelled && currentStep === 1 && (
-        <div className="mx-4 mt-4 rounded-xl border border-amber-500/30 bg-amber-950/30 p-3">
-          <div className="flex items-center gap-2 text-sm text-amber-400">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            Payment cancelled. Your date is still available.
+        <div className="px-4 pt-2">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-950/30 backdrop-blur-xl p-3">
+            <div className="flex items-center gap-2 text-sm text-amber-400">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              Payment cancelled. Your date is still available.
+            </div>
           </div>
         </div>
       )}
@@ -1474,8 +1543,8 @@ export function MobileBookingWizard({
         </div>
       </div>
 
-      {/* Bottom safe area spacer */}
-      <div className="h-8" />
+      {/* Bottom safe area spacer for mobile nav */}
+      <div className="h-24" />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar, Phone, Mail, Check, MapPin, Clock, Copy, Share2, Facebook, Twitter, MessageCircle } from "lucide-react";
 import { Confetti } from "@/components/ui/confetti";
 import { AddToCalendar } from "@/components/ui/add-to-calendar";
-import { createDateTime, CalendarEvent } from "@/lib/calendar";
+import { buildCustomerCalendarEvent, type CustomerCalendarData } from "@/lib/calendar";
 
 /* ---------------------------------------------------------------------------
  * Types
@@ -31,6 +31,9 @@ interface BookingData {
   subtotal: number;
   deposit_amount: number;
   balance_due: number;
+  // Payment status fields - critical for showing correct payment state
+  deposit_paid: boolean;
+  balance_paid: boolean;
   customers: {
     first_name: string;
     last_name: string;
@@ -332,14 +335,25 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
     ? `${booking.customers.first_name} ${booking.customers.last_name}`
     : "Valued Customer";
 
-  // Build calendar event
-  const calendarEvent: CalendarEvent = {
-    title: `🎉 ${productName} - Party Day!`,
-    description: `Your bounce house rental from Pop and Drop Party Rentals!\n\nBooking: ${booking.booking_number}\nDelivery: ${booking.delivery_window}\nPickup: ${pickupDate} at ${booking.pickup_window}\n\nBalance due on delivery: $${booking.balance_due}\n\nQuestions? Call 352-445-3723`,
-    location: `${booking.delivery_address}, ${booking.delivery_city}`,
-    startDate: createDateTime(booking.event_date, booking.delivery_window),
-    endDate: createDateTime(booking.pickup_date, booking.pickup_window),
+  // Determine if paid in full (balance_paid is true OR balance_due is 0)
+  const isPaidInFull = booking.balance_paid === true || Number(booking.balance_due) === 0;
+
+  // Build calendar event using the comprehensive calendar builder
+  const calendarData: CustomerCalendarData = {
+    productName,
+    bookingNumber: booking.booking_number,
+    eventDate: booking.event_date,
+    pickupDate: booking.pickup_date,
+    deliveryWindow: booking.delivery_window,
+    pickupWindow: booking.pickup_window,
+    address: booking.delivery_address,
+    city: booking.delivery_city,
+    totalPrice: Number(booking.subtotal),
+    balanceDue: Number(booking.balance_due),
+    isPaidInFull,
   };
+  
+  const calendarEvent = buildCustomerCalendarEvent(calendarData);
 
   return (
     <main className="mx-auto max-w-2xl px-4 pb-28 pt-6 sm:px-6 sm:pb-12 sm:pt-10">
@@ -405,22 +419,39 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
             />
           </div>
 
-          {/* Pricing Summary */}
+          {/* Pricing Summary - Dynamic based on payment status */}
           <div className={`mt-6 p-4 sm:p-5 ${styles.nestedCard}`}>
             <div className="flex items-center justify-between">
               <span className={styles.smallBody}>Total</span>
               <span className="font-semibold text-foreground">${booking.subtotal}</span>
             </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span className={styles.smallBody}>Deposit paid</span>
-              <span className="text-sm text-green-400">-${booking.deposit_amount}</span>
-            </div>
-            <div className="mt-3 border-t border-white/5 pt-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-foreground">Balance due on delivery</span>
-                <span className="text-lg font-semibold text-foreground">${booking.balance_due}</span>
+            
+            {/* Show different content based on payment status */}
+            {isPaidInFull ? (
+              // PAID IN FULL - Celebratory green styling
+              <div className="mt-3 border-t border-white/5 pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-green-400">✓ Paid in Full</span>
+                  <span className="text-lg font-semibold text-green-400">${booking.subtotal}</span>
+                </div>
+                <p className="mt-2 text-xs text-green-400/70">Nothing due on delivery — you&apos;re all set!</p>
               </div>
-            </div>
+            ) : (
+              // DEPOSIT ONLY - Show balance due
+              <>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className={styles.smallBody}>Deposit paid</span>
+                  <span className="text-sm text-green-400">-${booking.deposit_amount}</span>
+                </div>
+                <div className="mt-3 border-t border-white/5 pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-foreground">Balance due on delivery</span>
+                    <span className="text-lg font-semibold text-foreground">${booking.balance_due}</span>
+                  </div>
+                </div>
+              </>
+            )}
+            
             <div className={styles.nestedCardInner} />
           </div>
         </div>
@@ -459,14 +490,26 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
             </NextStep>
           </ul>
 
-          {/* Payment reminder */}
-          <div className={`mt-6 p-4 sm:p-5 ${styles.nestedCard}`}>
-            <p className={styles.smallBody}>
-              <strong className="text-foreground">Payment on delivery:</strong> We accept cash, card,
-              Venmo, or Zelle for the remaining ${booking.balance_due} balance.
-            </p>
-            <div className={styles.nestedCardInner} />
-          </div>
+          {/* Payment status callout - dynamic based on payment */}
+          {isPaidInFull ? (
+            // PAID IN FULL - Positive confirmation
+            <div className={`mt-6 p-4 sm:p-5 ${styles.nestedCard}`} style={{ borderColor: 'rgba(34, 197, 94, 0.2)', backgroundColor: 'rgba(34, 197, 94, 0.05)' }}>
+              <p className={styles.smallBody}>
+                <strong className="text-green-400">✓ You&apos;re all set!</strong> Your rental is fully paid. 
+                Just be ready with a clear setup area and power outlet when we arrive.
+              </p>
+              <div className={styles.nestedCardInner} />
+            </div>
+          ) : (
+            // DEPOSIT ONLY - Payment reminder
+            <div className={`mt-6 p-4 sm:p-5 ${styles.nestedCard}`}>
+              <p className={styles.smallBody}>
+                <strong className="text-foreground">Payment on delivery:</strong> We accept cash, card,
+                Venmo, or Zelle for the remaining ${booking.balance_due} balance.
+              </p>
+              <div className={styles.nestedCardInner} />
+            </div>
+          )}
         </div>
 
         <div className={styles.sectionCardInner} />

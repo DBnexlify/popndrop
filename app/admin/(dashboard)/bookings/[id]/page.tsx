@@ -26,8 +26,16 @@ import {
   CreditCard,
   Zap,
 } from "lucide-react";
+import {
+  formatEventDate,
+  formatTimestamp,
+  formatTimeWindow,
+  EASTERN_TIMEZONE,
+} from '@/lib/timezone';
 import { Badge } from "@/components/ui/badge";
 import { BookingActions, type PaymentRecord } from "./booking-actions-client";
+import { AdminCalendarButtons } from "@/components/admin/admin-calendar-buttons";
+import type { OwnerCalendarData } from "@/lib/calendar";
 
 // =============================================================================
 // DESIGN SYSTEM STYLES
@@ -143,40 +151,22 @@ interface BookingDetail {
 }
 
 // =============================================================================
-// HELPERS
+// HELPERS - Using timezone utilities for Eastern Time display
 // =============================================================================
 
+// formatDate and formatDateTime are imported from @/lib/timezone
+// (formatEventDate as formatDate, formatTimestamp as formatDateTime)
+
 function formatDate(dateStr: string): string {
-  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatEventDate(dateStr);
 }
 
 function formatDateTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatTimestamp(dateStr);
 }
 
 function formatWindow(window: string): string {
-  const windows: Record<string, string> = {
-    morning: "Morning (8–11 AM)",
-    midday: "Midday (11 AM–2 PM)",
-    afternoon: "Afternoon (2–5 PM)",
-    evening: "Evening (6–8 PM)",
-    "saturday-evening": "Saturday Evening (5–7 PM)",
-    "next-morning": "Next Morning (by 10 AM)",
-    "monday-morning": "Monday Morning (by 10 AM)",
-    "monday-afternoon": "Monday Afternoon (2–5 PM)",
-  };
-  return windows[window] || window;
+  return formatTimeWindow(window);
 }
 
 function getStatusConfig(status: string) {
@@ -489,6 +479,39 @@ export default async function BookingDetailPage({ params }: PageProps) {
                 </div>
                 <div className={styles.nestedCardInner} />
               </div>
+
+              {/* Add to Calendar - Owner/Admin */}
+              {!isCancelled && customer && (
+                <div className="mt-4 border-t border-white/5 pt-4">
+                  <p className={`mb-3 ${styles.label}`}>Add to Calendar</p>
+                  <AdminCalendarButtons
+                    bookingData={{
+                      productName: booking.product_snapshot.name,
+                      bookingNumber: booking.booking_number,
+                      customerName: `${customer.first_name} ${customer.last_name}`,
+                      customerPhone: customer.phone,
+                      customerEmail: customer.email,
+                      address: booking.delivery_address,
+                      city: booking.delivery_city,
+                      state: booking.delivery_state || undefined,
+                      zip: booking.delivery_zip || undefined,
+                      unitNumber: booking.unit?.unit_number,
+                      unitNickname: booking.unit?.nickname || undefined,
+                      deliveryNotes: booking.delivery_notes || undefined,
+                      totalPrice: Number(booking.subtotal),
+                      balanceDue: Number(booking.balance_due),
+                      depositPaid: booking.deposit_paid,
+                      balancePaid: booking.balance_paid,
+                      isPaidInFull: booking.balance_paid || Number(booking.balance_due) === 0,
+                      bookingType: booking.booking_type,
+                    }}
+                    deliveryDate={booking.delivery_date}
+                    deliveryWindow={booking.delivery_window}
+                    pickupDate={booking.pickup_date}
+                    pickupWindow={booking.pickup_window}
+                  />
+                </div>
+              )}
             </div>
             <div className={styles.sectionCardInner} />
           </div>
@@ -974,13 +997,7 @@ function TimelineItem({
         </p>
         {date && (
           <p className="text-xs text-foreground/50">
-            {new Date(date).toLocaleString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
+            {formatTimestamp(date)}
           </p>
         )}
       </div>

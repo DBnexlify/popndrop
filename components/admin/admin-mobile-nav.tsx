@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
   CalendarCheck,
+  CalendarDays,
   Users,
   CalendarOff,
   Menu,
@@ -27,12 +28,13 @@ import { NotificationToggle, SoundToggle } from './pwa-provider';
 
 const navItems = [
   { href: '/admin', label: 'Home', icon: LayoutDashboard },
+  { href: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/admin/bookings', label: 'Bookings', icon: CalendarCheck },
   { href: '/admin/customers', label: 'Customers', icon: Users },
-  { href: '/admin/blackout-dates', label: 'Blackout', icon: CalendarOff },
 ];
 
 const menuItems = [
+  { href: '/admin/blackout-dates', label: 'Blackout Dates', icon: CalendarOff },
   { href: '/admin/cancellations', label: 'Cancellations', icon: Ban },
   { href: '/admin/inventory', label: 'Inventory', icon: Package },
   { href: '/admin/settings', label: 'Settings', icon: Settings },

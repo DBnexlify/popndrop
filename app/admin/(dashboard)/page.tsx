@@ -13,12 +13,16 @@ import {
 } from '@/lib/admin-queries';
 import {
   formatCurrency,
-  formatDate,
-  getDeliveryWindowLabel,
-  getPickupWindowLabel,
   getStatusColor,
   getStatusLabel,
 } from '@/lib/database-types';
+import {
+  getTodayDisplayET,
+  getDayOfWeek,
+  getDayNumber,
+  getDeliveryWindowLabel,
+  getPickupWindowLabel,
+} from '@/lib/timezone';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -50,11 +54,7 @@ export default async function AdminDashboardPage() {
     getUpcomingSchedule(),
   ]);
   
-  const today = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  });
+  const today = getTodayDisplayET();
   
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -263,10 +263,10 @@ export default async function AdminDashboardPage() {
               >
                 <div className="text-center">
                   <p className="text-xs text-foreground/50">
-                    {new Date(item.event_date).toLocaleDateString('en-US', { weekday: 'short' })}
+                    {getDayOfWeek(item.event_date)}
                   </p>
                   <p className="text-lg font-semibold text-foreground/90">
-                    {new Date(item.event_date).getDate()}
+                    {getDayNumber(item.event_date)}
                   </p>
                 </div>
                 

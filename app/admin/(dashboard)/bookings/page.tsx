@@ -13,6 +13,11 @@ import {
   getBookingTypeLabel,
   getCustomerFullName,
 } from '@/lib/database-types';
+import {
+  getDayOfWeek,
+  getDayNumber,
+  getMonthShort,
+} from '@/lib/timezone';
 import type { BookingStatus } from '@/lib/database-types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -141,13 +146,13 @@ export default async function AdminBookingsPage({ searchParams }: PageProps) {
                 {/* Date column */}
                 <div className="hidden text-center sm:block sm:w-16">
                   <p className="text-xs text-foreground/50">
-                    {new Date(booking.event_date).toLocaleDateString('en-US', { weekday: 'short' })}
+                    {getDayOfWeek(booking.event_date)}
                   </p>
                   <p className="text-xl font-semibold text-foreground/90">
-                    {new Date(booking.event_date).getDate()}
+                    {getDayNumber(booking.event_date)}
                   </p>
                   <p className="text-xs text-foreground/50">
-                    {new Date(booking.event_date).toLocaleDateString('en-US', { month: 'short' })}
+                    {getMonthShort(booking.event_date)}
                   </p>
                 </div>
                 

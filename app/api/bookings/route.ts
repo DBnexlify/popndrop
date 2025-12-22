@@ -467,6 +467,7 @@ export function createCustomerEmail(data: {
   notes?: string;
   bookingType: BookingType;
   paidInFull?: boolean;
+  deliveryDate?: string; // Added for calendar
 }): string {
   const bookingTypeLabel = data.bookingType === 'weekend' 
     ? 'Weekend Package' 
@@ -569,6 +570,69 @@ export function createCustomerEmail(data: {
         
         <!-- Payment Section -->
         ${paymentSection}
+        
+        <!-- Add to Calendar -->
+        ${(() => {
+          // Generate calendar URLs for customer
+          const fullAddress = `${data.address}, ${data.city}, FL`;
+          const deliveryDateStr = data.deliveryDate || data.eventDate;
+          
+          // Parse time window for calendar
+          const parseWindow = (window: string) => {
+            let startHour = 9, endHour = 11;
+            if (window.toLowerCase().includes('afternoon')) { startHour = 13; endHour = 15; }
+            else if (window.toLowerCase().includes('evening')) { startHour = 17; endHour = 19; }
+            return { startHour, endHour };
+          };
+          
+          const { startHour: delStart, endHour: delEnd } = parseWindow(data.deliveryWindow);
+          const deliveryStartDate = new Date(deliveryDateStr + 'T12:00:00');
+          deliveryStartDate.setHours(delStart, 0, 0, 0);
+          const deliveryEndDate = new Date(data.pickupDate + 'T12:00:00');
+          const { endHour: pickEnd } = parseWindow(data.pickupWindow);
+          deliveryEndDate.setHours(pickEnd, 0, 0, 0);
+          
+          const formatGoogleDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+          
+          const calDescription = `🎈 ${data.productName} Rental\n\n📋 Booking: ${data.bookingNumber}\n📅 Event: ${data.eventDate}\n🚚 Delivery: ${data.deliveryWindow}\n📦 Pickup: ${data.pickupDate} at ${data.pickupWindow}\n\n${data.paidInFull ? '✓ PAID IN FULL' : `Balance due: ${data.balanceDue}`}\n\n📞 Questions? Call (352) 445-3723`;
+          
+          const googleParams = new URLSearchParams({
+            action: 'TEMPLATE',
+            text: `🎉 ${data.productName} - Party Day!`,
+            dates: `${formatGoogleDate(deliveryStartDate)}/${formatGoogleDate(deliveryEndDate)}`,
+            details: calDescription,
+            location: fullAddress,
+            ctz: 'America/New_York',
+          });
+          const googleUrl = `https://calendar.google.com/calendar/render?${googleParams.toString()}`;
+          
+          const outlookParams = new URLSearchParams({
+            path: '/calendar/action/compose',
+            rru: 'addevent',
+            subject: `🎉 ${data.productName} - Party Day!`,
+            body: calDescription,
+            location: fullAddress,
+            startdt: deliveryStartDate.toISOString(),
+            enddt: deliveryEndDate.toISOString(),
+          });
+          const outlookUrl = `https://outlook.live.com/calendar/0/deeplink/compose?${outlookParams.toString()}`;
+          
+          return `
+        <div style="background-color: #1a1a2e; border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+          <p style="margin: 0 0 10px; color: #c084fc; font-size: 13px; font-weight: 600;">📅 Don't forget your party!</p>
+          <p style="margin: 0 0 12px; color: #a0a0a0; font-size: 12px;">Add to your calendar so you're ready:</p>
+          <table style="width: 100%;">
+            <tr>
+              <td style="padding-right: 8px;">
+                <a href="${googleUrl}" style="display: block; background-color: #4285f4; color: white; text-decoration: none; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; text-align: center;">📅 Google Calendar</a>
+              </td>
+              <td style="padding-left: 8px;">
+                <a href="${outlookUrl}" style="display: block; background-color: #0078d4; color: white; text-decoration: none; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; text-align: center;">📅 Outlook</a>
+              </td>
+            </tr>
+          </table>
+        </div>`;
+        })()}
         
         ${data.notes ? `
         <div style="margin-bottom: 16px; padding: 12px; background-color: #222; border-left: 3px solid #a855f7; border-radius: 0 8px 8px 0;">

@@ -15,6 +15,12 @@ import {
   getBookingTypeLabel,
   getCustomerFullName,
 } from '@/lib/database-types';
+import {
+  formatEventDateShort,
+  getDayOfWeek,
+  getDayNumber,
+  getMonthShort,
+} from '@/lib/timezone';
 import type { Customer, CustomerLeaderboardEntry } from '@/lib/database-types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -297,13 +303,13 @@ export default async function CustomerDetailPage({ params }: PageProps) {
                     >
                       <div className="text-center">
                         <p className="text-xs text-foreground/50">
-                          {new Date(booking.event_date).toLocaleDateString('en-US', { weekday: 'short' })}
+                          {getDayOfWeek(booking.event_date)}
                         </p>
                         <p className="text-xl font-semibold">
-                          {new Date(booking.event_date).getDate()}
+                          {getDayNumber(booking.event_date)}
                         </p>
                         <p className="text-xs text-foreground/50">
-                          {new Date(booking.event_date).toLocaleDateString('en-US', { month: 'short' })}
+                          {getMonthShort(booking.event_date)}
                         </p>
                       </div>
                       
@@ -356,13 +362,13 @@ export default async function CustomerDetailPage({ params }: PageProps) {
                     >
                       <div className="hidden text-center sm:block sm:w-14">
                         <p className="text-xs text-foreground/50">
-                          {new Date(booking.event_date).toLocaleDateString('en-US', { weekday: 'short' })}
+                          {getDayOfWeek(booking.event_date)}
                         </p>
                         <p className="text-lg font-semibold">
-                          {new Date(booking.event_date).getDate()}
+                          {getDayNumber(booking.event_date)}
                         </p>
                         <p className="text-xs text-foreground/50">
-                          {new Date(booking.event_date).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
+                          {getMonthShort(booking.event_date)}
                         </p>
                       </div>
                       

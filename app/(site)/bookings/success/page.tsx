@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { createServerClient } from "@/lib/supabase";
 import { SuccessContent } from "./success-content";
+import { formatEventDate, formatEventDateShort } from "@/lib/timezone";
 
 export const metadata = {
   title: "Booking Confirmed | Pop and Drop Party Rentals",
@@ -68,6 +69,9 @@ interface BookingData {
   subtotal: number;
   deposit_amount: number;
   balance_due: number;
+  // Payment status fields - critical for showing correct payment state
+  deposit_paid: boolean;
+  balance_paid: boolean;
   customers: {
     first_name: string;
     last_name: string;
@@ -101,6 +105,8 @@ async function getBooking(bookingId: string): Promise<BookingData | null> {
       subtotal,
       deposit_amount,
       balance_due,
+      deposit_paid,
+      balance_paid,
       customers (
         first_name,
         last_name,
@@ -177,19 +183,10 @@ export default async function BookingSuccessPage({ searchParams }: PageProps) {
     return <NoBookingState />;
   }
 
-  // Format dates for display
-  const eventDate = new Date(booking.event_date).toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-
-  const pickupDate = new Date(booking.pickup_date).toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  // Format dates for display using timezone-aware utilities
+  // These are date-only fields, formatted for Eastern Time
+  const eventDate = formatEventDate(booking.event_date);
+  const pickupDate = formatEventDateShort(booking.pickup_date);
 
   return (
     <Suspense fallback={<LoadingState />}>

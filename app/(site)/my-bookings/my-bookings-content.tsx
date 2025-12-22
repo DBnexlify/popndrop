@@ -15,7 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getSavedCustomerInfo } from "@/lib/use-customer-autofill";
-import { generateGoogleCalendarUrl, generateICSContent } from "@/lib/calendar";
+import { buildCustomerCalendarEvent, type CustomerCalendarData } from "@/lib/calendar";
+import { AddToCalendar } from "@/components/ui/add-to-calendar";
 import {
   Search,
   Calendar,
@@ -28,7 +29,6 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  CalendarPlus,
   Phone,
   History,
   Sparkles,
@@ -194,30 +194,23 @@ function BookingCard({
   const canCancel = isUpcoming && 
     (booking.status === "confirmed" || booking.status === "pending");
 
-  // Generate calendar event data
-  const calendarEvent = {
-    title: `${booking.product_snapshot.name} - Pop and Drop Rentals`,
-    startDate: eventDate,
-    endDate: eventDate,
-    location: `${booking.delivery_address}, ${booking.delivery_city}`,
-    description: `Booking #${booking.booking_number}\nDelivery: ${booking.delivery_window}\nPickup: ${booking.pickup_window}`,
+  // Build calendar event data using the proper calendar utility
+  const calendarData: CustomerCalendarData = {
+    productName: booking.product_snapshot.name,
+    bookingNumber: booking.booking_number,
+    eventDate: booking.event_date,
+    pickupDate: booking.pickup_date,
+    deliveryWindow: booking.delivery_window,
+    pickupWindow: booking.pickup_window,
+    address: booking.delivery_address,
+    city: booking.delivery_city,
+    totalPrice: booking.subtotal,
+    balanceDue: booking.balance_due,
+    isPaidInFull: booking.balance_paid,
+    notes: booking.customer_notes || undefined,
   };
-
-  const handleAddToCalendar = () => {
-    const url = generateGoogleCalendarUrl(calendarEvent);
-    window.open(url, "_blank");
-  };
-
-  const handleDownloadICS = () => {
-    const ics = generateICSContent(calendarEvent);
-    const blob = new Blob([ics], { type: "text/calendar" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `pop-and-drop-${booking.booking_number}.ics`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  
+  const calendarEvent = buildCustomerCalendarEvent(calendarData);
 
   return (
     <div className={cn(styles.card, "transition-all hover:border-white/20")}>
@@ -274,27 +267,10 @@ function BookingCard({
           </div>
         </div>
 
-        {/* Actions */}
+        {/* Calendar Actions */}
         {isUpcoming && booking.status === "confirmed" && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleAddToCalendar}
-              className="flex-1 border-white/10 text-xs hover:bg-white/5"
-            >
-              <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
-              Google Calendar
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleDownloadICS}
-              className="flex-1 border-white/10 text-xs hover:bg-white/5"
-            >
-              <Calendar className="mr-1.5 h-3.5 w-3.5" />
-              Download .ics
-            </Button>
+          <div className="mt-4">
+            <AddToCalendar event={calendarEvent} usePortal />
           </div>
         )}
 

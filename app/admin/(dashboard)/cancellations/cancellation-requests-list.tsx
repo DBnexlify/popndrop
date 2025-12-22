@@ -7,13 +7,13 @@
 "use client";
 
 import { useState } from "react";
-import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { formatEventDateShort, formatTimestamp } from "@/lib/timezone";
 import {
   AlertTriangle,
   Check,
@@ -248,7 +248,7 @@ function RequestCard({
           <span className="flex items-center gap-1">
             <Calendar className="h-3.5 w-3.5" />
             {booking?.event_date
-              ? format(new Date(booking.event_date + "T12:00:00"), "MMM d, yyyy")
+              ? formatEventDateShort(booking.event_date)
               : "N/A"}
           </span>
           <span className="flex items-center gap-1">
@@ -326,7 +326,7 @@ function RequestCard({
 
             {/* Submitted time */}
             <p className="text-xs text-foreground/40">
-              Submitted {format(new Date(request.created_at), "MMM d, yyyy 'at' h:mm a")}
+              Submitted {formatTimestamp(request.created_at)}
             </p>
 
             {/* Actions for pending requests */}

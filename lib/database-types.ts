@@ -1,3 +1,9 @@
+import {
+  formatEventDateShort,
+  formatTimestampShort,
+  EASTERN_TIMEZONE,
+} from './timezone';
+
 // =============================================================================
 // DATABASE TYPES - Single Source of Truth
 // Consolidated from database-types.ts + database_types.ts
@@ -673,20 +679,13 @@ export function formatCurrency(amount: number): string {
 }
 
 export function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
+  // Use timezone-aware formatting for Eastern Time
+  return formatEventDateShort(date);
 }
 
 export function formatDateTime(date: string): string {
-  return new Date(date).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  // Use timezone-aware formatting for Eastern Time
+  return formatTimestampShort(date);
 }
 
 // Status transition validation
