@@ -14,7 +14,9 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
     <>
       <ScrollToTop />
       <SiteHeader />
-      <div className="flex-1">{children}</div>
+      <main id="main-content" className="flex-1" tabIndex={-1}>
+        {children}
+      </main>
       <SiteFooter />
       <MobileBottomNav />
     </>

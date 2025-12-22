@@ -129,6 +129,50 @@
     @apply text-foreground;
     /* No bg-background - gradient is handled in layout.tsx */
   }
+  
+  /* ==========================================================================
+   * ACCESSIBILITY: Enhanced Focus States
+   * Visible focus indicators for keyboard navigation (WCAG 2.4.7)
+   * ========================================================================== */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-fuchsia-500;
+  }
+  
+  /* Skip link target - remove focus outline after skip */
+  #main-content:focus {
+    outline: none;
+  }
+  
+  /* ==========================================================================
+   * ACCESSIBILITY: Reduced Motion
+   * Respect user preferences for reduced motion (WCAG 2.3.3)
+   * ========================================================================== */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  
+  /* ==========================================================================
+   * ACCESSIBILITY: Minimum Touch Targets
+   * Ensure interactive elements are at least 44x44px (WCAG 2.5.5)
+   * ========================================================================== */
+  @media (pointer: coarse) {
+    button,
+    [role="button"],
+    a,
+    input[type="checkbox"],
+    input[type="radio"],
+    select {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
 }
 
 /* ==========================================================================
@@ -226,4 +270,20 @@
     opacity: 1;
     transform: translate3d(0, 0, 0) scaleX(1) scaleY(1);
   }
+}
+
+/* ==========================================================================
+ * ACCESSIBILITY: Screen Reader Only (Utility)
+ * For text that should be available to screen readers but not visible
+ * ========================================================================== */
+.sr-only-focusable:focus,
+.sr-only-focusable:focus-within {
+  position: static !important;
+  width: auto !important;
+  height: auto !important;
+  padding: inherit !important;
+  margin: inherit !important;
+  overflow: visible !important;
+  clip: auto !important;
+  white-space: normal !important;
 }

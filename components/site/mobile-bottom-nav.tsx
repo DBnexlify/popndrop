@@ -67,6 +67,7 @@ export function MobileBottomNav() {
     <nav 
       ref={navRef}
       data-collapsed="false"
+      aria-label="Mobile navigation"
       className="group/nav fixed bottom-0 left-0 right-0 z-50 sm:hidden"
     >
       <div className="mx-auto max-w-5xl px-3 pb-3">
@@ -78,7 +79,7 @@ export function MobileBottomNav() {
             "will-change-transform"
           )}
         >
-          <div className="grid grid-cols-4 px-1.5 py-1.5">
+          <div className="grid grid-cols-4 px-1.5 py-1.5" role="menubar">
             {NAV_ITEMS.map(({ href, label, Icon }) => {
               const isActive = pathname === href;
               
@@ -86,6 +87,8 @@ export function MobileBottomNav() {
                 <Link
                   key={href}
                   href={href}
+                  role="menuitem"
+                  aria-current={isActive ? "page" : undefined}
                   className={cn(
                     "relative flex flex-col items-center justify-center rounded-xl",
                     "px-1 py-2 transition-all duration-300 ease-out",
@@ -102,6 +105,7 @@ export function MobileBottomNav() {
                       isActive ? "opacity-100" : "opacity-70"
                     )}
                     strokeWidth={isActive ? 2.25 : 2}
+                    aria-hidden="true"
                   />
                   <span 
                     className={cn(
@@ -117,6 +121,8 @@ export function MobileBottomNav() {
                   >
                     {label}
                   </span>
+                  {/* Screen reader always gets the label */}
+                  <span className="sr-only">{label}</span>
                 </Link>
               );
             })}

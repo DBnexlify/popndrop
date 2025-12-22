@@ -8,7 +8,11 @@ export function SiteHeader() {
       <div className="mx-auto flex h-14 max-w-5xl items-center px-4 sm:h-16 sm:px-6">
         {/* Mobile: Centered brand */}
         <div className="flex w-full items-center justify-center sm:hidden">
-          <Link href="/" className="transition-opacity hover:opacity-80">
+          <Link 
+            href="/" 
+            className="transition-opacity hover:opacity-80"
+            aria-label="Pop and Drop Party Rentals - Home"
+          >
             <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-base font-semibold tracking-tight text-transparent">
               Pop and Drop Party Rentals
             </span>
@@ -17,13 +21,17 @@ export function SiteHeader() {
 
         {/* Desktop: Left brand + Right nav */}
         <div className="hidden w-full items-center justify-between sm:flex">
-          <Link href="/" className="transition-opacity hover:opacity-80">
+          <Link 
+            href="/" 
+            className="transition-opacity hover:opacity-80"
+            aria-label="Pop and Drop Party Rentals - Home"
+          >
             <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-lg font-semibold tracking-tight text-transparent">
               Pop and Drop Party Rentals
             </span>
           </Link>
 
-          <nav className="flex items-center gap-1">
+          <nav aria-label="Main navigation" className="flex items-center gap-1">
             <Link
               href="/"
               className="rounded-lg px-3 py-2 text-sm text-foreground/70 transition-colors hover:bg-white/5 hover:text-foreground"
