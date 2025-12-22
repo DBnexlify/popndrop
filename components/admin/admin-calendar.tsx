@@ -4,6 +4,7 @@
 // ADMIN SMART CALENDAR
 // components/admin/admin-calendar.tsx
 // Interactive calendar for viewing bookings and blackout dates
+// Redesigned with full-day glow effects and improved mobile responsiveness
 // =============================================================================
 
 import { useState, useMemo, useCallback } from 'react';
@@ -25,6 +26,7 @@ import {
   CheckCircle2,
   CircleDot,
   ExternalLink,
+  Wrench,
 } from 'lucide-react';
 import type { CalendarEvent } from '@/lib/calendar-types';
 import { getCalendarStatusConfig } from '@/lib/calendar-types';
@@ -68,6 +70,58 @@ const styles = {
   nestedCard: 'relative overflow-hidden rounded-lg border border-white/5 bg-white/[0.03] sm:rounded-xl',
   nestedCardInner: 'pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]',
 } as const;
+
+// -----------------------------------------------------------------------------
+// STATUS GLOW CONFIGURATIONS
+// Full-day glow colors based on booking status
+// -----------------------------------------------------------------------------
+
+const statusGlowConfig: Record<string, {
+  borderColor: string;
+  bgGradient: string;
+  glowShadow: string;
+}> = {
+  pending: {
+    borderColor: 'border-purple-500/50',
+    bgGradient: 'bg-gradient-to-b from-purple-500/5 via-purple-500/15 to-purple-500/25',
+    glowShadow: '[box-shadow:inset_0_0_20px_rgba(168,85,247,0.15)]',
+  },
+  confirmed: {
+    borderColor: 'border-blue-500/50',
+    bgGradient: 'bg-gradient-to-b from-blue-500/5 via-blue-500/15 to-blue-500/25',
+    glowShadow: '[box-shadow:inset_0_0_20px_rgba(59,130,246,0.15)]',
+  },
+  delivered: {
+    borderColor: 'border-amber-500/50',
+    bgGradient: 'bg-gradient-to-b from-amber-500/5 via-amber-500/15 to-amber-500/25',
+    glowShadow: '[box-shadow:inset_0_0_20px_rgba(245,158,11,0.15)]',
+  },
+  picked_up: {
+    borderColor: 'border-cyan-500/50',
+    bgGradient: 'bg-gradient-to-b from-cyan-500/5 via-cyan-500/15 to-cyan-500/25',
+    glowShadow: '[box-shadow:inset_0_0_20px_rgba(6,182,212,0.15)]',
+  },
+  completed: {
+    borderColor: 'border-emerald-500/50',
+    bgGradient: 'bg-gradient-to-b from-emerald-500/5 via-emerald-500/15 to-emerald-500/25',
+    glowShadow: '[box-shadow:inset_0_0_20px_rgba(16,185,129,0.15)]',
+  },
+  cancelled: {
+    borderColor: 'border-slate-500/40',
+    bgGradient: 'bg-gradient-to-b from-slate-500/5 via-slate-500/10 to-slate-500/15',
+    glowShadow: '[box-shadow:inset_0_0_15px_rgba(100,116,139,0.1)]',
+  },
+  blackout: {
+    borderColor: 'border-rose-500/50',
+    bgGradient: 'bg-gradient-to-b from-rose-500/5 via-rose-500/15 to-rose-500/25',
+    glowShadow: '[box-shadow:inset_0_0_20px_rgba(244,63,94,0.15)]',
+  },
+  maintenance: {
+    borderColor: 'border-violet-500/50',
+    bgGradient: 'bg-gradient-to-b from-violet-500/5 via-violet-500/15 to-violet-500/25',
+    glowShadow: '[box-shadow:inset_0_0_20px_rgba(139,92,246,0.15)]',
+  },
+};
 
 // -----------------------------------------------------------------------------
 // COMPONENT
@@ -121,7 +175,9 @@ export function AdminCalendar({
     year: 'numeric',
   });
 
-  const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  // Abbreviated weekday headers for mobile
+  const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  const weekDaysFull = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -168,55 +224,60 @@ export function AdminCalendar({
 
       {/* Calendar Card */}
       <div className={styles.card}>
-        {/* Header with navigation */}
-        <div className="flex items-center justify-between border-b border-white/5 p-4 sm:p-5">
-          <div className="flex items-center gap-2">
+        {/* Header with navigation - FIXED for mobile */}
+        <div className="border-b border-white/5 p-3 sm:p-5">
+          <div className="flex items-center justify-between gap-2">
+            {/* Navigation controls */}
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={goToPrevMonth}
+                className="h-8 w-8 shrink-0 text-foreground/60 hover:text-foreground"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+              <h2 className="min-w-0 text-center text-base font-semibold sm:min-w-[180px] sm:text-xl">
+                {monthName}
+              </h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={goToNextMonth}
+                className="h-8 w-8 shrink-0 text-foreground/60 hover:text-foreground"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </Button>
+            </div>
+            {/* Today button - shrink-0 prevents cut-off */}
             <Button
-              variant="ghost"
-              size="icon"
-              onClick={goToPrevMonth}
-              className="h-8 w-8 text-foreground/60 hover:text-foreground"
+              variant="outline"
+              size="sm"
+              onClick={goToToday}
+              className="shrink-0 border-white/10 px-2 text-xs hover:bg-white/5 sm:px-3"
             >
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-            <h2 className="min-w-[180px] text-center text-lg font-semibold sm:text-xl">
-              {monthName}
-            </h2>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={goToNextMonth}
-              className="h-8 w-8 text-foreground/60 hover:text-foreground"
-            >
-              <ChevronRight className="h-5 w-5" />
+              Today
             </Button>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goToToday}
-            className="border-white/10 text-xs hover:bg-white/5"
-          >
-            Today
-          </Button>
         </div>
 
         {/* Calendar Grid */}
-        <div className="p-2 sm:p-4">
+        <div className="p-1.5 sm:p-4">
           {/* Weekday headers */}
-          <div className="mb-2 grid grid-cols-7 gap-1">
-            {weekDays.map((day) => (
+          <div className="mb-1 grid grid-cols-7 gap-0.5 sm:mb-2 sm:gap-1">
+            {weekDays.map((day, index) => (
               <div
-                key={day}
-                className="py-2 text-center text-[10px] font-medium uppercase tracking-wide text-foreground/50 sm:text-xs"
+                key={day + index}
+                className="py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-foreground/50 sm:py-2 sm:text-xs"
               >
-                {day}
+                <span className="sm:hidden">{day}</span>
+                <span className="hidden sm:inline">{weekDaysFull[index]}</span>
               </div>
             ))}
           </div>
 
           {/* Day cells */}
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
             {calendarDays.map((day) => (
               <DayCellComponent
                 key={day.dateStr}
@@ -231,9 +292,9 @@ export function AdminCalendar({
         </div>
 
         {/* Legend */}
-        <div className="border-t border-white/5 p-4 sm:p-5">
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-            <span className="text-xs text-foreground/50">Legend:</span>
+        <div className="border-t border-white/5 p-3 sm:p-5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+            <span className="text-[10px] text-foreground/50 sm:text-xs">Legend:</span>
             <LegendItem status="confirmed" />
             <LegendItem status="delivered" />
             <LegendItem status="picked_up" />
@@ -258,7 +319,7 @@ export function AdminCalendar({
 }
 
 // -----------------------------------------------------------------------------
-// DAY CELL COMPONENT
+// DAY CELL COMPONENT - REDESIGNED WITH FULL GLOW EFFECT
 // -----------------------------------------------------------------------------
 
 function DayCellComponent({
@@ -275,69 +336,168 @@ function DayCellComponent({
   onEventClick: (event: CalendarEvent) => void;
 }) {
   const hasEvents = day.events.length > 0;
-  const maxVisibleEvents = 2; // Show max 2 events, then "+X more"
+  
+  // Determine primary status for glow effect (priority: blackout > booking statuses)
+  const primaryStatus = useMemo(() => {
+    if (!hasEvents) return null;
+    
+    // Check for blackout first
+    const blackoutEvent = day.events.find(e => e.type === 'blackout');
+    if (blackoutEvent) return 'blackout';
+    
+    // Check for maintenance
+    const maintenanceEvent = day.events.find(e => 
+      e.title?.toLowerCase().includes('maintenance') ||
+      e.reason?.toLowerCase().includes('maintenance')
+    );
+    if (maintenanceEvent) return 'maintenance';
+    
+    // Otherwise use first booking's status
+    return day.events[0].status;
+  }, [day.events, hasEvents]);
+
+  const glowConfig = primaryStatus ? statusGlowConfig[primaryStatus] : null;
+
+  // Calculate how many events can be shown
+  const maxVisibleEvents = 2;
   const visibleEvents = day.events.slice(0, maxVisibleEvents);
   const remainingCount = day.events.length - maxVisibleEvents;
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={() => hasEvents && onEventClick(day.events[0])}
+      disabled={!hasEvents}
       className={`
-        group relative min-h-[80px] rounded-lg border p-1 transition-colors sm:min-h-[100px] sm:p-2
+        group relative flex min-h-[72px] flex-col overflow-hidden rounded-md border p-1 
+        transition-all duration-200 sm:min-h-[100px] sm:rounded-lg sm:p-1.5
+        ${!hasEvents ? 'cursor-default' : 'cursor-pointer'}
         ${day.isCurrentMonth ? 'border-white/5 bg-white/[0.02]' : 'border-transparent bg-transparent'}
-        ${day.isToday ? 'border-fuchsia-500/30 bg-fuchsia-500/5' : ''}
-        ${isHovered && hasEvents ? 'border-white/10 bg-white/[0.04]' : ''}
+        ${day.isToday && !hasEvents ? 'border-fuchsia-500/30 bg-fuchsia-500/5' : ''}
+        ${isHovered && hasEvents ? 'scale-[1.02] border-white/20' : ''}
+        ${hasEvents && glowConfig ? `${glowConfig.borderColor} ${glowConfig.bgGradient}` : ''}
       `}
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
     >
-      {/* Day number */}
-      <div className="mb-1 flex items-center justify-between">
+      {/* Glow overlay for days with events */}
+      {hasEvents && glowConfig && (
+        <div className={`pointer-events-none absolute inset-0 rounded-md sm:rounded-lg ${glowConfig.glowShadow}`} />
+      )}
+
+      {/* Day number row */}
+      <div className="z-10 mb-0.5 flex items-center justify-between sm:mb-1">
         <span
           className={`
-            flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium sm:h-7 sm:w-7 sm:text-sm
-            ${!day.isCurrentMonth ? 'text-foreground/25' : ''}
+            flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold 
+            sm:h-6 sm:w-6 sm:text-xs
+            ${!day.isCurrentMonth ? 'text-foreground/20' : 'text-foreground/80'}
             ${day.isToday ? 'bg-fuchsia-500 text-white' : ''}
             ${day.isWeekend && day.isCurrentMonth && !day.isToday ? 'text-foreground/50' : ''}
           `}
         >
           {day.dayNumber}
         </span>
+        {/* Event count badge on mobile */}
         {day.events.length > 0 && (
-          <span className="text-[10px] text-foreground/40 sm:hidden">
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white/10 px-1 text-[8px] font-medium text-foreground/60 sm:hidden">
             {day.events.length}
           </span>
         )}
       </div>
 
-      {/* Events */}
-      <div className="space-y-0.5 sm:space-y-1">
-        {visibleEvents.map((event) => {
-          const config = getCalendarStatusConfig(event.status);
-          return (
-            <button
-              key={event.id}
-              onClick={() => onEventClick(event)}
-              className={`
-                w-full truncate rounded px-1 py-0.5 text-left text-[9px] font-medium transition-all
-                hover:scale-[1.02] sm:px-1.5 sm:py-1 sm:text-[10px]
-                ${config.bgColor} ${config.color} border ${config.borderColor}
-              `}
-              title={event.title}
-            >
-              <span className="mr-0.5 hidden sm:inline">{config.icon}</span>
-              <span className="truncate">{event.bookingNumber || event.title}</span>
-            </button>
-          );
-        })}
+      {/* Event indicators - CONTAINED within cell */}
+      <div className="z-10 flex flex-1 flex-col gap-0.5 overflow-hidden">
+        {visibleEvents.map((event) => (
+          <EventIndicator key={event.id} event={event} />
+        ))}
         {remainingCount > 0 && (
-          <button
-            onClick={() => onEventClick(day.events[0])}
-            className="w-full rounded bg-white/5 px-1 py-0.5 text-center text-[9px] text-foreground/50 hover:bg-white/10 sm:px-1.5 sm:py-1 sm:text-[10px]"
-          >
-            +{remainingCount} more
-          </button>
+          <div className="mt-auto rounded bg-white/10 px-1 py-0.5 text-center text-[8px] font-medium text-foreground/50 sm:text-[9px]">
+            +{remainingCount}
+          </div>
         )}
       </div>
+    </button>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// EVENT INDICATOR - WRAPPED TEXT FOR BOOKING NUMBERS
+// -----------------------------------------------------------------------------
+
+function EventIndicator({ event }: { event: CalendarEvent }) {
+  const config = getCalendarStatusConfig(event.status);
+  
+  // Check if this is a maintenance event
+  const isMaintenance = event.title?.toLowerCase().includes('maintenance') ||
+                        event.reason?.toLowerCase().includes('maintenance');
+  
+  // Parse booking number for stacked display (e.g., "PD-123456" -> ["PD", "123456"])
+  const parseBookingNumber = (num: string | undefined) => {
+    if (!num) return null;
+    const match = num.match(/^(PD)-?(\d+)$/);
+    if (match) {
+      return { prefix: match[1], number: match[2] };
+    }
+    return null;
+  };
+
+  const bookingParts = parseBookingNumber(event.bookingNumber);
+  
+  // For maintenance: parse unit number and show stacked
+  const parseMaintenanceTitle = (title: string) => {
+    const match = title.match(/Unit\s*#?(\d+)/i);
+    if (match) {
+      return { unit: `Unit ${match[1]}`, type: 'Maint.' };
+    }
+    return null;
+  };
+  
+  const maintenanceParts = isMaintenance ? parseMaintenanceTitle(event.title) : null;
+
+  return (
+    <div
+      className={`
+        flex min-h-[24px] flex-col items-center justify-center overflow-hidden rounded 
+        px-0.5 py-0.5 text-center backdrop-blur-sm
+        sm:min-h-[28px] sm:px-1 sm:py-1
+        ${config.bgColor} border ${config.borderColor}
+      `}
+    >
+      {/* Stacked booking number display */}
+      {bookingParts ? (
+        <>
+          <span className={`text-[7px] font-bold leading-none ${config.color} sm:text-[8px]`}>
+            {bookingParts.prefix}
+          </span>
+          <span className={`text-[8px] font-semibold leading-tight ${config.color} sm:text-[9px]`}>
+            {bookingParts.number}
+          </span>
+        </>
+      ) : maintenanceParts ? (
+        // Stacked maintenance display
+        <>
+          <span className={`text-[7px] font-bold leading-none ${config.color} sm:text-[8px]`}>
+            {maintenanceParts.unit}
+          </span>
+          <span className={`text-[8px] font-semibold leading-tight ${config.color} sm:text-[9px]`}>
+            {maintenanceParts.type}
+          </span>
+        </>
+      ) : event.type === 'blackout' ? (
+        // Blocked/Blackout display
+        <>
+          <Ban className={`h-3 w-3 ${config.color}`} />
+          <span className={`hidden text-[7px] font-medium leading-none ${config.color} sm:block`}>
+            Blocked
+          </span>
+        </>
+      ) : (
+        // Fallback: Show truncated title wrapped
+        <span className={`line-clamp-2 text-[8px] font-medium leading-tight ${config.color} sm:text-[9px]`}>
+          {event.title}
+        </span>
+      )}
     </div>
   );
 }
@@ -354,9 +514,13 @@ function EventDetailModal({
   onClose: () => void;
 }) {
   const config = getCalendarStatusConfig(event.status);
+  const isMaintenance = event.title?.toLowerCase().includes('maintenance');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <div
         className={`${styles.card} w-full max-w-md animate-in fade-in zoom-in-95`}
         onClick={(e) => e.stopPropagation()}
@@ -365,7 +529,11 @@ function EventDetailModal({
           <div className="flex items-center gap-3">
             <div className={`flex h-10 w-10 items-center justify-center rounded-full ${config.bgColor}`}>
               {event.type === 'booking' ? (
-                <CalendarIcon className={`h-5 w-5 ${config.color}`} />
+                isMaintenance ? (
+                  <Wrench className={`h-5 w-5 ${config.color}`} />
+                ) : (
+                  <CalendarIcon className={`h-5 w-5 ${config.color}`} />
+                )
               ) : (
                 <Ban className={`h-5 w-5 ${config.color}`} />
               )}
@@ -390,7 +558,7 @@ function EventDetailModal({
         <div className="space-y-4 p-4 sm:p-5">
           {/* Date range */}
           <div className="flex items-center gap-3 text-sm">
-            <Clock className="h-4 w-4 text-foreground/50" />
+            <Clock className="h-4 w-4 shrink-0 text-foreground/50" />
             <span>
               {formatDateRange(event.startDate, event.endDate)}
             </span>
@@ -401,21 +569,21 @@ function EventDetailModal({
             <>
               {event.bookingNumber && (
                 <div className="flex items-center gap-3 text-sm">
-                  <CircleDot className="h-4 w-4 text-foreground/50" />
+                  <CircleDot className="h-4 w-4 shrink-0 text-foreground/50" />
                   <span className="font-mono">{event.bookingNumber}</span>
                 </div>
               )}
 
               {event.customerName && (
                 <div className="flex items-center gap-3 text-sm">
-                  <Truck className="h-4 w-4 text-foreground/50" />
+                  <Truck className="h-4 w-4 shrink-0 text-foreground/50" />
                   <span>{event.customerName}</span>
                 </div>
               )}
 
               {event.customerPhone && (
                 <div className="flex items-center gap-3 text-sm">
-                  <Phone className="h-4 w-4 text-foreground/50" />
+                  <Phone className="h-4 w-4 shrink-0 text-foreground/50" />
                   <a
                     href={`tel:${event.customerPhone}`}
                     className="text-cyan-400 hover:underline"
@@ -434,7 +602,7 @@ function EventDetailModal({
 
               {event.balanceDue !== undefined && event.balanceDue > 0 && (
                 <div className="flex items-center gap-3 text-sm">
-                  <DollarSign className="h-4 w-4 text-foreground/50" />
+                  <DollarSign className="h-4 w-4 shrink-0 text-foreground/50" />
                   <span>
                     Balance: {formatCurrency(event.balanceDue)}
                     {event.balancePaid ? (
@@ -452,7 +620,7 @@ function EventDetailModal({
 
               {event.unitNumber && event.unitNumber > 1 && (
                 <div className="flex items-center gap-3 text-sm">
-                  <Package className="h-4 w-4 text-foreground/50" />
+                  <Package className="h-4 w-4 shrink-0 text-foreground/50" />
                   <span>Unit #{event.unitNumber}</span>
                 </div>
               )}
@@ -528,10 +696,18 @@ function StatBadge({
 
 function LegendItem({ status }: { status: string }) {
   const config = getCalendarStatusConfig(status as any);
+  const glowConfig = statusGlowConfig[status];
+  
   return (
     <div className="flex items-center gap-1.5">
-      <div className={`h-3 w-3 rounded ${config.bgColor} border ${config.borderColor}`} />
-      <span className="text-xs text-foreground/60">{config.label}</span>
+      <div 
+        className={`
+          h-3 w-3 rounded border sm:h-4 sm:w-4
+          ${glowConfig?.borderColor || `border ${config.borderColor}`}
+          ${glowConfig?.bgGradient || config.bgColor}
+        `} 
+      />
+      <span className="text-[10px] text-foreground/60 sm:text-xs">{config.label}</span>
     </div>
   );
 }

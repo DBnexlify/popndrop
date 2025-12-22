@@ -88,9 +88,11 @@ const styles = {
   
   // Inputs (from design system)
   input: "border-white/10 bg-white/5 placeholder:text-foreground/40 focus:border-white/20 focus:ring-1 focus:ring-white/10",
-  selectTrigger: "w-full border-white/10 bg-white/5 focus:border-white/20 focus:ring-1 focus:ring-white/10",
-  selectContent: "border-white/10 bg-background/95 backdrop-blur-xl",
-  selectItem: "focus:bg-fuchsia-500/10",
+  
+  // Select dropdowns - enhanced for proper z-index and styling
+  selectTrigger: "w-full border-white/10 bg-white/5 focus:border-white/20 focus:ring-1 focus:ring-white/10 rounded-xl",
+  selectContent: "z-[9999] border-white/10 bg-background/95 backdrop-blur-xl rounded-xl shadow-[0_14px_50px_rgba(0,0,0,0.25)] overflow-hidden",
+  selectItem: "focus:bg-fuchsia-500/10 rounded-lg mx-1",
   
   // Icon containers (from design system)
   iconFuchsia: "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fuchsia-500/10",
@@ -169,7 +171,7 @@ function Toast({
   return (
     <div
       className={cn(
-        "fixed left-1/2 top-20 z-50 -translate-x-1/2 transition-all duration-300",
+        "fixed left-1/2 top-20 z-[9999] -translate-x-1/2 transition-all duration-300",
         visible
           ? "translate-y-0 opacity-100"
           : "-translate-y-4 opacity-0 pointer-events-none"
@@ -184,7 +186,7 @@ function Toast({
 }
 
 // =============================================================================
-// PROGRESS HEADER COMPONENT
+// PROGRESS HEADER COMPONENT - with scroll morph behavior
 // =============================================================================
 
 function WizardHeader({
@@ -203,12 +205,50 @@ function WizardHeader({
   stepLabel: string;
 }) {
   const progressPercentage = ((currentStep - 1) / (totalSteps - 1)) * 100;
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [isAtTop, setIsAtTop] = useState(false);
+
+  // Detect when header reaches top of viewport
+  useEffect(() => {
+    const handleScroll = () => {
+      if (headerRef.current) {
+        // Get the sticky element's position
+        const rect = headerRef.current.getBoundingClientRect();
+        // When top is 0 (or very close), we're "stuck" at the top
+        setIsAtTop(rect.top <= 1);
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll(); // Check initial state
+    
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
-    <div className="sticky top-0 z-50 px-4 pt-4 pb-2">
-      {/* Floating glassmorphism header */}
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-background/70 shadow-[0_14px_50px_rgba(0,0,0,0.25)] backdrop-blur-xl">
-        <div className="flex items-center gap-3 px-4 py-3">
+    <div 
+      ref={headerRef}
+      className={cn(
+        "sticky top-0 z-50 transition-all duration-300 ease-out",
+        isAtTop 
+          ? "px-0 pt-0 pb-0" // Full width when at top
+          : "px-4 pt-4 pb-2"  // Floating card with padding
+      )}
+    >
+      {/* Morphing container */}
+      <div
+        className={cn(
+          "relative overflow-hidden transition-all duration-300 ease-out",
+          isAtTop 
+            ? "rounded-none border-x-0 border-t-0 border-b border-white/5 bg-background/80 shadow-[0_4px_30px_rgba(0,0,0,0.15)]" 
+            : "rounded-2xl border border-white/10 bg-background/70 shadow-[0_14px_50px_rgba(0,0,0,0.25)]",
+          "backdrop-blur-xl"
+        )}
+      >
+        <div className={cn(
+          "flex items-center gap-3 transition-all duration-300",
+          isAtTop ? "px-4 py-2.5" : "px-4 py-3"
+        )}>
           {/* Back button */}
           <button
             onClick={() => {
@@ -218,6 +258,7 @@ function WizardHeader({
               }
             }}
             disabled={!canGoBack}
+            aria-label="Go back"
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-full transition-all",
               canGoBack
@@ -225,7 +266,7 @@ function WizardHeader({
                 : "text-foreground/20"
             )}
           >
-            <ChevronLeft className="h-5 w-5" />
+            <ChevronLeft className="h-5 w-5" aria-hidden="true" />
           </button>
 
           {/* Progress section */}
@@ -254,8 +295,15 @@ function WizardHeader({
           )}
         </div>
         
-        {/* Inner feather overlay */}
-        <div className="pointer-events-none absolute inset-0 rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]" />
+        {/* Inner feather overlay - adapts to morph state */}
+        <div 
+          className={cn(
+            "pointer-events-none absolute inset-0 transition-all duration-300",
+            isAtTop
+              ? "[box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.03),inset_0_0_30px_rgba(0,0,0,0.1)]"
+              : "rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]"
+          )} 
+        />
       </div>
     </div>
   );
@@ -437,7 +485,7 @@ function Step1SelectRental({
 }
 
 // =============================================================================
-// STEP 2: DATE & TIME
+// STEP 2: DATE & TIME - with responsive calendar
 // =============================================================================
 
 function Step2DateTime({
@@ -504,18 +552,18 @@ function Step2DateTime({
     <div className="px-4 pt-4 pb-6">
       {/* Floating Section Card */}
       <div className={styles.sectionCard}>
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           {/* Header */}
-          <div className="text-center mb-5">
+          <div className="text-center mb-4 sm:mb-5">
             <h2 className={styles.heading}>When&apos;s Your Event?</h2>
             <p className={cn(styles.subheading, "mt-1")}>
               Pick your date and delivery times
             </p>
           </div>
 
-          {/* Calendar Card */}
+          {/* Calendar Card - responsive container */}
           <div className={styles.nestedCard}>
-            <div className="p-4">
+            <div className="p-3 sm:p-4">
               {/* Month navigation */}
               <div className="mb-3 flex items-center justify-between">
                 <button
@@ -529,6 +577,7 @@ function Step2DateTime({
                     }
                   }}
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 active:bg-white/10"
+                  aria-label="Previous month"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
@@ -546,37 +595,50 @@ function Step2DateTime({
                     }
                   }}
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 active:bg-white/10"
+                  aria-label="Next month"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
 
-              <Calendar
-                mode="single"
-                selected={eventDate}
-                onSelect={(date) => {
-                  if (date) {
-                    hapticSuccess();
+              {/* Responsive Calendar Container */}
+              <div className="calendar-responsive-container flex justify-center">
+                <Calendar
+                  mode="single"
+                  selected={eventDate}
+                  onSelect={(date) => {
+                    if (date) {
+                      hapticSuccess();
+                    }
+                    setEventDate(date);
+                  }}
+                  month={calendarMonth}
+                  onMonthChange={setCalendarMonth}
+                  disabled={(date) =>
+                    date < minDate ||
+                    date > maxDate ||
+                    !isDeliveryAvailable(date) ||
+                    isDateUnavailable(date)
                   }
-                  setEventDate(date);
-                }}
-                month={calendarMonth}
-                onMonthChange={setCalendarMonth}
-                disabled={(date) =>
-                  date < minDate ||
-                  date > maxDate ||
-                  !isDeliveryAvailable(date) ||
-                  isDateUnavailable(date)
-                }
-                className="mx-auto"
-                classNames={{
-                  caption: "hidden",
-                  nav: "hidden",
-                  day_selected: "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white hover:from-fuchsia-600 hover:to-purple-700",
-                  day_today: "bg-cyan-500/20 text-cyan-400",
-                  day_disabled: "text-foreground/20 line-through",
-                }}
-              />
+                  className="!p-0 [--cell-size:clamp(28px,calc((100vw-140px)/7),40px)]"
+                  classNames={{
+                    caption: "hidden",
+                    nav: "hidden",
+                    months: "w-full",
+                    month: "w-full",
+                    table: "w-full border-collapse",
+                    head_row: "flex w-full",
+                    head_cell: "flex-1 text-center text-[10px] sm:text-xs font-medium text-foreground/50 pb-2",
+                    row: "flex w-full mt-1",
+                    cell: "flex-1 aspect-square p-0.5",
+                    day: "w-full h-full rounded-lg text-xs sm:text-sm font-medium transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-fuchsia-500/50 disabled:opacity-30 disabled:line-through disabled:hover:bg-transparent",
+                    day_selected: "!bg-gradient-to-r !from-fuchsia-500 !to-purple-600 !text-white hover:!from-fuchsia-600 hover:!to-purple-700 shadow-lg shadow-fuchsia-500/30",
+                    day_today: "bg-cyan-500/20 text-cyan-400",
+                    day_disabled: "text-foreground/20 line-through cursor-not-allowed",
+                    day_outside: "text-foreground/20",
+                  }}
+                />
+              </div>
 
               {/* Legend */}
               <div className="mt-3 flex items-center justify-center gap-4 text-[10px] text-foreground/50">
@@ -683,7 +745,7 @@ function Step2DateTime({
                   <SelectTrigger className={styles.selectTrigger}>
                     <SelectValue placeholder="Select time..." />
                   </SelectTrigger>
-                  <SelectContent className={styles.selectContent}>
+                  <SelectContent className={styles.selectContent} position="popper" sideOffset={8}>
                     {selectedOption.deliveryWindows.map((window) => (
                       <SelectItem key={window.value} value={window.value} className={styles.selectItem}>
                         {window.label}
@@ -705,7 +767,7 @@ function Step2DateTime({
                   <SelectTrigger className={styles.selectTrigger}>
                     <SelectValue placeholder="Select time..." />
                   </SelectTrigger>
-                  <SelectContent className={styles.selectContent}>
+                  <SelectContent className={styles.selectContent} position="popper" sideOffset={8}>
                     {selectedOption.pickupWindows.map((window) => (
                       <SelectItem key={window.value} value={window.value} className={styles.selectItem}>
                         {window.label}
@@ -858,7 +920,7 @@ function Step3Details({
                   <SelectTrigger className={styles.selectTrigger}>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className={styles.selectContent}>
+                  <SelectContent className={styles.selectContent} position="popper" sideOffset={8}>
                     {SERVICE_CITIES.map((city) => (
                       <SelectItem key={city} value={city} className={styles.selectItem}>
                         {city}
