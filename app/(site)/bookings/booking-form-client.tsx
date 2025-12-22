@@ -242,45 +242,7 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   const isMobile = useIsMobile();
 
   // ==========================================================================
-  // LOADING STATE - Prevent hydration mismatch
-  // ==========================================================================
-  
-  if (isMobile === null) {
-    return (
-      <div className="mt-8 flex items-center justify-center py-12 sm:mt-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-cyan-400" />
-      </div>
-    );
-  }
-
-  // ==========================================================================
-  // MOBILE WIZARD - Render step-by-step wizard on mobile devices
-  // ==========================================================================
-  
-  if (isMobile === true) {
-    return (
-      <MobileBookingWizard
-        products={products}
-        initialProductSlug={productSlug}
-        cancelled={cancelled === "true"}
-      />
-    );
-  }
-
-  // Show loading state while detecting device
-  if (isMobile === null) {
-    return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-fuchsia-500 border-t-transparent" />
-          <p className="text-sm text-foreground/50">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // ==========================================================================
-  // DESKTOP FLOW - Scroll-based form with sidebar
+  // ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
   // ==========================================================================
 
   // Refs for scroll tracking
@@ -348,8 +310,6 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
       if (!summaryCardRef.current) return;
       
       const rect = summaryCardRef.current.getBoundingClientRect();
-      // Show floating price when summary card is scrolled out of view
-      // Account for header height (64px on desktop, 56px on mobile)
       const headerHeight = window.innerWidth >= 640 ? 64 : 56;
       setShowFloatingPrice(rect.bottom < headerHeight + 100);
     };
@@ -411,33 +371,24 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   // ==========================================================================
   
   useEffect(() => {
-    // Only run when the date actually changes
     if (eventDate && eventDate !== prevEventDate) {
       setPrevEventDate(eventDate);
-      
-      // Trigger date selection animation
       setDateJustSelected(true);
       setTimeout(() => setDateJustSelected(false), 1500);
       
       if (pricingResult?.available && pricingResult.options.length > 0) {
         const options = pricingResult.options;
-        
-        // For multi-option scenarios (Saturday/Sunday), select the BASE option
         if (options.length > 1) {
           const baseOption = options.find(o => !o.recommended) || options[0];
           setSelectedOption(baseOption);
         } else {
-          // Single option (Mon-Fri) - just select it
           setSelectedOption(options[0]);
         }
-        
-        // Reset time selections and nudge dismissed state when date changes
         setFormData((prev) => ({ ...prev, deliveryTime: "", pickupTime: "" }));
         setNudgeDismissed(false);
       }
     }
     
-    // Handle when date is cleared
     if (!eventDate && prevEventDate) {
       setPrevEventDate(undefined);
       setSelectedOption(null);
@@ -462,7 +413,6 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   const isSaturdayEvent = eventDate?.getDay() === 6;
   const recommendedOption = pricingResult?.options.find((o) => o.recommended);
   
-  // Show upgrade nudge when user has selected the non-recommended option
   const showUpgradeNudge =
     selectedOption &&
     !selectedOption.recommended &&
@@ -474,10 +424,8 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     ? recommendedOption.price - selectedOption.price
     : 0;
 
-  // Show Sunday explanation when Sunday-only is selected
   const showSundayExplanation = selectedOption?.type === "sunday";
 
-  // Calendar bounds
   const minDate = new Date();
   const maxDate = addMonths(new Date(), 6);
 
@@ -518,14 +466,13 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     }
   }, [calendarMonth, maxDate]);
 
-  // Handle option selection - resets times when option changes
   const handleOptionSelect = useCallback((option: PricingOption) => {
     setSelectedOption(option);
     setFormData((prev) => ({ ...prev, deliveryTime: "", pickupTime: "" }));
   }, []);
 
   // ==========================================================================
-  // VALIDATION - Single source of truth
+  // VALIDATION
   // ==========================================================================
 
   const validation = useMemo(() => {
@@ -548,7 +495,6 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     };
   }, [selectedProduct, eventDate, selectedOption, formData, termsAccepted]);
 
-  // Clear submit error when form becomes valid (user fixed the issues)
   useEffect(() => {
     if (validation.isValid && submitError) {
       setSubmitError(null);
@@ -563,7 +509,6 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     e.preventDefault();
     setHasAttemptedSubmit(true);
     
-    // Stop if form isn't valid - the validation hint will show automatically
     if (!validation.isValid) {
       return;
     }
@@ -571,7 +516,6 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     setIsSubmitting(true);
     setSubmitError(null);
 
-    // TypeScript narrowing - guaranteed by validation above
     if (!selectedProduct || !eventDate || !selectedOption) {
       setSubmitError("An unexpected error occurred. Please refresh and try again.");
       setIsSubmitting(false);
@@ -594,7 +538,7 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
           address: formData.address.trim(),
           city: formData.city,
           notes: formData.notes.trim(),
-          paymentType, // NEW: 'deposit' or 'full'
+          paymentType,
         }),
       });
 
@@ -608,7 +552,6 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
         return;
       }
 
-      // Save customer info for next time (autofill)
       saveCustomerInfo({
         name: formData.name.trim(),
         email: formData.email.trim(),
@@ -629,9 +572,33 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     }
   };
 
-  // ===========================================================================
-  // RENDER
-  // ===========================================================================
+  // ==========================================================================
+  // CONDITIONAL RENDERS - AFTER ALL HOOKS
+  // ==========================================================================
+  
+  // Loading state while detecting device
+  if (isMobile === null) {
+    return (
+      <div className="mt-8 flex items-center justify-center py-12 sm:mt-12">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-cyan-400" />
+      </div>
+    );
+  }
+
+  // Mobile wizard
+  if (isMobile === true) {
+    return (
+      <MobileBookingWizard
+        products={products}
+        initialProductSlug={productSlug}
+        cancelled={cancelled === "true"}
+      />
+    );
+  }
+
+  // ==========================================================================
+  // DESKTOP RENDER
+  // ==========================================================================
 
   return (
     <>
