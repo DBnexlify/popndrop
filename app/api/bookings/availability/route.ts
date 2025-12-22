@@ -4,7 +4,11 @@ import { createServerClient } from '@/lib/supabase';
 /**
  * GET /api/bookings/availability?productSlug=glitch-combo
  * 
- * Returns all unavailable dates for a product over the next 6 months.
+ * Returns:
+ * - unavailableDates: All dates where no units are available
+ * - totalUnits: Total number of units for this product
+ * - availableUnitsCount: Number of units currently available (not in maintenance/retired)
+ * 
  * A date is unavailable if:
  * - All units of that product are booked (delivery_date to pickup_date range)
  * - There's a blackout date (global, product-level, or unit-level)
@@ -19,7 +23,7 @@ export async function GET(request: NextRequest) {
 
   if (!slug) {
     return NextResponse.json(
-      { error: 'productSlug is required', unavailableDates: [] },
+      { error: 'productSlug is required', unavailableDates: [], totalUnits: 0 },
       { status: 400 }
     );
   }
@@ -29,16 +33,25 @@ export async function GET(request: NextRequest) {
   // Get the product first
   const { data: product, error: productError } = await supabase
     .from('products')
-    .select('id')
+    .select('id, name')
     .eq('slug', slug)
     .single();
 
   if (productError || !product) {
     return NextResponse.json(
-      { error: 'Product not found', unavailableDates: [] },
+      { error: 'Product not found', unavailableDates: [], totalUnits: 0 },
       { status: 404 }
     );
   }
+
+  // Get unit counts for this product
+  const { data: allUnits } = await supabase
+    .from('units')
+    .select('id, status')
+    .eq('product_id', product.id);
+
+  const totalUnits = allUnits?.length || 0;
+  const availableUnitsCount = allUnits?.filter(u => u.status === 'available').length || 0;
 
   const today = new Date();
   const sixMonthsOut = new Date();
@@ -60,12 +73,21 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching blocked dates:', blockedError);
     
     // Fallback: manually query bookings and blackouts
-    return await getFallbackUnavailableDates(supabase, product.id, todayStr, sixMonthsStr);
+    return await getFallbackUnavailableDates(
+      supabase, 
+      product.id, 
+      todayStr, 
+      sixMonthsStr,
+      totalUnits,
+      availableUnitsCount
+    );
   }
 
   return NextResponse.json({
-  unavailableDates: (blockedDates || []).map((d: { blocked_date: string }) => d.blocked_date),
-});
+    unavailableDates: (blockedDates || []).map((d: { blocked_date: string }) => d.blocked_date),
+    totalUnits,
+    availableUnitsCount,
+  });
 }
 
 /**
@@ -75,7 +97,9 @@ async function getFallbackUnavailableDates(
   supabase: ReturnType<typeof createServerClient>,
   productId: string,
   fromDate: string,
-  toDate: string
+  toDate: string,
+  totalUnits: number,
+  availableUnitsCount: number
 ) {
   const unavailableDates: Set<string> = new Set();
 
@@ -90,9 +114,10 @@ async function getFallbackUnavailableDates(
 
   if (unitIds.length === 0) {
     // No available units = all dates blocked
-    // Return a message indicating this
     return NextResponse.json({
       unavailableDates: [],
+      totalUnits,
+      availableUnitsCount,
       error: 'No units available for this product',
     });
   }
@@ -107,7 +132,6 @@ async function getFallbackUnavailableDates(
     .in('status', ['pending', 'confirmed', 'delivered']);
 
   // For each date in range, check if ALL units are booked
-  // (We need to check each date individually)
   if (bookings && bookings.length > 0) {
     // Group bookings by unit
     const bookingsByUnit: Map<string, Array<{ start: Date; end: Date }>> = new Map();
@@ -129,7 +153,7 @@ async function getFallbackUnavailableDates(
       const dateStr = checkDate.toISOString().split('T')[0];
       
       // Count how many units are available on this date
-      let availableUnits = 0;
+      let availableOnDate = 0;
       
       for (const unitId of unitIds) {
         const unitBookings = bookingsByUnit.get(unitId) || [];
@@ -137,12 +161,12 @@ async function getFallbackUnavailableDates(
           b => checkDate >= b.start && checkDate <= b.end
         );
         if (!isBooked) {
-          availableUnits++;
+          availableOnDate++;
         }
       }
 
       // If no units available, date is blocked
-      if (availableUnits === 0) {
+      if (availableOnDate === 0) {
         unavailableDates.add(dateStr);
       }
 
@@ -169,8 +193,6 @@ async function getFallbackUnavailableDates(
       }
       // Unit-level blackouts (only if it blocks ALL units)
       else if (blackout.scope === 'unit' && blackout.unit_id && unitIds.includes(blackout.unit_id)) {
-        // Would need to check if all units are blocked - simplified for now
-        // In practice, unit-level blackouts for single-unit products block the date
         if (unitIds.length === 1) {
           unavailableDates.add(blackout.date);
         }
@@ -180,5 +202,7 @@ async function getFallbackUnavailableDates(
 
   return NextResponse.json({
     unavailableDates: Array.from(unavailableDates).sort(),
+    totalUnits,
+    availableUnitsCount,
   });
 }

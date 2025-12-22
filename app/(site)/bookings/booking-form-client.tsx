@@ -54,7 +54,7 @@ import {
   FloatingPricePill 
 } from "@/components/site/booking-progress";
 import { TermsCheckbox } from "@/components/site/terms-acceptance";
-import { LiveViewers, RecentBookings, TrustBadges } from "@/components/site/social-proof";
+import { TrustBadges, LowStockIndicator } from "@/components/site/social-proof";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { MobileBookingWizard } from "@/components/site/mobile-booking-wizard";
 import { useCustomerAutofill, saveCustomerInfo } from "@/lib/use-customer-autofill";
@@ -275,6 +275,9 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   const [unavailableDates, setUnavailableDates] = useState<Date[]>([]);
   const [isLoadingDates, setIsLoadingDates] = useState(false);
   
+  // Real inventory tracking for honest scarcity indicators
+  const [availableUnitsCount, setAvailableUnitsCount] = useState<number | null>(null);
+  
   // Micro-interaction states
   const [dateJustSelected, setDateJustSelected] = useState(false);
   
@@ -328,11 +331,12 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     }
   }, [productSlug, products]);
 
-  // Fetch unavailable dates when product changes
+  // Fetch unavailable dates and unit counts when product changes
   useEffect(() => {
-    async function fetchUnavailableDates() {
+    async function fetchAvailability() {
       if (!selectedProduct) {
         setUnavailableDates([]);
+        setAvailableUnitsCount(null);
         return;
       }
 
@@ -348,6 +352,11 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
             data.unavailableDates.map((d: string) => new Date(d + "T12:00:00"))
           );
         }
+        
+        // Track real unit count for honest scarcity indicator
+        if (typeof data.availableUnitsCount === 'number') {
+          setAvailableUnitsCount(data.availableUnitsCount);
+        }
       } catch (error) {
         console.error("Error fetching availability:", error);
       } finally {
@@ -355,7 +364,7 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
       }
     }
 
-    fetchUnavailableDates();
+    fetchAvailability();
   }, [selectedProduct]);
 
   // Compute pricing options when product or date changes
@@ -642,15 +651,6 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
       </div>
 
       <div className="mt-6 space-y-6">
-        {/* ===================================================================== */}
-        {/* SOCIAL PROOF BAR */}
-        {/* ===================================================================== */}
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          {selectedProduct && (
-            <LiveViewers productSlug={selectedProduct.slug} />
-          )}
-          <RecentBookings period="week" />
-        </div>
 
         {/* Cancelled Payment Alert */}
         {cancelled && (
@@ -692,32 +692,42 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
               </div>
               <div className="p-4 sm:p-5">
                 {selectedProduct ? (
-                  <div className="flex items-center gap-4">
-                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-slate-900 via-purple-950/50 to-slate-900 sm:h-24 sm:w-24">
-                      <Image
-                        src={selectedProduct.image}
-                        alt={selectedProduct.name}
-                        fill
-                        className="object-contain p-2"
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold">{selectedProduct.name}</p>
-                      <p className={cn(styles.bodyText, "mt-0.5")}>
-                        {selectedProduct.subtitle}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <Badge variant="secondary" className="text-xs">
-                          ${selectedProduct.pricing.daily}/day
-                        </Badge>
-                        <Badge variant="secondary" className="text-xs">
-                          ${selectedProduct.pricing.weekend} weekend
-                        </Badge>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-4">
+                      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-slate-900 via-purple-950/50 to-slate-900 sm:h-24 sm:w-24">
+                        <Image
+                          src={selectedProduct.image}
+                          alt={selectedProduct.name}
+                          fill
+                          className="object-contain p-2"
+                        />
                       </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold">{selectedProduct.name}</p>
+                        <p className={cn(styles.bodyText, "mt-0.5")}>
+                          {selectedProduct.subtitle}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Badge variant="secondary" className="text-xs">
+                            ${selectedProduct.pricing.daily}/day
+                          </Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            ${selectedProduct.pricing.weekend} weekend
+                          </Badge>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="sm" asChild className="shrink-0">
+                        <Link href="/rentals">Change</Link>
+                      </Button>
                     </div>
-                    <Button variant="ghost" size="sm" asChild className="shrink-0">
-                      <Link href="/rentals">Change</Link>
-                    </Button>
+                    
+                    {/* Real scarcity indicator - only shows when genuinely limited */}
+                    {availableUnitsCount === 1 && (
+                      <LowStockIndicator 
+                        availableUnits={availableUnitsCount} 
+                        productName={selectedProduct.name}
+                      />
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1492,10 +1502,10 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
               <div className={styles.cardInner} />
             </div>
 
-            {/* Social Proof - Reviews snippet */}
+            {/* Customer Review */}
             <div className={styles.card}>
               <div className={styles.cardHeader}>
-                <span className={styles.cardTitle}>Customer reviews</span>
+                <span className={styles.cardTitle}>Customer review</span>
               </div>
               <div className="p-4 sm:p-5">
                 <div className="flex items-center gap-2 mb-3">
@@ -1505,7 +1515,6 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                     ))}
                   </div>
                   <span className="text-sm font-medium">5.0</span>
-                  <span className="text-xs text-foreground/50">· 47 reviews</span>
                 </div>
                 <p className="text-xs text-foreground/60 italic leading-relaxed">
                   &ldquo;Super clean, professional setup and takedown. Already planning to book again!&rdquo;

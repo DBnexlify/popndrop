@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Phone, Mail, MapPin, Star, ChevronRight, Sparkles, Shield, Clock, Users } from "lucide-react";
+import { Phone, Mail, MapPin, Star, ChevronRight, Sparkles, Shield, Clock } from "lucide-react";
 import { LogoConfetti } from "@/components/site/logo-confetti";
 import { AnimatedLogo } from "@/components/site/animated-logo";
 
@@ -38,6 +38,7 @@ const styles = {
 
 // ============================================================================
 // STRUCTURED DATA - SEO
+// Note: aggregateRating removed until we have verified reviews on Google/Facebook
 // ============================================================================
 
 const jsonLd = {
@@ -60,11 +61,6 @@ const jsonLd = {
     { "@type": "State", name: "Florida" },
   ],
   priceRange: "$$",
-  aggregateRating: {
-    "@type": "AggregateRating",
-    ratingValue: "5.0",
-    reviewCount: "47",
-  },
   serviceType: [
     "Bounce House Rental",
     "Water Slide Rental",
@@ -101,6 +97,7 @@ const trustCards = [
   },
 ];
 
+// REAL testimonial only - add more as real customers leave reviews
 const testimonials = [
   {
     quote:
@@ -110,36 +107,6 @@ const testimonials = [
     rating: 5,
     avatar: "D",
   },
-  {
-    quote:
-      "Rented the Party House for my 21st and it completely transformed the backyard into a legit club vibe. The lighting inside was awesome and everyone was obsessed with it. Setup crew was in and out, super professional. Made the whole night unforgettable!",
-    name: "Brianna T.",
-    event: "21st Birthday Party",
-    rating: 5,
-    avatar: "B",
-  },
-  {
-    quote:
-      "We had the bounce house for our daughter's 6th birthday party. The setup was quick and professional, and the kids had an absolute blast. The team was friendly and responsive. Will definitely book again!",
-    name: "Marcus J.",
-    event: "Daughter's 6th Birthday",
-    rating: 5,
-    avatar: "M",
-  },
-  {
-    quote:
-      "Amazing service from start to finish! The bounce house was spotless and the kids loved it. They even helped us find the perfect spot in our backyard. Highly recommend for any party!",
-    name: "Ashley R.",
-    event: "Neighborhood Block Party",
-    rating: 5,
-    avatar: "A",
-  },
-];
-
-const stats = [
-  { value: "47+", label: "Happy families" },
-  { value: "5.0", label: "Star rating" },
-  { value: "100%", label: "On-time delivery" },
 ];
 
 // ============================================================================
@@ -262,24 +229,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Social proof mini-stat */}
-              <div className="flex items-center justify-center gap-4 sm:justify-start">
-                <div className="flex -space-x-2">
-                  {["D", "B", "M", "A"].map((letter, i) => (
-                    <div
-                      key={i}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-gradient-to-br from-fuchsia-500 to-purple-600 text-xs font-bold text-white"
-                    >
-                      {letter}
-                    </div>
-                  ))}
-                </div>
-                <div className="text-sm">
-                  <span className="font-semibold text-foreground">47+ families</span>
-                  <span className="text-foreground/50"> have booked with us</span>
-                </div>
-              </div>
-
               {/* Service area */}
               <div className="flex items-center justify-center gap-1.5 text-xs text-foreground/50 sm:justify-start sm:text-sm">
                 <MapPin className="h-3.5 w-3.5 shrink-0" />
@@ -290,23 +239,6 @@ export default function HomePage() {
 
           {/* Inner feather edge */}
           <div className={styles.sectionCardInner} />
-        </section>
-
-        {/* ================================================================
-            STATS BAR
-        ================================================================ */}
-        <section className={`${styles.sectionGap} grid grid-cols-3 gap-3`}>
-          {stats.map((stat) => (
-            <div 
-              key={stat.label}
-              className="text-center p-3 sm:p-4"
-            >
-              <p className="text-2xl font-bold bg-gradient-to-r from-fuchsia-400 to-cyan-400 bg-clip-text text-transparent sm:text-3xl">
-                {stat.value}
-              </p>
-              <p className="mt-1 text-xs text-foreground/50 sm:text-sm">{stat.label}</p>
-            </div>
-          ))}
         </section>
 
         {/* ================================================================
@@ -328,7 +260,7 @@ export default function HomePage() {
         </section>
 
         {/* ================================================================
-            SOCIAL PROOF - TESTIMONIALS
+            TESTIMONIAL - Real review only
         ================================================================ */}
         <section className={styles.sectionGap}>
           <Card className={styles.sectionCard}>
@@ -339,7 +271,6 @@ export default function HomePage() {
               <div className="mb-4 flex flex-col items-center gap-2 sm:mb-6 sm:flex-row sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold sm:text-xl">What families are saying</h2>
-                  <p className="mt-1 text-sm text-foreground/60">Real reviews from real customers</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="flex">
@@ -351,47 +282,45 @@ export default function HomePage() {
                     ))}
                   </div>
                   <span className="font-semibold">5.0</span>
-                  <span className="text-sm text-foreground/50">· 47 reviews</span>
                 </div>
               </div>
 
-              {/* Testimonials Grid */}
-              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
-                {testimonials.map((t) => (
-                  <div key={t.name} className={`${styles.nestedCard} p-4 sm:p-5`}>
-                    {/* Rating */}
-                    <div className="mb-2 flex">
-                      {[...Array(t.rating)].map((_, i) => (
-                        <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />
-                      ))}
-                    </div>
-                    
-                    {/* Quote */}
-                    <p className="text-xs leading-relaxed text-foreground/75 sm:text-sm">
-                      &ldquo;{t.quote}&rdquo;
-                    </p>
-                    
-                    {/* Author */}
-                    <div className="mt-3 flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-600 text-xs font-bold text-white">
-                        {t.avatar}
-                      </div>
-                      <div>
-                        <span className="text-sm font-medium">{t.name}</span>
-                        <span className="block text-xs text-foreground/50">{t.event}</span>
-                      </div>
-                    </div>
-                    
-                    <div className={styles.nestedCardInner} />
+              {/* Featured Testimonial - Single real review displayed prominently */}
+              <div className={`${styles.nestedCard} p-5 sm:p-6`}>
+                {/* Rating */}
+                <div className="mb-3 flex">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
+                  ))}
+                </div>
+                
+                {/* Quote - Larger for featured review */}
+                <p className="text-sm leading-relaxed text-foreground/80 sm:text-base">
+                  &ldquo;{testimonials[0].quote}&rdquo;
+                </p>
+                
+                {/* Author */}
+                <div className="mt-4 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-600 text-sm font-bold text-white">
+                    {testimonials[0].avatar}
                   </div>
-                ))}
+                  <div>
+                    <span className="font-medium">{testimonials[0].name}</span>
+                    <span className="block text-sm text-foreground/50">{testimonials[0].event}</span>
+                  </div>
+                </div>
+                
+                <div className={styles.nestedCardInner} />
               </div>
               
               {/* CTA */}
               <div className="mt-6 text-center">
+                <p className="mb-3 text-sm text-foreground/50">
+                  Had a great experience? We&apos;d love to hear from you!
+                </p>
                 <Button asChild variant="outline" className="border-white/10">
                   <Link href="/bookings">
-                    Join our happy customers
+                    Book your party
                     <ChevronRight className="ml-1 h-4 w-4" />
                   </Link>
                 </Button>

@@ -12,13 +12,14 @@ import {
   Calendar,
   Cloud,
 } from "lucide-react";
-import { getProductsFromDB } from "@/lib/products";
+import { getProductsFromDB, getProductUnitCounts } from "@/lib/products";
 import { DEPOSIT_AMOUNT } from "@/lib/rentals";
 import type { ProductDisplay } from "@/lib/database-types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RentalCardClient } from "./rental-card-client";
+import { LowStockIndicator } from "@/components/site/social-proof";
 
 export const metadata = {
   title: "Bounce House Rentals | Pop and Drop Party Rentals",
@@ -82,9 +83,11 @@ const styles = {
 function RentalCard({
   product,
   priority = false,
+  availableUnits,
 }: {
   product: ProductDisplay;
   priority?: boolean;
+  availableUnits?: number;
 }) {
   const isComingSoon = product.pricing.daily === 0;
 
@@ -216,6 +219,14 @@ function RentalCard({
           </div>
         )}
 
+        {/* Low stock indicator - only shows when genuinely limited */}
+        {!isComingSoon && availableUnits === 1 && (
+          <LowStockIndicator 
+            availableUnits={availableUnits} 
+            productName={product.name}
+          />
+        )}
+
         {/* Action buttons */}
         {!isComingSoon ? (
           <div className="grid gap-2 pt-1 sm:grid-cols-2">
@@ -309,8 +320,11 @@ const goodToKnowCards = [
 // MAIN PAGE (Server Component)
 // ============================================
 export default async function RentalsPage() {
-  // Fetch products directly from database
-  const products = await getProductsFromDB();
+  // Fetch products and unit counts in parallel
+  const [products, unitCounts] = await Promise.all([
+    getProductsFromDB(),
+    getProductUnitCounts(),
+  ]);
 
   return (
     <main className="mx-auto max-w-5xl px-4 pb-28 pt-6 sm:px-6 sm:pb-12 sm:pt-10">
@@ -343,7 +357,12 @@ export default async function RentalsPage() {
       {/* Rental Grid */}
       <section className="mt-8 grid gap-4 sm:mt-12 sm:grid-cols-2">
         {products.map((product, index) => (
-          <RentalCard key={product.slug} product={product} priority={index < 2} />
+          <RentalCard 
+            key={product.slug} 
+            product={product} 
+            priority={index < 2}
+            availableUnits={unitCounts.get(product.id)}
+          />
         ))}
       </section>
 

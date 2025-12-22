@@ -101,3 +101,30 @@ export async function getAvailableProductsFromDB(): Promise<ProductDisplay[]> {
 
   return (data || []).map(toProductDisplay);
 }
+
+/**
+ * Fetch unit counts for all products
+ * Returns a map of productId -> availableUnitCount
+ */
+export async function getProductUnitCounts(): Promise<Map<string, number>> {
+  const supabase = createServerClient();
+  
+  const { data, error } = await supabase
+    .from("units")
+    .select("product_id, status")
+    .eq("status", "available");
+
+  if (error) {
+    console.error("Error fetching unit counts:", error);
+    return new Map();
+  }
+
+  // Count available units per product
+  const counts = new Map<string, number>();
+  for (const unit of data || []) {
+    const current = counts.get(unit.product_id) || 0;
+    counts.set(unit.product_id, current + 1);
+  }
+
+  return counts;
+}

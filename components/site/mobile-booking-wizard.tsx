@@ -49,22 +49,26 @@ import {
 } from "lucide-react";
 import { hapticSelect, hapticSuccess, hapticNavigate, hapticError, hapticConfirm } from "@/lib/haptics";
 import { TermsCheckbox } from "@/components/site/terms-acceptance";
-import { TrustBadges } from "@/components/site/social-proof";
+import { TrustBadges, LowStockIndicator } from "@/components/site/social-proof";
 import { useCustomerAutofill, saveCustomerInfo } from "@/lib/use-customer-autofill";
 import { PhoneInput } from "@/components/ui/phone-input";
 
 // =============================================================================
-// DESIGN SYSTEM STYLES
+// DESIGN SYSTEM STYLES - Premium Glassmorphism (matching desktop)
 // =============================================================================
 
 const styles = {
-  // Cards
+  // Tier 2: Standard Cards (Grid Items)
   card: "relative overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl",
   cardInner: "pointer-events-none absolute inset-0 rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]",
   
-  // Nested
+  // Tier 3: Nested Cards (Inside Other Cards)
   nestedCard: "relative overflow-hidden rounded-xl border border-white/5 bg-white/[0.03]",
   nestedCardInner: "pointer-events-none absolute inset-0 rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]",
+  
+  // Selected state with fuchsia glow (matching desktop)
+  cardSelected: "ring-2 ring-fuchsia-500/50 shadow-[0_0_30px_rgba(217,70,239,0.15)]",
+  nestedCardSelected: "ring-2 ring-fuchsia-500/50 bg-fuchsia-500/5",
   
   // Typography
   heading: "text-xl font-semibold",
@@ -76,7 +80,7 @@ const styles = {
   input: "border-white/10 bg-white/5 placeholder:text-foreground/40 focus:border-white/20 focus:ring-1 focus:ring-white/10",
   selectTrigger: "w-full border-white/10 bg-white/5 focus:border-white/20 focus:ring-1 focus:ring-white/10",
   selectContent: "border-white/10 bg-background/95 backdrop-blur-xl",
-  selectItem: "focus:bg-cyan-500/10",
+  selectItem: "focus:bg-fuchsia-500/10",
 } as const;
 
 // =============================================================================
@@ -213,10 +217,10 @@ function WizardHeader({
             </span>
           </div>
           
-          {/* Progress bar */}
+          {/* Progress bar with fuchsia gradient */}
           <div className="mt-1.5 relative h-1.5 overflow-hidden rounded-full bg-white/10">
             <div
-              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 transition-all duration-500 ease-out"
+              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(217,70,239,0.5)]"
               style={{ width: `${progressPercentage}%` }}
             />
           </div>
@@ -224,7 +228,7 @@ function WizardHeader({
 
         {/* Price pill */}
         {price !== undefined && price > 0 && (
-          <div className="shrink-0 rounded-full bg-cyan-500/20 px-3 py-1.5 text-sm font-semibold text-cyan-400">
+          <div className="shrink-0 rounded-full bg-gradient-to-r from-fuchsia-500/20 to-purple-600/20 border border-fuchsia-500/30 px-3 py-1.5 text-sm font-semibold text-fuchsia-300">
             ${price}
           </div>
         )}
@@ -297,10 +301,12 @@ function Step1SelectRental({
   products,
   selectedProduct,
   onSelect,
+  availableUnitsCount,
 }: {
   products: ProductDisplay[];
   selectedProduct?: ProductDisplay;
   onSelect: (product: ProductDisplay) => void;
+  availableUnitsCount?: number | null;
 }) {
   return (
     <div className="space-y-4 p-4">
@@ -325,7 +331,7 @@ function Step1SelectRental({
               className={cn(
                 styles.card,
                 "w-full p-4 text-left transition-all duration-200 active:scale-[0.98]",
-                isSelected && "ring-2 ring-cyan-500/50"
+                isSelected && styles.cardSelected
               )}
             >
               <div className="flex items-center gap-4">
@@ -338,8 +344,8 @@ function Step1SelectRental({
                     className="object-contain p-2"
                   />
                   {isSelected && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-cyan-500/20">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500">
+                    <div className="absolute inset-0 flex items-center justify-center bg-fuchsia-500/20 backdrop-blur-[2px]">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 shadow-lg shadow-fuchsia-500/30">
                         <Check className="h-5 w-5 text-white" />
                       </div>
                     </div>
@@ -363,8 +369,22 @@ function Step1SelectRental({
                 </div>
 
                 {/* Chevron */}
-                <ChevronRight className="h-5 w-5 shrink-0 text-foreground/30" />
+                <ChevronRight className={cn(
+                  "h-5 w-5 shrink-0 transition-colors",
+                  isSelected ? "text-fuchsia-400" : "text-foreground/30"
+                )} />
               </div>
+              
+              {/* Real scarcity indicator - only shows when selected and genuinely limited */}
+              {isSelected && availableUnitsCount === 1 && (
+                <div className="mt-3 pt-3 border-t border-white/5">
+                  <LowStockIndicator 
+                    availableUnits={availableUnitsCount} 
+                    productName={product.name}
+                  />
+                </div>
+              )}
+              
               <div className={styles.cardInner} />
             </button>
           );
@@ -562,7 +582,7 @@ function Step2DateTime({
                     styles.nestedCard,
                     "p-3 text-left transition-all active:scale-[0.98]",
                     isSelected
-                      ? "ring-2 ring-cyan-500/50 bg-cyan-500/10"
+                      ? styles.nestedCardSelected
                       : "active:bg-white/5"
                   )}
                 >
@@ -574,7 +594,10 @@ function Step2DateTime({
                       </Badge>
                     )}
                   </div>
-                  <p className="mt-1 text-lg font-semibold text-cyan-400">
+                  <p className={cn(
+                    "mt-1 text-lg font-semibold",
+                    isSelected ? "text-fuchsia-400" : "text-cyan-400"
+                  )}>
                     ${option.price}
                   </p>
                   <p className="mt-0.5 text-[10px] text-foreground/50 line-clamp-2">
@@ -1001,7 +1024,7 @@ function Step4Review({
               styles.nestedCard,
               "p-3 text-left transition-all active:scale-[0.98]",
               paymentType === 'deposit'
-                ? "ring-2 ring-cyan-500/50 bg-cyan-500/10"
+                ? styles.nestedCardSelected
                 : "active:bg-white/5"
             )}
           >
@@ -1010,16 +1033,19 @@ function Step4Review({
                 <div className={cn(
                   "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all",
                   paymentType === 'deposit' 
-                    ? "border-cyan-400 bg-cyan-400" 
+                    ? "border-fuchsia-400 bg-fuchsia-400" 
                     : "border-white/30"
                 )}>
                   {paymentType === 'deposit' && (
-                    <Check className="h-2.5 w-2.5 text-black" />
+                    <Check className="h-2.5 w-2.5 text-white" />
                   )}
                 </div>
                 <span className="text-sm font-semibold">Deposit</span>
               </div>
-              <span className="text-lg font-semibold text-cyan-400">$50</span>
+              <span className={cn(
+                "text-lg font-semibold",
+                paymentType === 'deposit' ? "text-fuchsia-400" : "text-cyan-400"
+              )}>$50</span>
             </div>
             <p className="mt-1.5 pl-6 text-[10px] text-foreground/50">
               ${selectedOption.price - 50} due on delivery
@@ -1051,14 +1077,20 @@ function Step4Review({
                     : "border-white/30"
                 )}>
                   {paymentType === 'full' && (
-                    <Check className="h-2.5 w-2.5 text-black" />
+                    <Check className="h-2.5 w-2.5 text-white" />
                   )}
                 </div>
                 <span className="text-sm font-semibold">Pay in full</span>
               </div>
-              <span className="text-lg font-semibold text-green-400">${selectedOption.price}</span>
+              <span className={cn(
+                "text-lg font-semibold",
+                paymentType === 'full' ? "text-green-400" : "text-foreground/50"
+              )}>${selectedOption.price}</span>
             </div>
-            <p className="mt-1.5 pl-6 text-[10px] text-green-400/70">
+            <p className={cn(
+              "mt-1.5 pl-6 text-[10px]",
+              paymentType === 'full' ? "text-green-400/70" : "text-foreground/50"
+            )}>
               ✓ Nothing due on delivery!
             </p>
             <div className={styles.nestedCardInner} />
@@ -1154,6 +1186,7 @@ export function MobileBookingWizard({
   // UI state
   const [unavailableDates, setUnavailableDates] = useState<Date[]>([]);
   const [isLoadingDates, setIsLoadingDates] = useState(false);
+  const [availableUnitsCount, setAvailableUnitsCount] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; visible: boolean }>({
@@ -1199,11 +1232,12 @@ export function MobileBookingWizard({
     }
   }, [initialProductSlug, products]);
 
-  // Fetch unavailable dates
+  // Fetch unavailable dates and unit counts
   useEffect(() => {
-    async function fetchUnavailableDates() {
+    async function fetchAvailability() {
       if (!selectedProduct) {
         setUnavailableDates([]);
+        setAvailableUnitsCount(null);
         return;
       }
 
@@ -1219,6 +1253,11 @@ export function MobileBookingWizard({
             data.unavailableDates.map((d: string) => new Date(d + "T12:00:00"))
           );
         }
+        
+        // Track real unit count for honest scarcity indicator
+        if (typeof data.availableUnitsCount === 'number') {
+          setAvailableUnitsCount(data.availableUnitsCount);
+        }
       } catch (error) {
         console.error("Error fetching availability:", error);
       } finally {
@@ -1226,7 +1265,7 @@ export function MobileBookingWizard({
       }
     }
 
-    fetchUnavailableDates();
+    fetchAvailability();
   }, [selectedProduct]);
 
   // Show toast helper
@@ -1389,6 +1428,7 @@ export function MobileBookingWizard({
               products={products}
               selectedProduct={selectedProduct}
               onSelect={handleSelectRental}
+              availableUnitsCount={availableUnitsCount}
             />
           )}
 

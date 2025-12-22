@@ -118,6 +118,33 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   console.log(`✅ Processing payment for booking ${bookingId} (${paymentType})`);
 
+  // ==========================================================================
+  // FETCH STRIPE PAYMENT DETAILS (for receipt URL, card info)
+  // ==========================================================================
+  let stripeReceiptUrl: string | null = null;
+  let cardLast4: string | null = null;
+  let cardBrand: string | null = null;
+  
+  if (session.payment_intent && typeof session.payment_intent === 'string') {
+    try {
+      const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent, {
+        expand: ['latest_charge'],
+      });
+      
+      const charge = paymentIntent.latest_charge as Stripe.Charge | null;
+      if (charge) {
+        stripeReceiptUrl = charge.receipt_url || null;
+        if (charge.payment_method_details?.card) {
+          cardLast4 = charge.payment_method_details.card.last4 || null;
+          cardBrand = charge.payment_method_details.card.brand || null;
+        }
+      }
+      console.log('✅ Fetched Stripe payment details');
+    } catch (stripeErr) {
+      console.log('ℹ️ Could not fetch payment details:', stripeErr);
+    }
+  }
+
   const supabase = createServerClient();
   const now = new Date().toISOString();
   const amountPaid = (session.amount_total || 0) / 100; // Convert cents to dollars
@@ -276,9 +303,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         customerEmail: booking.customer?.email || '',
         customerPhone: booking.customer?.phone || '',
         productName,
-        eventDate: formatDate(booking.event_date),
-        deliveryDate: formatDate(booking.delivery_date),
-        pickupDate: formatDate(booking.pickup_date),
+        eventDate: booking.event_date,
+        deliveryDate: booking.delivery_date,
+        pickupDate: booking.pickup_date,
         deliveryWindow: booking.delivery_window,
         pickupWindow: booking.pickup_window,
         address: booking.delivery_address,
@@ -290,6 +317,11 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         bookingType: booking.booking_type as 'daily' | 'weekend' | 'sunday',
         paidInFull: isFullPayment,
         amountPaid,
+        // Stripe details
+        stripePaymentIntentId: session.payment_intent as string || undefined,
+        stripeReceiptUrl: stripeReceiptUrl || undefined,
+        cardLast4: cardLast4 || undefined,
+        cardBrand: cardBrand || undefined,
       }),
     });
     console.log('✅ Business notification email sent');
