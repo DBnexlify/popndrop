@@ -6,7 +6,35 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { createAuthServerClient } from '@/lib/supabase';
 import type { CreatePromoCodeRequest } from '@/lib/promo-code-types';
+
+// =============================================================================
+// HELPER: Verify admin auth (consistent with getAdminUser - checks by email)
+// =============================================================================
+
+async function verifyAdmin() {
+  const authClient = await createAuthServerClient();
+  const { data: { session } } = await authClient.auth.getSession();
+  
+  if (!session?.user?.email) {
+    return { admin: null, error: 'No session' };
+  }
+
+  // Use service role client to bypass RLS for admin check
+  const supabase = createServerClient();
+  const { data: admin } = await supabase
+    .from('admin_users')
+    .select('id, email, role')
+    .eq('email', session.user.email)
+    .single();
+
+  if (!admin) {
+    return { admin: null, error: 'Not an admin' };
+  }
+
+  return { admin, error: null };
+}
 
 // =============================================================================
 // GET - List all promo codes
@@ -14,23 +42,12 @@ import type { CreatePromoCodeRequest } from '@/lib/promo-code-types';
 
 export async function GET() {
   try {
-    const supabase = createServerClient();
-    
-    // Verify admin auth
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { data: admin } = await supabase
-      .from('admin_users')
-      .select('id')
-      .eq('id', session.user.id)
-      .single();
-
+    const { admin, error: authError } = await verifyAdmin();
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const supabase = createServerClient();
 
     // Get all codes with usage
     const { data: codes, error } = await supabase
@@ -63,24 +80,12 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerClient();
-    
-    // Verify admin auth
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { data: admin } = await supabase
-      .from('admin_users')
-      .select('id')
-      .eq('id', session.user.id)
-      .single();
-
+    const { admin, error: authError } = await verifyAdmin();
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const supabase = createServerClient();
     const body: CreatePromoCodeRequest = await request.json();
 
     // Validate required fields
@@ -174,24 +179,12 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = createServerClient();
-    
-    // Verify admin auth
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { data: admin } = await supabase
-      .from('admin_users')
-      .select('id')
-      .eq('id', session.user.id)
-      .single();
-
+    const { admin, error: authError } = await verifyAdmin();
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const supabase = createServerClient();
     const body = await request.json();
     const { id, ...updates } = body;
 
@@ -228,24 +221,12 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createServerClient();
-    
-    // Verify admin auth
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { data: admin } = await supabase
-      .from('admin_users')
-      .select('id')
-      .eq('id', session.user.id)
-      .single();
-
+    const { admin, error: authError } = await verifyAdmin();
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const supabase = createServerClient();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 

@@ -1642,7 +1642,69 @@ Cyan: #22d3ee (secondary accent)
 
 ---
 
-## SECTION 14: SAFARI & PERFORMANCE OPTIMIZATIONS
+## SECTION 14: GLASSMORPHISM UTILITIES
+
+> **Added**: December 2024
+
+### Overview
+
+CSS utility classes for consistent glass effects across the site. These codify the 3-tier card system into reusable classes with built-in Safari performance optimizations.
+
+### Utility Classes (`globals.css`)
+
+| Class | Use For | Blur | Has ::after |
+|-------|---------|------|-------------|
+| `.glass-section` | Hero, form containers, major sections | 24px | ✅ 70px feather |
+| `.glass-card` | Product cards, grid items (with hover) | 24px | ✅ 50px feather |
+| `.glass-card-static` | Cards without hover effect | 24px | ✅ 50px feather |
+| `.glass-nested` | Elements inside glass containers | None | ✅ 35px feather |
+| `.glass-nav` | Sticky headers, toolbars | 24px | ❌ |
+| `.glass-nav-floating` | Floating nav with borders | 24px | ❌ |
+| `.glass-subtle` | Badges, tooltips | 12px | ❌ |
+| `.glass-selected` | Selection state modifier | — | Fuchsia ring |
+
+### Migration Path
+
+The `.glass-*` utilities automatically include the inner feather `::after` overlay, eliminating the need for manual `<div>` overlays.
+
+**Before**:
+```tsx
+<div className="relative overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+  {content}
+  <div className="pointer-events-none absolute inset-0 [box-shadow:inset...]" />
+</div>
+```
+
+**After**:
+```tsx
+<div className="glass-section rounded-2xl">
+  {content}
+</div>
+```
+
+### Performance Notes
+
+- All utilities include `transform: translateZ(0)` for GPU acceleration
+- `.glass-nested` has NO backdrop-blur to avoid stacking blur performance issues
+- Blur is standardized at 24px (tested safe for iOS Safari)
+- Inner feather uses `box-shadow: inset` not blur for performance
+
+### Where Utilities Can Be Used
+
+| Component | Current Implementation | Can Migrate To |
+|-----------|------------------------|----------------|
+| `site-header.tsx` | Inline Tailwind | `.glass-nav` |
+| `mobile-bottom-nav.tsx` | Inline Tailwind | `.glass-nav-floating` |
+| `mobile-booking-wizard.tsx` | `styles` object | `.glass-section`, `.glass-nested` |
+| `booking-form-client.tsx` | `styles` object | `.glass-section`, `.glass-nested` |
+| `rental-card.tsx` | Inline Tailwind | `.glass-card` |
+| `app/(site)/page.tsx` | `styles` object | `.glass-section`, `.glass-card` |
+
+Migration is optional but recommended for new components.
+
+---
+
+## SECTION 15: SAFARI & PERFORMANCE OPTIMIZATIONS
 
 > **Last Updated**: December 2024
 
@@ -1784,7 +1846,7 @@ export const viewport: Viewport = {
 
 ---
 
-## SECTION 15: STICKY HEADER MORPH TRANSITIONS
+## SECTION 16: STICKY HEADER MORPH TRANSITIONS
 
 > **Last Updated**: December 2024
 > **Primary Files**: `components/site/mobile-booking-wizard.tsx`, `app/(site)/bookings/booking-form-client.tsx`
@@ -1906,7 +1968,7 @@ style={isAtTop ? { paddingTop: 'env(safe-area-inset-top, 0px)' } : undefined}
 
 ---
 
-## SECTION 16: MOBILE MODAL PATTERN
+## SECTION 17: MOBILE MODAL PATTERN
 
 ### Problem
 
@@ -1974,7 +2036,7 @@ const modalStyles = {
 
 ---
 
-## SECTION 17: FILTER PILL PATTERN
+## SECTION 18: FILTER PILL PATTERN
 
 ### Problem
 
@@ -2054,7 +2116,7 @@ const pillStyles = {
 
 ---
 
-## SECTION 18: BOOKING AUTOMATION SYSTEM
+## SECTION 19: BOOKING AUTOMATION SYSTEM
 
 > **Added**: December 22, 2024
 > **Status**: Phase 1 Complete (Schema, Types, Core Logic)
@@ -2198,7 +2260,7 @@ Runs every 2 hours (at the top of even hours).
 
 ---
 
-## SECTION 19: NOTIFICATION NUDGE SYSTEM
+## SECTION 20: NOTIFICATION NUDGE SYSTEM
 
 > **Added**: December 23, 2024
 > **Status**: Complete (Pending migration run)
@@ -2316,11 +2378,148 @@ This adds:
 
 ---
 
+## SECTION 24: CROSS-PLATFORM LAYOUT CONSIDERATIONS
+
+> Added: December 23, 2024
+> Last Updated: December 23, 2024
+
+### Overview
+
+This section documents the differences between iOS and Android browsers that affect layout, and the strategies used to ensure consistent behavior across platforms.
+
+### Key Platform Differences
+
+| Feature | iOS Safari | Android Chrome | Solution |
+|---------|------------|----------------|----------|
+| Safe area insets | Full support via `env()` | Limited/none | Use `calc(base + env(..., 0px))` |
+| Viewport height | `100vh` includes browser chrome | `100vh` varies by version | Use `100dvh` or JavaScript |
+| Status bar | Uses `env(safe-area-inset-top)` | May overlay content | Handle via padding |
+| Home indicator | ~34px safe area bottom | Varies (0-24px with gesture nav) | Use minimum + safe area |
+| Position sticky | Generally good | Good, minor edge cases | Add `will-change: transform` |
+
+### Safe Area Strategy
+
+**The Problem**: iOS devices require `env(safe-area-inset-*)` for proper notch/home indicator handling. Android devices typically don't support or need these values.
+
+**The Solution**: Use additive safe areas instead of max() or replacement:
+
+```css
+/* CROSS-PLATFORM APPROACH */
+.pb-safe {
+  /* Base padding + any safe area */
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Result:
+   - iOS: 12px + ~34px = 46px (proper home indicator clearance)
+   - Android gesture: 12px + 0-24px = 12-36px
+   - Android button: 12px + 0 = 12px (minimum always applies)
+*/
+```
+
+### Components with Cross-Platform Fixes
+
+| Component | File | Fixes Applied |
+|-----------|------|---------------|
+| Bottom Nav | `components/site/mobile-bottom-nav.tsx` | Additive safe area padding via inline style |
+| Site Header | `components/site/site-header.tsx` | Top safe area + min-height centering |
+| Wizard Header | `components/site/mobile-booking-wizard.tsx` | Safe area on outer wrapper, `will-change` for sticky |
+
+### Bottom Navigation Fix
+
+**Issue**: Navigation cut off on Android, not centered properly.
+
+**Root Cause**: `pb-safe` class was using `max()` which could evaluate inconsistently across platforms.
+
+**Fix**:
+```tsx
+<div 
+  className="mx-auto max-w-5xl px-3"
+  style={{
+    paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+  }}
+>
+```
+
+### Site Header Fix
+
+**Issue**: Text not vertically centered on Android.
+
+**Root Cause**: Fixed `h-14` height combined with platform font rendering differences.
+
+**Fix**:
+- Changed `h-14` to `min-h-14` for more resilient height handling
+- Added `leading-none` to text to prevent line-height affecting visual centering
+- Added `flex items-center` wrapper around the link
+- Added top safe area padding to header container
+
+### Sticky Progress Bar Fix
+
+**Issue**: Sticky header goes out of view when scrolling on Android.
+
+**Root Cause**: Safe area padding was applied to inner content instead of outer wrapper, causing layout shift during scroll.
+
+**Fix**:
+- Moved `env(safe-area-inset-top)` padding from inner content to outer wrapper
+- Added `will-change: transform` to sticky container for better Android sticky behavior
+- Changed `h-14` to `min-h-14` for consistent centering
+
+### Viewport Configuration
+
+The root layout (`app/layout.tsx`) must have proper viewport settings:
+
+```tsx
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover', // REQUIRED for safe area insets
+  themeColor: '#d946ef',
+};
+```
+
+### Testing Checklist
+
+#### Devices to Test:
+- [ ] iPhone Safari (latest iOS) - PRIMARY
+- [ ] iPhone Chrome
+- [ ] Android Chrome (Pixel/Samsung with gesture nav)
+- [ ] Android Chrome (device with button nav)
+- [ ] iPad Safari
+- [ ] Android tablet
+
+#### Things to Verify:
+- [ ] Bottom nav fully visible and centered
+- [ ] Header text perfectly centered vertically
+- [ ] Sticky elements dock properly at top
+- [ ] No content cut off by notch or home indicator
+- [ ] Scroll behavior smooth in both directions
+- [ ] Status bar handled correctly
+
+### CSS Utilities Reference
+
+| Utility | Purpose | Use When |
+|---------|---------|----------|
+| `.pb-safe` | Bottom padding + safe area | Bottom nav, fixed footers |
+| `.pt-safe` | Top padding + safe area | Headers (if needed) |
+| `.pb-safe-only` | Safe area only (no base) | When parent has padding |
+| `.mt-safe` | Top margin for safe area | Below sticky headers |
+
+### Best Practices
+
+1. **Always use additive safe areas**: `calc(base + env(..., 0px))` not `max()`
+2. **Test on real devices**: Emulators don't perfectly replicate safe area behavior
+3. **Use `min-h-*` over `h-*`**: More resilient to platform rendering differences
+4. **Add `will-change: transform`**: To sticky elements for Android
+5. **Apply safe area to outer wrappers**: Not inner content that transitions
+6. **Use `leading-none`**: On centered text to prevent line-height issues
+
+---
+
 *Blueprint Complete — Last Updated: December 23, 2024*
 
 ---
 
-## SECTION 21: PROMO CODE SYSTEM
+## SECTION 22: PROMO CODE SYSTEM
 
 > Added: December 23, 2024
 
@@ -2421,7 +2620,7 @@ Run in Supabase SQL Editor:
 
 ---
 
-## SECTION 22: CUSTOMER LOYALTY REWARDS SYSTEM
+## SECTION 23: CUSTOMER LOYALTY REWARDS SYSTEM
 
 > Added: December 23, 2024
 

@@ -70,14 +70,32 @@ export function MobileBottomNav() {
       aria-label="Mobile navigation"
       className="group/nav fixed bottom-0 left-0 right-0 z-50 sm:hidden"
     >
-      {/* pb-safe ensures proper padding above Apple's home indicator */}
-      <div className="mx-auto max-w-5xl px-3 pb-3 pb-safe">
+      {/* 
+        CROSS-PLATFORM SAFE AREA HANDLING:
+        - iOS: env(safe-area-inset-bottom) provides home indicator padding
+        - Android gesture nav: May or may not have safe area, but we ensure minimum padding
+        - Android button nav: No safe area needed, but minimum padding still applies
+        
+        Using inline style with fallback to ensure consistent behavior across platforms.
+        The calc() ensures we ALWAYS have at least 12px padding, plus any safe area.
+      */}
+      <div 
+        className="mx-auto max-w-5xl px-3"
+        style={{
+          // Cross-platform safe area: 12px base + safe area inset
+          // This works on all platforms - Android ignores env() and gets 12px
+          // iOS gets 12px + safe area inset
+          paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+        }}
+      >
         <div
           className={cn(
             "rounded-2xl border bg-background/70 backdrop-blur-xl",
             // GPU-accelerated transitions
             "transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
-            "will-change-transform"
+            "will-change-transform",
+            // Ensure the nav card itself has consistent styling
+            "border-white/10"
           )}
         >
           <div className="grid grid-cols-4 px-1.5 py-1.5" role="menubar">

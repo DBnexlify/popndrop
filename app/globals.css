@@ -343,46 +343,66 @@
 }
 
 /* ==========================================================================
- * SAFE AREA UTILITIES FOR APPLE DEVICES
- * Handles iPhone notch, home indicator, and other safe area insets
+ * SAFE AREA UTILITIES - CROSS-PLATFORM
+ * Handles iPhone notch, home indicator, Android gesture nav, and status bars
  * 
  * Requirements:
  * - viewport-fit=cover must be set in viewport meta tag
  * - env() function provides the safe area inset values
- * - Fallbacks are provided for devices without safe areas
+ * - On devices without safe areas (including most Android), env() returns 0
+ * 
+ * CROSS-PLATFORM NOTES:
+ * - iOS: Full support for env(safe-area-inset-*)
+ * - Android gesture nav: Limited support, may return 0 or small values
+ * - Android button nav: Returns 0 (no safe area needed)
+ * - All utilities use fallbacks that ensure minimum spacing
  * ========================================================================== */
 
-/* Safe area padding - bottom (for home indicator) */
+/* Safe area padding - bottom (for home indicator / gesture nav) */
 .pb-safe {
-  /* Combines minimum 12px padding with safe area inset */
-  /* On devices without safe areas, defaults to the pb-3 (12px) already applied */
-  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0.75rem));
+  /* 
+   * Cross-platform approach: Add base padding + any safe area
+   * - iOS gets 12px + safe area inset (typically ~34px for home indicator)
+   * - Android gesture nav gets 12px + any safe area (typically 0-24px)
+   * - Android button nav gets 12px + 0 = 12px
+   * This ensures consistent minimum spacing across all platforms.
+   */
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
 }
 
-/* Additional safe area utilities if needed */
+/* Alternative: Safe area only (no minimum padding added) */
+.pb-safe-only {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Additional safe area utilities */
 .pt-safe {
-  padding-top: env(safe-area-inset-top, 0);
+  padding-top: calc(0px + env(safe-area-inset-top, 0px));
 }
 
 .pl-safe {
-  padding-left: env(safe-area-inset-left, 0);
+  padding-left: env(safe-area-inset-left, 0px);
 }
 
 .pr-safe {
-  padding-right: env(safe-area-inset-right, 0);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 /* Margin variants */
 .mb-safe {
-  margin-bottom: env(safe-area-inset-bottom, 0);
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mt-safe {
+  margin-top: env(safe-area-inset-top, 0px);
 }
 
 /* Full safe area padding for modals/sheets */
 .p-safe {
-  padding-top: env(safe-area-inset-top, 0);
-  padding-right: env(safe-area-inset-right, 0);
-  padding-bottom: env(safe-area-inset-bottom, 0);
-  padding-left: env(safe-area-inset-left, 0);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
 }
 
 /* ==========================================================================
@@ -441,4 +461,200 @@
   will-change: opacity;
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
+}
+
+/* ==========================================================================
+ * GLASSMORPHISM UTILITY CLASSES
+ * Premium dark-theme glass effects optimized for iOS Safari.
+ * 
+ * These utilities codify the 3-tier card system from PROJECT-DESIGN-SYSTEM.md
+ * into reusable CSS classes. Each tier has:
+ * - Base glass effect (background, blur, border)
+ * - Inner feather overlay for iOS-quality depth
+ * 
+ * USAGE:
+ * - .glass-section: Hero containers, form panels, major sections
+ * - .glass-card: Product cards, feature cards, grid items  
+ * - .glass-nested: Elements inside other glass containers
+ * - .glass-nav: Navigation bars (header, mobile nav)
+ * - .glass-subtle: Badges, tooltips, minor overlays
+ * 
+ * All utilities include GPU acceleration hints for smooth Safari performance.
+ * ========================================================================== */
+
+/* -----------------------------------------------------------------------------
+ * TIER 1: Section Glass (Primary Containers)
+ * Use for: Hero sections, form containers, sidebars, major content blocks
+ * Border radius: rounded-2xl (sm: rounded-3xl) - apply via Tailwind
+ * -------------------------------------------------------------------------- */
+.glass-section {
+  position: relative;
+  overflow: hidden;
+  background: hsl(var(--background) / 0.5);
+  border: 1px solid rgb(255 255 255 / 0.10);
+  box-shadow: 0 20px 70px rgb(0 0 0 / 0.18);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  /* GPU acceleration for Safari */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+/* Inner feather overlay - creates premium iOS glass depth */
+.glass-section::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.07),
+    inset 0 0 70px rgb(0 0 0 / 0.2);
+}
+
+/* -----------------------------------------------------------------------------
+ * TIER 2: Card Glass (Grid Items)
+ * Use for: Product cards, feature cards, FAQ cards, trust signals
+ * Border radius: rounded-xl (sm: rounded-2xl) - apply via Tailwind
+ * -------------------------------------------------------------------------- */
+.glass-card {
+  position: relative;
+  overflow: hidden;
+  background: hsl(var(--background) / 0.5);
+  border: 1px solid rgb(255 255 255 / 0.10);
+  box-shadow: 0 14px 50px rgb(0 0 0 / 0.15);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  /* GPU acceleration for Safari */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  /* Interactive hover */
+  transition: transform 200ms ease-out;
+}
+
+.glass-card:hover {
+  transform: translateZ(0) scale(1.02);
+}
+
+/* Inner feather overlay */
+.glass-card::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.07),
+    inset 0 0 50px rgb(0 0 0 / 0.18);
+}
+
+/* Non-interactive variant (no hover scale) */
+.glass-card-static {
+  position: relative;
+  overflow: hidden;
+  background: hsl(var(--background) / 0.5);
+  border: 1px solid rgb(255 255 255 / 0.10);
+  box-shadow: 0 14px 50px rgb(0 0 0 / 0.15);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+.glass-card-static::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.07),
+    inset 0 0 50px rgb(0 0 0 / 0.18);
+}
+
+/* -----------------------------------------------------------------------------
+ * TIER 3: Nested Glass (Inside Other Glass)
+ * Use for: Testimonial quotes, contact items, form sections, info callouts
+ * Border radius: rounded-lg (sm: rounded-xl) - apply via Tailwind
+ * NO backdrop-blur (parent already has it - avoids performance hit)
+ * -------------------------------------------------------------------------- */
+.glass-nested {
+  position: relative;
+  overflow: hidden;
+  background: rgb(255 255 255 / 0.03);
+  border: 1px solid rgb(255 255 255 / 0.05);
+  /* No backdrop-filter - nested inside blurred parent */
+}
+
+/* Inner feather overlay - smaller blur for nested elements */
+.glass-nested::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.05),
+    inset 0 0 35px rgb(0 0 0 / 0.12);
+}
+
+/* -----------------------------------------------------------------------------
+ * NAVIGATION GLASS (Headers, Mobile Nav)
+ * Use for: Sticky headers, mobile bottom nav, toolbars
+ * Higher opacity for better readability over scrolling content
+ * Border radius: Apply via Tailwind based on context
+ * -------------------------------------------------------------------------- */
+.glass-nav {
+  background: hsl(var(--background) / 0.7);
+  border-bottom: 1px solid rgb(255 255 255 / 0.05);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  /* GPU acceleration for Safari */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+/* Variant with side borders (for floating nav bars) */
+.glass-nav-floating {
+  background: hsl(var(--background) / 0.7);
+  border: 1px solid rgb(255 255 255 / 0.10);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+/* -----------------------------------------------------------------------------
+ * SUBTLE GLASS (Badges, Tooltips, Minor Overlays)
+ * Use for: Price badges, status indicators, hover tooltips
+ * Lighter blur for better performance on many small elements
+ * -------------------------------------------------------------------------- */
+.glass-subtle {
+  background: rgb(0 0 0 / 0.6);
+  border: 1px solid rgb(255 255 255 / 0.20);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+/* -----------------------------------------------------------------------------
+ * SELECTED STATE MODIFIER
+ * Apply alongside any glass class to indicate selection
+ * -------------------------------------------------------------------------- */
+.glass-selected {
+  box-shadow:
+    0 0 0 2px rgb(217 70 239 / 0.5), /* fuchsia ring */
+    0 0 30px rgb(217 70 239 / 0.15); /* fuchsia glow */
+}
+
+/* For nested cards - also changes background */
+.glass-nested.glass-selected {
+  background: rgb(217 70 239 / 0.05);
+  box-shadow:
+    0 0 0 2px rgb(217 70 239 / 0.5),
+    inset 0 0 0 1px rgb(255 255 255 / 0.05),
+    inset 0 0 35px rgb(0 0 0 / 0.12);
+}
+
+.glass-nested.glass-selected::after {
+  box-shadow: none; /* Override the ::after to avoid double shadows */
 }

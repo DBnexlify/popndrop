@@ -191,6 +191,12 @@ function Toast({
 // PROGRESS HEADER COMPONENT - Premium scroll-morph behavior
 // Transitions smoothly from floating glassmorphism card to docked header
 // Matches site header dimensions exactly when docked (h-14 mobile, h-16 desktop)
+//
+// CROSS-PLATFORM NOTES:
+// - iOS: Uses env(safe-area-inset-top) for notch handling
+// - Android: May or may not have safe area, but `env()` gracefully falls back to 0
+// - The sticky positioning uses `top: 0` which works consistently across platforms
+//   when combined with proper safe area padding on the content
 // =============================================================================
 
 function WizardHeader({
@@ -240,11 +246,22 @@ function WizardHeader({
       {/* Sentinel element - sits above the header to detect scroll position */}
       <div ref={sentinelRef} className="absolute top-0 h-1 w-full" />
 
+      {/* 
+        CROSS-PLATFORM STICKY FIX:
+        Using `top: 0` works on both iOS and Android. The key is to handle
+        safe areas in the CONTENT, not the sticky position itself.
+        This prevents the header from going "out of view" on Android.
+      */}
       <div
         ref={headerRef}
         className="sticky top-0 z-50"
-        // GPU acceleration for smooth transforms
-        style={{ transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
+        // GPU acceleration for smooth transforms on all platforms
+        style={{ 
+          transform: 'translateZ(0)', 
+          WebkitTransform: 'translateZ(0)',
+          // Ensure sticky works even with transform applied
+          willChange: 'transform',
+        }}
       >
         {/* Outer wrapper handles the spacing transition */}
         <div
@@ -254,6 +271,8 @@ function WizardHeader({
               ? "px-0 py-0" // Full-width docked state
               : "px-4 pt-3 pb-1" // Floating card with margin
           )}
+          // When docked, account for top safe area (iOS notch, Android status bar)
+          style={isAtTop ? { paddingTop: 'env(safe-area-inset-top, 0px)' } : undefined}
         >
           {/* Main morphing container */}
           <div
@@ -278,17 +297,18 @@ function WizardHeader({
                   ]
             )}
           >
-            {/* Content container - height matches site header when docked */}
+            {/* 
+              Content container - consistent height across platforms
+              Using min-h-14 instead of h-14 for more resilient vertical centering
+            */}
             <div
               className={cn(
                 "flex items-center gap-3",
                 "transition-all duration-[280ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
                 isAtTop
-                  ? "h-14 px-4" // Match site header: h-14 (56px) on mobile
+                  ? "min-h-14 px-4" // Match site header: min-h-14 (56px) on mobile
                   : "h-auto px-4 py-3" // Floating: natural height with padding
               )}
-              // iOS safe area support when docked at top
-              style={isAtTop ? { paddingTop: 'env(safe-area-inset-top, 0px)' } : undefined}
             >
               {/* Back button */}
               <button

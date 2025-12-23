@@ -4,16 +4,32 @@ import Link from "next/link";
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-14 max-w-5xl items-center px-4 sm:h-16 sm:px-6">
-        {/* Mobile: Centered brand */}
-        <div className="flex w-full items-center justify-center sm:hidden">
+    <header 
+      className="sticky top-0 z-50 w-full border-b border-white/5 bg-background/80 backdrop-blur-xl"
+      // Safe area handling for devices with status bar overlays
+      style={{
+        // Ensure header accounts for any top safe area (iOS notch, Android status bar)
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+      }}
+    >
+      {/* 
+        CROSS-PLATFORM VERTICAL CENTERING FIX:
+        Using explicit min-height instead of just h-14 ensures consistent behavior.
+        The flexbox centering is the same, but min-height is more resilient.
+      */}
+      <div className="mx-auto flex min-h-14 max-w-5xl items-center justify-center px-4 sm:min-h-16 sm:px-6">
+        {/* Mobile: Centered brand with explicit vertical alignment */}
+        <div className="flex h-full w-full items-center justify-center sm:hidden">
           <Link 
             href="/" 
-            className="transition-opacity hover:opacity-80"
+            className="flex items-center transition-opacity hover:opacity-80"
             aria-label="Pop and Drop Party Rentals - Home"
           >
-            <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-base font-semibold tracking-tight text-transparent">
+            {/* 
+              Using leading-none and explicit line-height ensures text is
+              visually centered regardless of platform font rendering differences
+            */}
+            <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-base font-semibold leading-none tracking-tight text-transparent">
               Pop and Drop Party Rentals
             </span>
           </Link>
@@ -23,10 +39,10 @@ export function SiteHeader() {
         <div className="hidden w-full items-center justify-between sm:flex">
           <Link 
             href="/" 
-            className="transition-opacity hover:opacity-80"
+            className="flex items-center transition-opacity hover:opacity-80"
             aria-label="Pop and Drop Party Rentals - Home"
           >
-            <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-lg font-semibold tracking-tight text-transparent">
+            <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-lg font-semibold leading-none tracking-tight text-transparent">
               Pop and Drop Party Rentals
             </span>
           </Link>
