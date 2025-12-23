@@ -51,13 +51,10 @@ function DialogOverlay({
 /**
  * DIALOG CONTENT
  * ==============
- * Mobile-first dialog with proper spacing and safe margins.
+ * Mobile-first dialog with PROPER centering on all platforms.
  * 
- * Features:
- * - Consistent 16px (mx-4) margins on mobile
- * - Constrained max-width on desktop (sm:max-w-lg)
- * - Glassmorphism background styling
- * - Smooth enter/exit animations
+ * CRITICAL FIX: Uses inset-0 + margin:auto for bulletproof centering
+ * instead of translate transforms which can break on Android.
  */
 function DialogContent({
   className,
@@ -73,17 +70,16 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          // Positioning: centered in viewport
-          "fixed top-[50%] left-[50%] z-50",
-          "translate-x-[-50%] translate-y-[-50%]",
+          // CRITICAL: Bulletproof centering that works on iOS AND Android
+          // Using inset-0 + margin:auto instead of translate transforms
+          "fixed inset-0 z-50 m-auto",
           
-          // Mobile-first width: full width with 16px margins (max-w-[calc(100%-2rem)])
-          "w-full max-w-[calc(100vw-2rem)]",
-          // Desktop: constrained max-width
-          "sm:max-w-lg",
+          // Size constraints
+          "h-fit max-h-[85vh]",
+          "w-[calc(100%-2rem)] max-w-lg",
           
           // Base styling
-          "grid gap-4 rounded-2xl border p-6",
+          "overflow-hidden rounded-2xl border",
           "bg-background shadow-lg",
           "outline-none",
           
@@ -97,12 +93,15 @@ function DialogContent({
         )}
         {...props}
       >
-        {children}
+        {/* Scrollable content wrapper */}
+        <div className="max-h-[85vh] overflow-y-auto">
+          {children}
+        </div>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
             className={cn(
-              "absolute top-4 right-4",
+              "absolute top-4 right-4 z-10",
               "flex h-8 w-8 items-center justify-center",
               "rounded-full bg-white/10 transition-colors hover:bg-white/20",
               "ring-offset-background",

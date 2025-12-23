@@ -119,13 +119,20 @@ export default async function AdminDashboardLayout({
             </div>{/* End header content */}
           </header>
           
-          {/* Page content */}
-          <main className="min-h-[calc(100vh-3.5rem)] pb-24 lg:min-h-screen lg:pb-0">
+          {/* 
+            PAGE CONTENT
+            ============
+            CRITICAL: Bottom padding for floating nav
+            - pb-32 (128px) = nav height (~70px) + safe area (~34px) + spacing (~24px)
+            - This ensures ALL content is scrollable above the floating nav
+            - Desktop (lg:) has no bottom nav so pb-0
+          */}
+          <main className="min-h-[calc(100vh-3.5rem)] pb-32 lg:min-h-screen lg:pb-0">
             {children}
           </main>
         </div>
         
-        {/* Mobile bottom nav */}
+        {/* Mobile bottom nav - floating pill, no banner */}
         <AdminMobileNav />
         
         {/* PWA install prompt */}

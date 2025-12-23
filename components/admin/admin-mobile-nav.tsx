@@ -1,7 +1,7 @@
 // =============================================================================
 // ADMIN MOBILE BOTTOM NAVIGATION
 // components/admin/admin-mobile-nav.tsx
-// Premium glassmorphism design with cross-platform safe area handling
+// Pure floating pill navigation - NO background banner
 // =============================================================================
 
 'use client';
@@ -52,11 +52,8 @@ const SCROLL_DELTA_MIN = 8;
 /**
  * ADMIN MOBILE BOTTOM NAVIGATION
  * ===============================
- * Cross-platform fixed bottom navigation with:
- * - iOS home indicator safe area handling
- * - Android gesture navigation support
- * - Scroll-responsive collapse behavior
- * - GPU-accelerated animations
+ * Pure floating pill design - NO background banner.
+ * The pill floats above content with proper safe area spacing.
  */
 export function AdminMobileNav() {
   const pathname = usePathname();
@@ -103,33 +100,35 @@ export function AdminMobileNav() {
   
   return (
     <>
-      {/* Bottom Navigation Bar */}
+      {/* 
+        FLOATING PILL NAVIGATION
+        ========================
+        - NO background banner - just the floating pill
+        - Uses safe-area-inset-bottom for iOS home indicator spacing
+        - Pill floats above content
+      */}
       <nav 
         ref={navRef}
         data-collapsed="false"
         aria-label="Admin navigation"
-        className="group/nav fixed inset-x-0 bottom-0 z-50 lg:hidden"
-        style={{
-          transform: 'translateZ(0)',
-          WebkitTransform: 'translateZ(0)',
-          willChange: 'transform',
-        }}
+        className="group/nav fixed inset-x-0 bottom-0 z-50 pointer-events-none lg:hidden"
       >
-        {/* Background layer - extends into safe area */}
+        {/* Floating pill container with safe area margin */}
         <div 
-          className="absolute inset-0 border-t border-white/5 bg-neutral-950/90 backdrop-blur-xl"
+          className="pointer-events-auto mx-auto max-w-5xl px-3"
           style={{
-            bottom: 'calc(-1 * env(safe-area-inset-bottom, 0px))',
-            height: 'calc(100% + env(safe-area-inset-bottom, 0px))',
+            // Add safe area margin at bottom (iOS home indicator)
+            paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))',
           }}
-          aria-hidden="true"
-        />
-
-        {/* Content container - sits above safe area */}
-        <div className="relative mx-auto max-w-5xl px-3 pb-3 pt-2">
+        >
+          {/* The floating pill itself */}
           <div
             className={cn(
-              "rounded-2xl border border-white/10 bg-background/70 backdrop-blur-xl",
+              // Glassmorphism pill
+              "rounded-2xl border border-white/10 bg-neutral-900/90 backdrop-blur-xl",
+              // Subtle shadow for floating effect
+              "shadow-[0_4px_20px_rgba(0,0,0,0.4)]",
+              // Smooth animations
               "transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]"
             )}
           >
@@ -217,13 +216,6 @@ export function AdminMobileNav() {
             </div>
           </div>
         </div>
-
-        {/* Safe area spacer */}
-        <div 
-          className="pointer-events-none"
-          style={{ height: 'env(safe-area-inset-bottom, 0px)' }}
-          aria-hidden="true"
-        />
       </nav>
 
       {/* More Menu Overlay */}
@@ -240,7 +232,7 @@ export function AdminMobileNav() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="rounded-t-3xl border-t border-white/10 bg-neutral-900/98 backdrop-blur-xl">
-              {/* Content with safe padding */}
+              {/* Content with padding */}
               <div className="p-6">
                 {/* Handle bar */}
                 <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-white/20" />
@@ -323,7 +315,7 @@ export function AdminMobileNav() {
                 </div>
               </div>
               
-              {/* Safe area at bottom of menu */}
+              {/* Safe area spacer at bottom of menu */}
               <div 
                 style={{ height: 'env(safe-area-inset-bottom, 0px)' }}
                 aria-hidden="true"

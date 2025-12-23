@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -40,10 +39,11 @@ import {
   Users,
   Loader2,
   MoreVertical,
-  Pencil,
   Ban,
   Trash2,
   RefreshCw,
+  User,
+  UserX,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -96,6 +96,68 @@ const styles = {
   label: 'text-sm font-medium text-foreground/70',
   helperText: 'text-xs text-foreground/40',
 } as const;
+
+// =============================================================================
+// CUSTOM TOGGLE COMPONENT
+// Matches the NotificationToggle and SoundToggle in pwa-provider.tsx
+// =============================================================================
+
+function CustomToggle({
+  checked,
+  onChange,
+  label,
+  description,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+  description?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="group flex w-full items-center gap-4 rounded-lg p-4 text-left transition-all hover:bg-white/5"
+    >
+      {/* Toggle Track - matches NotificationToggle/SoundToggle exactly */}
+      <div 
+        className={cn(
+          "relative h-6 w-11 shrink-0 rounded-full p-0.5 transition-all duration-300",
+          checked 
+            ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 shadow-[0_0_12px_rgba(217,70,239,0.4)]" 
+            : "bg-neutral-700"
+        )}
+      >
+        {/* Sliding Knob */}
+        <div 
+          className={cn(
+            "flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-md transition-all duration-300",
+            checked ? "translate-x-5" : "translate-x-0"
+          )}
+        >
+          {checked ? (
+            <User className="h-3 w-3 text-fuchsia-600" />
+          ) : (
+            <UserX className="h-3 w-3 text-neutral-400" />
+          )}
+        </div>
+      </div>
+      
+      {/* Label & Description */}
+      <div className="flex-1 min-w-0">
+        <p className={cn(
+          "text-sm font-medium transition-colors",
+          checked ? "text-fuchsia-400" : "text-foreground/70"
+        )}>
+          {label}
+        </p>
+        {description && (
+          <p className="mt-0.5 text-xs text-foreground/40">{description}</p>
+        )}
+      </div>
+    </button>
+  );
+}
 
 // =============================================================================
 // TYPES
@@ -496,7 +558,8 @@ function PromoCodeRow({
 
 // =============================================================================
 // CREATE PROMO CODE DIALOG
-// Premium mobile-first dialog with proper spacing and consistent card styling
+// Premium mobile-first dialog with proper spacing
+// FIXES: iOS field overlap, Android centering, toggle consistency
 // =============================================================================
 
 function CreatePromoCodeDialog({
@@ -583,16 +646,9 @@ function CreatePromoCodeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent 
         className={cn(
-          // Mobile-first: Full width with safe margins
-          'mx-4 max-w-[calc(100vw-2rem)]',
-          // Desktop: Constrained width
-          'sm:mx-auto sm:max-w-lg',
           // Glassmorphism styling
-          'overflow-hidden rounded-2xl',
-          'border border-white/10 bg-background/95 backdrop-blur-xl',
-          'shadow-[0_20px_70px_rgba(0,0,0,0.3)]',
-          // Max height with scroll
-          'max-h-[85vh] overflow-y-auto'
+          'border-white/10 bg-neutral-900/98 backdrop-blur-xl',
+          'shadow-[0_20px_70px_rgba(0,0,0,0.4)]'
         )}
       >
         <DialogHeader className="px-5 pt-5 sm:px-6 sm:pt-6">
@@ -604,180 +660,176 @@ function CreatePromoCodeDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 px-5 pb-5 sm:space-y-5 sm:px-6 sm:pb-6">
-          {/* Code Input */}
-          <div className="space-y-2">
-            <Label className={styles.label}>Code (leave blank to auto-generate)</Label>
-            <Input
-              value={customCode}
-              onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
-              placeholder="PND-XXXXXX"
-              className={cn(styles.input, 'uppercase font-mono')}
-              maxLength={20}
-            />
-          </div>
-
-          {/* Discount Type & Amount - Side by side */}
-          <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit} className="px-5 pb-5 sm:px-6 sm:pb-6">
+          {/* Form fields with EXPLICIT gaps to prevent iOS overlap */}
+          <div className="space-y-5">
+            {/* Code Input */}
             <div className="space-y-2">
-              <Label className={styles.label}>Type *</Label>
-              <Select value={discountType} onValueChange={(v) => setDiscountType(v as PromoDiscountType)}>
-                <SelectTrigger className={styles.input}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="percent">Percent (%)</SelectItem>
-                  <SelectItem value="fixed">Fixed ($)</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className={styles.label}>Code (leave blank to auto-generate)</Label>
+              <Input
+                value={customCode}
+                onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
+                placeholder="PND-XXXXXX"
+                className={cn(styles.input, 'uppercase font-mono')}
+                maxLength={20}
+              />
             </div>
-            <div className="space-y-2">
-              <Label className={styles.label}>Amount *</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/50">
-                  {discountType === 'percent' ? '%' : '$'}
-                </span>
-                <Input
-                  type="number"
-                  value={discountAmount}
-                  onChange={(e) => setDiscountAmount(e.target.value)}
-                  placeholder={discountType === 'percent' ? '25' : '10'}
-                  className={cn(styles.input, 'pl-8')}
-                  min="0"
-                  max={discountType === 'percent' ? '100' : undefined}
-                  step="0.01"
-                  required
-                />
+
+            {/* Discount Type & Amount - STACKED on mobile, side-by-side on tablet+ */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:gap-4">
+              <div className="flex-1 space-y-2">
+                <Label className={styles.label}>Type *</Label>
+                <Select value={discountType} onValueChange={(v) => setDiscountType(v as PromoDiscountType)}>
+                  <SelectTrigger className={styles.input}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percent">Percent (%)</SelectItem>
+                    <SelectItem value="fixed">Fixed ($)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1 space-y-2">
+                <Label className={styles.label}>Amount *</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/50">
+                    {discountType === 'percent' ? '%' : '$'}
+                  </span>
+                  <Input
+                    type="number"
+                    value={discountAmount}
+                    onChange={(e) => setDiscountAmount(e.target.value)}
+                    placeholder={discountType === 'percent' ? '25' : '10'}
+                    className={cn(styles.input, 'pl-8')}
+                    min="0"
+                    max={discountType === 'percent' ? '100' : undefined}
+                    step="0.01"
+                    required
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Max Cap (for percent discounts) */}
-          {discountType === 'percent' && (
+            {/* Max Cap (for percent discounts) */}
+            {discountType === 'percent' && (
+              <div className="space-y-2">
+                <Label className={styles.label}>Maximum Discount Cap</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/50">$</span>
+                  <Input
+                    type="number"
+                    value={maxCap}
+                    onChange={(e) => setMaxCap(e.target.value)}
+                    placeholder="50"
+                    className={cn(styles.input, 'pl-8')}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <p className={styles.helperText}>
+                  E.g., 25% off with $50 max → $200 order gets $50 off
+                </p>
+              </div>
+            )}
+
+            {/* Minimum Order */}
             <div className="space-y-2">
-              <Label className={styles.label}>Maximum Discount Cap</Label>
+              <Label className={styles.label}>Minimum Order Amount</Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/50">$</span>
                 <Input
                   type="number"
-                  value={maxCap}
-                  onChange={(e) => setMaxCap(e.target.value)}
-                  placeholder="50"
+                  value={minOrder}
+                  onChange={(e) => setMinOrder(e.target.value)}
+                  placeholder="100"
                   className={cn(styles.input, 'pl-8')}
                   min="0"
                   step="0.01"
                 />
               </div>
-              <p className={styles.helperText}>
-                E.g., 25% off with $50 max → $200 order gets $50 off
-              </p>
             </div>
-          )}
 
-          {/* Minimum Order */}
-          <div className="space-y-2">
-            <Label className={styles.label}>Minimum Order Amount</Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/50">$</span>
-              <Input
-                type="number"
-                value={minOrder}
-                onChange={(e) => setMinOrder(e.target.value)}
-                placeholder="100"
-                className={cn(styles.input, 'pl-8')}
-                min="0"
-                step="0.01"
-              />
-            </div>
-          </div>
-
-          {/* Expiration & Usage Limit - Side by side */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label className={styles.label}>Expires</Label>
-              <Input
-                type="date"
-                value={expirationDate}
-                onChange={(e) => setExpirationDate(e.target.value)}
-                className={styles.input}
-                min={new Date().toISOString().split('T')[0]}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className={styles.label}>Max Uses</Label>
-              <Input
-                type="number"
-                value={usageLimit}
-                onChange={(e) => setUsageLimit(e.target.value)}
-                placeholder="∞"
-                className={styles.input}
-                min="1"
-              />
-            </div>
-          </div>
-
-          {/* Single Use Toggle - REDESIGNED */}
-          <div className={cn(styles.nestedCard, 'p-4')}>
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">One use per customer</p>
-                <p className={cn(styles.helperText, 'mt-0.5')}>
-                  Each customer can only use this code once
-                </p>
+            {/* Expiration & Usage Limit - STACKED on mobile */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:gap-4">
+              <div className="flex-1 space-y-2">
+                <Label className={styles.label}>Expires</Label>
+                <Input
+                  type="date"
+                  value={expirationDate}
+                  onChange={(e) => setExpirationDate(e.target.value)}
+                  className={styles.input}
+                  min={new Date().toISOString().split('T')[0]}
+                />
               </div>
-              <Switch 
-                checked={singleUse} 
-                onCheckedChange={setSingleUse}
-                className="shrink-0"
+              <div className="flex-1 space-y-2">
+                <Label className={styles.label}>Max Uses</Label>
+                <Input
+                  type="number"
+                  value={usageLimit}
+                  onChange={(e) => setUsageLimit(e.target.value)}
+                  placeholder="Unlimited"
+                  className={styles.input}
+                  min="1"
+                />
+              </div>
+            </div>
+
+            {/* Single Use Toggle - MATCHES NotificationToggle/SoundToggle */}
+            <div className={cn(styles.nestedCard)}>
+              <CustomToggle
+                checked={singleUse}
+                onChange={setSingleUse}
+                label="One use per customer"
+                description="Each customer can only use this code once"
+              />
+              <div className={styles.nestedCardInner} />
+            </div>
+
+            {/* Campaign Name */}
+            <div className="space-y-2">
+              <Label className={styles.label}>Campaign Name</Label>
+              <Input
+                value={campaignName}
+                onChange={(e) => setCampaignName(e.target.value)}
+                placeholder="Summer 2024, Referral, etc."
+                className={styles.input}
               />
             </div>
-            <div className={styles.nestedCardInner} />
-          </div>
 
-          {/* Campaign Name */}
-          <div className="space-y-2">
-            <Label className={styles.label}>Campaign Name</Label>
-            <Input
-              value={campaignName}
-              onChange={(e) => setCampaignName(e.target.value)}
-              placeholder="Summer 2024, Referral, etc."
-              className={styles.input}
-            />
-          </div>
+            {/* Public Description */}
+            <div className="space-y-2">
+              <Label className={styles.label}>Public Description</Label>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Summer special - 25% off!"
+                className={styles.input}
+              />
+              <p className={styles.helperText}>Shown to customers when code is applied</p>
+            </div>
 
-          {/* Public Description */}
-          <div className="space-y-2">
-            <Label className={styles.label}>Public Description</Label>
-            <Input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Summer special - 25% off!"
-              className={styles.input}
-            />
-            <p className={styles.helperText}>Shown to customers when code is applied</p>
-          </div>
-
-          {/* Internal Notes */}
-          <div className="space-y-2">
-            <Label className={styles.label}>Internal Notes</Label>
-            <Input
-              value={internalNotes}
-              onChange={(e) => setInternalNotes(e.target.value)}
-              placeholder="Created for VIP customer John"
-              className={styles.input}
-            />
-            <p className={styles.helperText}>Admin only - not shown to customers</p>
+            {/* Internal Notes */}
+            <div className="space-y-2">
+              <Label className={styles.label}>Internal Notes</Label>
+              <Input
+                value={internalNotes}
+                onChange={(e) => setInternalNotes(e.target.value)}
+                placeholder="Created for VIP customer John"
+                className={styles.input}
+              />
+              <p className={styles.helperText}>Admin only - not shown to customers</p>
+            </div>
           </div>
 
           {/* Error Message */}
           {error && (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+            <div className="mt-5 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
               <p className="text-sm text-red-400">{error}</p>
             </div>
           )}
 
           {/* Action Buttons */}
-          <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
