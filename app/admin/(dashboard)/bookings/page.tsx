@@ -22,12 +22,11 @@ import type { BookingStatus } from '@/lib/database-types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { StatusFilterPills } from '@/components/admin/status-filter-pills';
 import {
   Search,
   ChevronRight,
-  Filter,
   Calendar,
-  Phone,
   MapPin,
 } from 'lucide-react';
 
@@ -45,7 +44,7 @@ interface PageProps {
   }>;
 }
 
-const STATUS_OPTIONS: { value: BookingStatus | 'all'; label: string }[] = [
+const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'pending', label: 'Pending' },
   { value: 'confirmed', label: 'Confirmed' },
@@ -99,28 +98,13 @@ export default async function AdminBookingsPage({ searchParams }: PageProps) {
           />
         </form>
         
-        {/* Status filter tabs */}
-        <div className="flex flex-wrap gap-1.5">
-          {STATUS_OPTIONS.map((option) => {
-            const isActive = 
-              (option.value === 'all' && !statusFilter) || 
-              statusFilter === option.value;
-            
-            return (
-              <Link
-                key={option.value}
-                href={`/admin/bookings${option.value === 'all' ? '' : `?status=${option.value}`}`}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                  isActive
-                    ? 'bg-white/10 text-white'
-                    : 'text-foreground/60 hover:bg-white/5 hover:text-foreground'
-                }`}
-              >
-                {option.label}
-              </Link>
-            );
-          })}
-        </div>
+        {/* Status filter pills - using shared component */}
+        <StatusFilterPills
+          options={STATUS_OPTIONS}
+          activeValue={statusFilter || 'all'}
+          baseUrl="/admin/bookings"
+          paramName="status"
+        />
       </div>
       
       {/* Bookings List */}

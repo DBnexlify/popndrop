@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ClientStatusFilterPills } from "@/components/admin/status-filter-pills";
 import { cn } from "@/lib/utils";
 import { formatEventDateShort, formatTimestamp } from "@/lib/timezone";
 import {
@@ -486,25 +487,13 @@ export function CancellationRequestsList({
 
   return (
     <div className="space-y-4">
-      {/* Filter tabs */}
+      {/* Filter tabs - using shared component */}
       <div className="flex flex-wrap items-center gap-2">
-        {statusTabs.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => setStatusFilter(tab.value)}
-            className={cn(
-              "rounded-full px-3 py-1.5 text-sm font-medium transition-all",
-              statusFilter === tab.value
-                ? "bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white"
-                : "bg-white/5 text-foreground/60 hover:bg-white/10 hover:text-foreground"
-            )}
-          >
-            {tab.label}
-            {tab.count > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({tab.count})</span>
-            )}
-          </button>
-        ))}
+        <ClientStatusFilterPills
+          options={statusTabs}
+          activeValue={statusFilter}
+          onChange={setStatusFilter}
+        />
 
         <Button
           variant="ghost"

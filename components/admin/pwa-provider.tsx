@@ -387,8 +387,23 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 }
 
 // =============================================================================
-// NOTIFICATION TOGGLE - COMPACT VERTICAL BELL SWITCH
-// Bell icon inside a vertical toggle: UP = ON, DOWN = OFF
+// SHARED TOGGLE STYLES
+// Both toggles use identical dimensions and styling for consistency
+// =============================================================================
+
+const toggleStyles = {
+  // Track dimensions - SAME for both toggles
+  track: "relative h-6 w-11 rounded-full p-0.5 transition-all duration-300",
+  // Knob dimensions - SAME for both toggles
+  knob: "flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-md transition-all duration-300",
+  // Container
+  container: "group flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-white/5",
+  // Label
+  label: "text-xs font-medium transition-colors",
+} as const;
+
+// =============================================================================
+// NOTIFICATION TOGGLE - HORIZONTAL (matches Sound toggle)
 // =============================================================================
 
 export function NotificationToggle() {
@@ -428,11 +443,11 @@ export function NotificationToggle() {
     }
   };
 
-  // Not supported - show disabled bell
+  // Not supported - show disabled state
   if (typeof window === "undefined" || !("Notification" in window)) {
     return (
-      <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/40">
-        <BellOff className="h-5 w-5" />
+      <div className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-foreground/40">
+        <BellOff className="h-4 w-4" />
         <span className="text-xs">Not supported</span>
       </div>
     );
@@ -442,10 +457,10 @@ export function NotificationToggle() {
   if (notificationPermission === "denied") {
     return (
       <div 
-        className="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-400/70"
+        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-400/70"
         title="Notifications blocked in browser settings"
       >
-        <BellOff className="h-5 w-5" />
+        <BellOff className="h-4 w-4" />
         <span className="text-xs">Blocked</span>
       </div>
     );
@@ -454,7 +469,7 @@ export function NotificationToggle() {
   // VAPID not configured
   if (!vapidConfigured) {
     return (
-      <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-amber-400/70">
+      <div className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-amber-400/70">
         <AlertTriangle className="h-4 w-4" />
         <span className="text-xs">Not configured</span>
       </div>
@@ -466,9 +481,9 @@ export function NotificationToggle() {
     return (
       <button
         onClick={retryServiceWorker}
-        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-400/70 transition-colors hover:bg-white/5 hover:text-red-400"
+        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-400/70 transition-colors hover:bg-white/5 hover:text-red-400"
       >
-        <RefreshCw className="h-5 w-5" />
+        <RefreshCw className="h-4 w-4" />
         <span className="text-xs">Retry</span>
       </button>
     );
@@ -477,14 +492,14 @@ export function NotificationToggle() {
   // Loading service worker
   if (swStatus === "loading") {
     return (
-      <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/40">
-        <Loader2 className="h-5 w-5 animate-spin" />
+      <div className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-foreground/40">
+        <Loader2 className="h-4 w-4 animate-spin" />
         <span className="text-xs">Loading...</span>
       </div>
     );
   }
 
-  // Ready - show the vertical bell toggle!
+  // Ready - show horizontal toggle (matching Sound toggle exactly)
   return (
     <div className="relative">
       <button
@@ -492,33 +507,31 @@ export function NotificationToggle() {
         disabled={loading}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
-        className={`group flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${
-          loading ? "opacity-60 cursor-wait" : "cursor-pointer hover:bg-white/5"
-        }`}
+        className={`${toggleStyles.container} ${loading ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
         aria-label={isSubscribed ? "Turn off notifications" : "Turn on notifications"}
       >
-        {/* Vertical Toggle Track */}
-        <div className={`relative h-14 w-8 rounded-full p-1 transition-all duration-300 ${
+        {/* Horizontal Toggle Track - SAME as SoundToggle */}
+        <div className={`${toggleStyles.track} ${
           isSubscribed 
-            ? "bg-gradient-to-b from-green-400 to-green-600 shadow-[0_0_12px_rgba(34,197,94,0.4)]" 
+            ? "bg-gradient-to-r from-green-400 to-green-600 shadow-[0_0_12px_rgba(34,197,94,0.4)]" 
             : "bg-neutral-700"
         }`}>
-          {/* Sliding Bell Button */}
-          <div className={`flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-md transition-all duration-300 ${
-            isSubscribed ? "translate-y-0" : "translate-y-6"
+          {/* Sliding Knob - SAME as SoundToggle */}
+          <div className={`${toggleStyles.knob} ${
+            isSubscribed ? "translate-x-5" : "translate-x-0"
           }`}>
             {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-neutral-600" />
+              <Loader2 className="h-3 w-3 animate-spin text-neutral-600" />
+            ) : isSubscribed ? (
+              <Bell className="h-3 w-3 text-green-600" />
             ) : (
-              <Bell className={`h-3.5 w-3.5 transition-colors ${
-                isSubscribed ? "text-green-600" : "text-neutral-400"
-              }`} />
+              <BellOff className="h-3 w-3 text-neutral-400" />
             )}
           </div>
         </div>
         
         {/* Label */}
-        <span className={`text-xs font-medium transition-colors ${
+        <span className={`${toggleStyles.label} ${
           isSubscribed ? "text-green-400" : "text-foreground/50"
         }`}>
           {loading ? "..." : isSubscribed ? "Alerts on" : "Alerts off"}
@@ -653,7 +666,7 @@ export function OfflineIndicator() {
 }
 
 // =============================================================================
-// SOUND TOGGLE - Toggle notification sounds on/off
+// SOUND TOGGLE - HORIZONTAL (reference design for both toggles)
 // =============================================================================
 
 export function SoundToggle() {
@@ -683,17 +696,17 @@ export function SoundToggle() {
         onClick={handleToggle}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
-        className="group flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-white/5"
+        className={toggleStyles.container}
         aria-label={enabled ? "Turn off sounds" : "Turn on sounds"}
       >
-        {/* Toggle Track */}
-        <div className={`relative h-6 w-11 rounded-full p-0.5 transition-all duration-300 ${
+        {/* Horizontal Toggle Track - SAME as NotificationToggle */}
+        <div className={`${toggleStyles.track} ${
           enabled 
             ? "bg-gradient-to-r from-cyan-400 to-cyan-600 shadow-[0_0_12px_rgba(6,182,212,0.4)]" 
             : "bg-neutral-700"
         }`}>
-          {/* Sliding Circle */}
-          <div className={`flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-md transition-all duration-300 ${
+          {/* Sliding Knob - SAME as NotificationToggle */}
+          <div className={`${toggleStyles.knob} ${
             enabled ? "translate-x-5" : "translate-x-0"
           }`}>
             {enabled ? (
@@ -705,7 +718,7 @@ export function SoundToggle() {
         </div>
         
         {/* Label */}
-        <span className={`text-xs font-medium transition-colors ${
+        <span className={`${toggleStyles.label} ${
           enabled ? "text-cyan-400" : "text-foreground/50"
         }`}>
           {enabled ? "Sound on" : "Sound off"}
