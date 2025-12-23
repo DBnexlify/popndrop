@@ -23,12 +23,13 @@ export const metadata: Metadata = {
   manifest: '/admin/manifest.json',
   
   // Apple PWA icons - CRITICAL: Apple ignores manifest.json icons!
-  // These link tags are required for home screen icons on iOS
+  // Must use apple-touch-icon link tags for iOS home screen
   icons: {
+    // Standard favicon
+    icon: '/admin/icon-192.png',
+    // Apple touch icons - 180x180 is the primary size iOS uses
     apple: [
       { url: '/admin/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
-      { url: '/admin/apple-touch-icon-152.png', sizes: '152x152', type: 'image/png' },
-      { url: '/admin/apple-touch-icon-120.png', sizes: '120x120', type: 'image/png' },
     ],
   },
   
@@ -36,13 +37,6 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'P&D Admin',
-    // Startup image for iOS (optional but nice)
-    startupImage: [
-      {
-        url: '/admin/apple-splash-1170x2532.png',
-        media: '(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)',
-      },
-    ],
   },
   
   formatDetection: {
@@ -90,8 +84,12 @@ export default async function AdminDashboardLayout({
         
         {/* Main content */}
         <div className="lg:pl-64">
-          {/* Mobile header */}
-          <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-white/10 bg-neutral-950/80 px-4 backdrop-blur-xl lg:hidden">
+          {/* Mobile header - with safe area support for PWA standalone mode */}
+          <header className="sticky top-0 z-40 border-b border-white/10 bg-neutral-950/80 backdrop-blur-xl lg:hidden">
+            {/* Safe area spacer - fills the status bar area in PWA mode */}
+            <div className="h-[env(safe-area-inset-top,0px)] bg-neutral-950/80" />
+            {/* Header content */}
+            <div className="flex h-14 items-center justify-between px-4">
             <div className="flex items-center gap-2">
               <Image
                 src="/brand/logo.png"
@@ -116,6 +114,7 @@ export default async function AdminDashboardLayout({
                 ADMIN
               </span>
             </div>
+            </div>{/* End header content */}
           </header>
           
           {/* Page content */}

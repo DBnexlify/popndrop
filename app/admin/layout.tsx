@@ -3,9 +3,26 @@
 // app/admin/layout.tsx
 // =============================================================================
 
-export const metadata = {
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
   title: 'Admin | Pop and Drop Party Rentals',
   robots: 'noindex, nofollow',
+  
+  // Apple touch icons - defined here AND in dashboard layout for coverage
+  icons: {
+    icon: '/admin/icon-192.png',
+    apple: [
+      { url: '/admin/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
+  
+  // Apple PWA settings
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'P&D Admin',
+  },
 };
 
 export default function AdminRootLayout({
