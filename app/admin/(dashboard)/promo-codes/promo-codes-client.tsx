@@ -61,13 +61,40 @@ import {
 } from '@/lib/promo-code-types';
 
 // =============================================================================
-// STYLES
+// STYLES (Following Design System)
 // =============================================================================
 
 const styles = {
-  card: 'relative overflow-hidden rounded-xl border border-white/10 bg-background/50 shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl sm:rounded-2xl',
-  cardInner: 'pointer-events-none absolute inset-0 rounded-xl sm:rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]',
-  input: 'border-white/10 bg-white/5 focus:border-white/20 focus:ring-1 focus:ring-white/10',
+  // Tier 2: Standard Cards
+  card: cn(
+    'relative overflow-hidden rounded-xl',
+    'border border-white/10 bg-background/50',
+    'shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl',
+    'sm:rounded-2xl'
+  ),
+  cardInner: cn(
+    'pointer-events-none absolute inset-0 rounded-xl sm:rounded-2xl',
+    '[box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]'
+  ),
+  // Tier 3: Nested Cards (inside dialogs/cards)
+  nestedCard: cn(
+    'relative overflow-hidden rounded-lg',
+    'border border-white/5 bg-white/[0.03]',
+    'sm:rounded-xl'
+  ),
+  nestedCardInner: cn(
+    'pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl',
+    '[box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]'
+  ),
+  // Form inputs
+  input: cn(
+    'border-white/10 bg-white/5',
+    'placeholder:text-foreground/40',
+    'focus:border-white/20 focus:ring-1 focus:ring-white/10'
+  ),
+  // Typography
+  label: 'text-sm font-medium text-foreground/70',
+  helperText: 'text-xs text-foreground/40',
 } as const;
 
 // =============================================================================
@@ -469,6 +496,7 @@ function PromoCodeRow({
 
 // =============================================================================
 // CREATE PROMO CODE DIALOG
+// Premium mobile-first dialog with proper spacing and consistent card styling
 // =============================================================================
 
 function CreatePromoCodeDialog({
@@ -553,45 +581,60 @@ function CreatePromoCodeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto border-white/10 bg-background/95 backdrop-blur-xl sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Tag className="h-5 w-5 text-fuchsia-400" />
+      <DialogContent 
+        className={cn(
+          // Mobile-first: Full width with safe margins
+          'mx-4 max-w-[calc(100vw-2rem)]',
+          // Desktop: Constrained width
+          'sm:mx-auto sm:max-w-lg',
+          // Glassmorphism styling
+          'overflow-hidden rounded-2xl',
+          'border border-white/10 bg-background/95 backdrop-blur-xl',
+          'shadow-[0_20px_70px_rgba(0,0,0,0.3)]',
+          // Max height with scroll
+          'max-h-[85vh] overflow-y-auto'
+        )}
+      >
+        <DialogHeader className="px-5 pt-5 sm:px-6 sm:pt-6">
+          <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-fuchsia-500/10">
+              <Tag className="h-4 w-4 text-fuchsia-400" />
+            </div>
             Create Promo Code
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Code */}
+        <form onSubmit={handleSubmit} className="space-y-4 px-5 pb-5 sm:space-y-5 sm:px-6 sm:pb-6">
+          {/* Code Input */}
           <div className="space-y-2">
-            <Label>Code (leave blank to auto-generate)</Label>
+            <Label className={styles.label}>Code (leave blank to auto-generate)</Label>
             <Input
               value={customCode}
               onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
               placeholder="PND-XXXXXX"
-              className={cn(styles.input, 'uppercase')}
+              className={cn(styles.input, 'uppercase font-mono')}
               maxLength={20}
             />
           </div>
 
-          {/* Discount Type & Amount */}
-          <div className="grid gap-4 sm:grid-cols-2">
+          {/* Discount Type & Amount - Side by side */}
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Discount Type *</Label>
+              <Label className={styles.label}>Type *</Label>
               <Select value={discountType} onValueChange={(v) => setDiscountType(v as PromoDiscountType)}>
                 <SelectTrigger className={styles.input}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="percent">Percentage (%)</SelectItem>
-                  <SelectItem value="fixed">Fixed Amount ($)</SelectItem>
+                  <SelectItem value="percent">Percent (%)</SelectItem>
+                  <SelectItem value="fixed">Fixed ($)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Amount *</Label>
+              <Label className={styles.label}>Amount *</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/50">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/50">
                   {discountType === 'percent' ? '%' : '$'}
                 </span>
                 <Input
@@ -609,12 +652,12 @@ function CreatePromoCodeDialog({
             </div>
           </div>
 
-          {/* Max Cap (for percent) */}
+          {/* Max Cap (for percent discounts) */}
           {discountType === 'percent' && (
             <div className="space-y-2">
-              <Label>Maximum Discount Cap (optional)</Label>
+              <Label className={styles.label}>Maximum Discount Cap</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/50">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/50">$</span>
                 <Input
                   type="number"
                   value={maxCap}
@@ -625,17 +668,17 @@ function CreatePromoCodeDialog({
                   step="0.01"
                 />
               </div>
-              <p className="text-xs text-foreground/40">
+              <p className={styles.helperText}>
                 E.g., 25% off with $50 max → $200 order gets $50 off
               </p>
             </div>
           )}
 
-          {/* Min Order */}
+          {/* Minimum Order */}
           <div className="space-y-2">
-            <Label>Minimum Order Amount (optional)</Label>
+            <Label className={styles.label}>Minimum Order Amount</Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/50">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/50">$</span>
               <Input
                 type="number"
                 value={minOrder}
@@ -648,10 +691,10 @@ function CreatePromoCodeDialog({
             </div>
           </div>
 
-          {/* Expiration & Usage */}
-          <div className="grid gap-4 sm:grid-cols-2">
+          {/* Expiration & Usage Limit - Side by side */}
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Expiration Date (optional)</Label>
+              <Label className={styles.label}>Expires</Label>
               <Input
                 type="date"
                 value={expirationDate}
@@ -661,30 +704,39 @@ function CreatePromoCodeDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>Usage Limit (optional)</Label>
+              <Label className={styles.label}>Max Uses</Label>
               <Input
                 type="number"
                 value={usageLimit}
                 onChange={(e) => setUsageLimit(e.target.value)}
-                placeholder="Unlimited"
+                placeholder="∞"
                 className={styles.input}
                 min="1"
               />
             </div>
           </div>
 
-          {/* Single Use */}
-          <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-3">
-            <div>
-              <p className="text-sm font-medium">One use per customer</p>
-              <p className="text-xs text-foreground/50">Each customer can only use this code once</p>
+          {/* Single Use Toggle - REDESIGNED */}
+          <div className={cn(styles.nestedCard, 'p-4')}>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">One use per customer</p>
+                <p className={cn(styles.helperText, 'mt-0.5')}>
+                  Each customer can only use this code once
+                </p>
+              </div>
+              <Switch 
+                checked={singleUse} 
+                onCheckedChange={setSingleUse}
+                className="shrink-0"
+              />
             </div>
-            <Switch checked={singleUse} onCheckedChange={setSingleUse} />
+            <div className={styles.nestedCardInner} />
           </div>
 
-          {/* Campaign & Description */}
+          {/* Campaign Name */}
           <div className="space-y-2">
-            <Label>Campaign Name (optional)</Label>
+            <Label className={styles.label}>Campaign Name</Label>
             <Input
               value={campaignName}
               onChange={(e) => setCampaignName(e.target.value)}
@@ -693,33 +745,39 @@ function CreatePromoCodeDialog({
             />
           </div>
 
+          {/* Public Description */}
           <div className="space-y-2">
-            <Label>Public Description (shown to customer)</Label>
+            <Label className={styles.label}>Public Description</Label>
             <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Summer special - 25% off!"
               className={styles.input}
             />
+            <p className={styles.helperText}>Shown to customers when code is applied</p>
           </div>
 
+          {/* Internal Notes */}
           <div className="space-y-2">
-            <Label>Internal Notes (admin only)</Label>
+            <Label className={styles.label}>Internal Notes</Label>
             <Input
               value={internalNotes}
               onChange={(e) => setInternalNotes(e.target.value)}
               placeholder="Created for VIP customer John"
               className={styles.input}
             />
+            <p className={styles.helperText}>Admin only - not shown to customers</p>
           </div>
 
-          {/* Error */}
+          {/* Error Message */}
           {error && (
-            <p className="text-sm text-red-400">{error}</p>
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+              <p className="text-sm text-red-400">{error}</p>
+            </div>
           )}
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-2">
+          {/* Action Buttons */}
+          <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
@@ -731,14 +789,19 @@ function CreatePromoCodeDialog({
             <Button
               type="submit"
               disabled={isSubmitting || !discountAmount}
-              className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white"
+              className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20"
             >
               {isSubmitting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
               ) : (
-                <Tag className="mr-2 h-4 w-4" />
+                <>
+                  <Tag className="mr-2 h-4 w-4" />
+                  Create Code
+                </>
               )}
-              Create Code
             </Button>
           </div>
         </form>

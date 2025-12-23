@@ -2,32 +2,61 @@
 
 import Link from "next/link";
 
+/**
+ * SITE HEADER
+ * ===========
+ * Cross-platform sticky header that handles:
+ * - iOS status bar / notch (via safe-area-inset-top)
+ * - Android status bar overlay
+ * - Consistent vertical centering across font rendering differences
+ * 
+ * ARCHITECTURE:
+ * - Uses position: sticky with top: 0
+ * - Safe area padding applied to header element itself
+ * - Content uses flexbox centering with min-height for resilience
+ * - GPU acceleration hints for smooth scroll behavior
+ * 
+ * @see https://developer.chrome.com/docs/css-ui/edge-to-edge
+ */
 export function SiteHeader() {
   return (
-    <header 
+    <header
       className="sticky top-0 z-50 w-full border-b border-white/5 bg-background/80 backdrop-blur-xl"
-      // Safe area handling for devices with status bar overlays
       style={{
-        // Ensure header accounts for any top safe area (iOS notch, Android status bar)
+        /*
+         * CROSS-PLATFORM SAFE AREA:
+         * - iOS: env() returns notch height (~44-47px on iPhone X+)
+         * - Android: env() typically returns 0 (status bar is outside viewport)
+         * - Fallback ensures no padding on devices without safe areas
+         * 
+         * GPU acceleration prevents sticky jank on Android
+         */
         paddingTop: 'env(safe-area-inset-top, 0px)',
+        transform: 'translateZ(0)',
+        WebkitTransform: 'translateZ(0)',
       }}
     >
-      {/* 
-        CROSS-PLATFORM VERTICAL CENTERING FIX:
-        Using explicit min-height instead of just h-14 ensures consistent behavior.
-        The flexbox centering is the same, but min-height is more resilient.
+      {/*
+        CONTENT CONTAINER
+        Uses min-height (not fixed height) for resilient vertical centering.
+        This handles font rendering differences between iOS and Android.
+        
+        The flex container with items-center handles vertical centering.
+        The inner content wrapper handles horizontal centering on mobile.
       */}
       <div className="mx-auto flex min-h-14 max-w-5xl items-center justify-center px-4 sm:min-h-16 sm:px-6">
-        {/* Mobile: Centered brand with explicit vertical alignment */}
+        {/* Mobile: Centered brand */}
         <div className="flex h-full w-full items-center justify-center sm:hidden">
-          <Link 
-            href="/" 
+          <Link
+            href="/"
             className="flex items-center transition-opacity hover:opacity-80"
             aria-label="Pop and Drop Party Rentals - Home"
           >
-            {/* 
-              Using leading-none and explicit line-height ensures text is
-              visually centered regardless of platform font rendering differences
+            {/*
+              Typography note:
+              - leading-none removes line-height contribution to vertical alignment
+              - tracking-tight tightens letter spacing for brand aesthetic
+              - bg-clip-text enables gradient text effect
             */}
             <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-base font-semibold leading-none tracking-tight text-transparent">
               Pop and Drop Party Rentals
@@ -37,8 +66,8 @@ export function SiteHeader() {
 
         {/* Desktop: Left brand + Right nav */}
         <div className="hidden w-full items-center justify-between sm:flex">
-          <Link 
-            href="/" 
+          <Link
+            href="/"
             className="flex items-center transition-opacity hover:opacity-80"
             aria-label="Pop and Drop Party Rentals - Home"
           >

@@ -1,7 +1,7 @@
 // =============================================================================
 // ADMIN MOBILE BOTTOM NAVIGATION
 // components/admin/admin-mobile-nav.tsx
-// Liquid glass design matching the main site mobile nav
+// Premium glassmorphism design with cross-platform safe area handling
 // =============================================================================
 
 'use client';
@@ -49,6 +49,15 @@ const SCROLL_THRESHOLD = 60;
 // Minimum scroll delta to trigger state change (prevents jitter)
 const SCROLL_DELTA_MIN = 8;
 
+/**
+ * ADMIN MOBILE BOTTOM NAVIGATION
+ * ===============================
+ * Cross-platform fixed bottom navigation with:
+ * - iOS home indicator safe area handling
+ * - Android gesture navigation support
+ * - Scroll-responsive collapse behavior
+ * - GPU-accelerated animations
+ */
 export function AdminMobileNav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -80,7 +89,6 @@ export function AdminMobileNav() {
   }, []);
 
   const handleScroll = useCallback(() => {
-    // Use requestAnimationFrame for smooth, non-blocking updates
     if (!ticking.current) {
       requestAnimationFrame(updateNavState);
       ticking.current = true;
@@ -88,38 +96,44 @@ export function AdminMobileNav() {
   }, [updateNavState]);
 
   useEffect(() => {
-    // Set initial state
     lastScrollY.current = window.scrollY;
-    
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
   
   return (
     <>
-      {/* Bottom Navigation Bar - Liquid Glass Design */}
+      {/* Bottom Navigation Bar */}
       <nav 
         ref={navRef}
         data-collapsed="false"
-        className="group/nav fixed bottom-0 left-0 right-0 z-50 lg:hidden"
+        aria-label="Admin navigation"
+        className="group/nav fixed inset-x-0 bottom-0 z-50 lg:hidden"
+        style={{
+          transform: 'translateZ(0)',
+          WebkitTransform: 'translateZ(0)',
+          willChange: 'transform',
+        }}
       >
-        {/* 
-          Safe area padding for Apple devices:
-          - Uses env(safe-area-inset-bottom) for iPhone home indicator
-          - Falls back to 12px (pb-3) on devices without safe areas
-          - The padding applies BELOW the nav card, not inside it
-        */}
-        <div className="mx-auto max-w-5xl px-3 pb-3 pb-safe">
+        {/* Background layer - extends into safe area */}
+        <div 
+          className="absolute inset-0 border-t border-white/5 bg-neutral-950/90 backdrop-blur-xl"
+          style={{
+            bottom: 'calc(-1 * env(safe-area-inset-bottom, 0px))',
+            height: 'calc(100% + env(safe-area-inset-bottom, 0px))',
+          }}
+          aria-hidden="true"
+        />
+
+        {/* Content container - sits above safe area */}
+        <div className="relative mx-auto max-w-5xl px-3 pb-3 pt-2">
           <div
             className={cn(
-              // Liquid glass effect
               "rounded-2xl border border-white/10 bg-background/70 backdrop-blur-xl",
-              // GPU-accelerated transitions
-              "transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
-              "will-change-transform"
+              "transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]"
             )}
           >
-            <div className="grid grid-cols-5 px-1.5 py-1.5">
+            <div className="grid grid-cols-5 px-1.5 py-1.5" role="menubar">
               {navItems.map((item) => {
                 const isActive = item.href === '/admin' 
                   ? pathname === '/admin'
@@ -129,14 +143,13 @@ export function AdminMobileNav() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    role="menuitem"
+                    aria-current={isActive ? "page" : undefined}
                     className={cn(
                       "relative flex flex-col items-center justify-center rounded-xl",
                       "px-1 py-2 transition-all duration-300 ease-out",
-                      // Collapsed state: tighter padding
                       "group-data-[collapsed=true]/nav:py-1.5",
-                      isActive 
-                        ? "bg-white/10" 
-                        : "active:bg-white/5"
+                      isActive ? "bg-white/10" : "active:bg-white/5"
                     )}
                   >
                     <item.icon 
@@ -145,12 +158,12 @@ export function AdminMobileNav() {
                         isActive ? "text-cyan-400 opacity-100" : "opacity-60"
                       )}
                       strokeWidth={isActive ? 2.25 : 2}
+                      aria-hidden="true"
                     />
                     <span 
                       className={cn(
                         "mt-1 text-[10px] leading-none",
                         "transition-all duration-300 ease-out origin-top",
-                        // Collapsed: scale to 0 height, fade out
                         "group-data-[collapsed=true]/nav:mt-0",
                         "group-data-[collapsed=true]/nav:h-0",
                         "group-data-[collapsed=true]/nav:opacity-0",
@@ -160,6 +173,7 @@ export function AdminMobileNav() {
                     >
                       {item.label}
                     </span>
+                    <span className="sr-only">{item.label}</span>
                   </Link>
                 );
               })}
@@ -167,6 +181,9 @@ export function AdminMobileNav() {
               {/* More button */}
               <button
                 onClick={() => setMenuOpen(true)}
+                role="menuitem"
+                aria-expanded={menuOpen}
+                aria-haspopup="true"
                 className={cn(
                   "relative flex flex-col items-center justify-center rounded-xl",
                   "px-1 py-2 transition-all duration-300 ease-out",
@@ -180,6 +197,7 @@ export function AdminMobileNav() {
                     menuOpen ? "text-cyan-400 opacity-100" : "opacity-60"
                   )}
                   strokeWidth={menuOpen ? 2.25 : 2}
+                  aria-hidden="true"
                 />
                 <span 
                   className={cn(
@@ -194,10 +212,18 @@ export function AdminMobileNav() {
                 >
                   More
                 </span>
+                <span className="sr-only">More options</span>
               </button>
             </div>
           </div>
         </div>
+
+        {/* Safe area spacer */}
+        <div 
+          className="pointer-events-none"
+          style={{ height: 'env(safe-area-inset-bottom, 0px)' }}
+          aria-hidden="true"
+        />
       </nav>
 
       {/* More Menu Overlay */}
@@ -205,88 +231,103 @@ export function AdminMobileNav() {
         <div 
           className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm lg:hidden"
           onClick={() => setMenuOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="More options menu"
         >
           <div 
-            className="absolute bottom-0 left-0 right-0 rounded-t-3xl border-t border-white/10 bg-neutral-900/95 backdrop-blur-xl p-6 pb-safe animate-in slide-in-from-bottom duration-200"
+            className="absolute bottom-0 left-0 right-0 animate-in slide-in-from-bottom duration-200"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Handle bar */}
-            <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-white/20" />
-            
-            {/* Close button */}
-            <button
-              onClick={() => setMenuOpen(false)}
-              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            
-            {/* Menu title */}
-            <h3 className="mb-4 text-lg font-semibold">Menu</h3>
-            
-            {/* Notification toggle */}
-            <div className="mb-2">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
-                Notifications
-              </p>
-              <NotificationToggle />
-            </div>
-            
-            {/* Sound toggle */}
-            <div className="mb-4">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
-                Sounds
-              </p>
-              <SoundToggle />
-            </div>
-            
-            {/* Menu links */}
-            <div className="mb-4 space-y-1">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
-                Navigation
-              </p>
-              {menuItems.map((item) => {
-                const isActive = pathname.startsWith(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMenuOpen(false)}
-                    className={cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-3 transition-colors',
-                      isActive
-                        ? 'bg-white/10 text-white'
-                        : 'text-foreground/70 hover:bg-white/5'
-                    )}
-                  >
-                    <item.icon className={cn('h-5 w-5', isActive && 'text-cyan-400')} />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
-            
-            {/* External links */}
-            <div className="space-y-1 border-t border-white/10 pt-4">
-              <a
-                href="/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 rounded-lg px-3 py-3 text-foreground/70 transition-colors hover:bg-white/5"
-              >
-                <ExternalLink className="h-5 w-5" />
-                View Live Site
-              </a>
-              
-              <form action="/api/auth/logout" method="POST">
+            <div className="rounded-t-3xl border-t border-white/10 bg-neutral-900/98 backdrop-blur-xl">
+              {/* Content with safe padding */}
+              <div className="p-6">
+                {/* Handle bar */}
+                <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-white/20" />
+                
+                {/* Close button */}
                 <button
-                  type="submit"
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-red-400 transition-colors hover:bg-red-500/10"
+                  onClick={() => setMenuOpen(false)}
+                  className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+                  aria-label="Close menu"
                 >
-                  <LogOut className="h-5 w-5" />
-                  Sign Out
+                  <X className="h-4 w-4" />
                 </button>
-              </form>
+                
+                {/* Menu title */}
+                <h3 className="mb-4 text-lg font-semibold">Menu</h3>
+                
+                {/* Notification toggle */}
+                <div className="mb-2">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
+                    Notifications
+                  </p>
+                  <NotificationToggle />
+                </div>
+                
+                {/* Sound toggle */}
+                <div className="mb-4">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
+                    Sounds
+                  </p>
+                  <SoundToggle />
+                </div>
+                
+                {/* Menu links */}
+                <div className="mb-4 space-y-1">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground/50">
+                    Navigation
+                  </p>
+                  {menuItems.map((item) => {
+                    const isActive = pathname.startsWith(item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMenuOpen(false)}
+                        className={cn(
+                          'flex items-center gap-3 rounded-lg px-3 py-3 transition-colors',
+                          isActive
+                            ? 'bg-white/10 text-white'
+                            : 'text-foreground/70 hover:bg-white/5'
+                        )}
+                      >
+                        <item.icon className={cn('h-5 w-5', isActive && 'text-cyan-400')} />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+                
+                {/* External links */}
+                <div className="space-y-1 border-t border-white/10 pt-4">
+                  <a
+                    href="/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 rounded-lg px-3 py-3 text-foreground/70 transition-colors hover:bg-white/5"
+                  >
+                    <ExternalLink className="h-5 w-5" />
+                    View Live Site
+                  </a>
+                  
+                  <form action="/api/auth/logout" method="POST">
+                    <button
+                      type="submit"
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-red-400 transition-colors hover:bg-red-500/10"
+                    >
+                      <LogOut className="h-5 w-5" />
+                      Sign Out
+                    </button>
+                  </form>
+                </div>
+              </div>
+              
+              {/* Safe area at bottom of menu */}
+              <div 
+                style={{ height: 'env(safe-area-inset-bottom, 0px)' }}
+                aria-hidden="true"
+              />
             </div>
           </div>
         </div>

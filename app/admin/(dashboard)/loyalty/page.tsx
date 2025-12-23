@@ -105,100 +105,103 @@ export default async function AdminLoyaltyPage() {
   ]);
   
   return (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Page Header */}
-      <div>
-        <h1 className={styles.pageTitle}>Loyalty Rewards</h1>
-        <p className={styles.pageSubtitle}>
-          Manage customer loyalty program and track rewards
-        </p>
-      </div>
-      
-      {/* Stats Grid */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
-        <StatCard
-          label="Total Rewards Issued"
-          value={stats?.total_rewards_issued || 0}
-          icon={Gift}
-          color="fuchsia"
-        />
-        <StatCard
-          label="Rewards Redeemed"
-          value={stats?.rewards_redeemed || 0}
-          icon={Check}
-          color="green"
-        />
-        <StatCard
-          label="Redemption Rate"
-          value={stats?.redemption_rate_percent || 0}
-          icon={TrendingUp}
-          color="cyan"
-          suffix="%"
-        />
-        <StatCard
-          label="Total Discount Given"
-          value={`$${(stats?.total_discount_given || 0).toFixed(0)}`}
-          icon={Award}
-          color="amber"
-        />
-      </div>
-      
-      {/* Tiers Overview */}
-      <div className={styles.sectionCard}>
-        <div className={styles.sectionCardInner} />
-        <div className="p-5 sm:p-8">
-          <h2 className={cn(styles.sectionHeading, 'mb-4')}>Loyalty Tiers</h2>
-          
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {tiers.map((tier) => (
-              <div 
-                key={tier.id}
-                className={cn(
-                  'relative overflow-hidden rounded-lg border p-4 sm:rounded-xl',
-                  tier.tier_name === 'bronze' 
-                    ? 'border-amber-500/30 bg-amber-500/5' 
-                    : 'border-cyan-500/30 bg-cyan-500/5'
-                )}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className={cn(
-                    'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                    tier.tier_name === 'bronze'
-                      ? 'bg-amber-500/20 text-amber-300'
-                      : 'bg-cyan-500/20 text-cyan-300'
-                  )}>
-                    {tier.tier_name}
-                  </span>
-                  <span className={cn(
-                    'text-xs',
-                    tier.is_active ? 'text-green-400' : 'text-foreground/40'
-                  )}>
-                    {tier.is_active ? 'Active' : 'Inactive'}
-                  </span>
+    // FIXED: Added consistent page padding matching other admin pages
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="space-y-6 sm:space-y-8">
+        {/* Page Header */}
+        <div>
+          <h1 className={styles.pageTitle}>Loyalty Rewards</h1>
+          <p className={styles.pageSubtitle}>
+            Manage customer loyalty program and track rewards
+          </p>
+        </div>
+        
+        {/* Stats Grid */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
+          <StatCard
+            label="Total Rewards Issued"
+            value={stats?.total_rewards_issued || 0}
+            icon={Gift}
+            color="fuchsia"
+          />
+          <StatCard
+            label="Rewards Redeemed"
+            value={stats?.rewards_redeemed || 0}
+            icon={Check}
+            color="green"
+          />
+          <StatCard
+            label="Redemption Rate"
+            value={stats?.redemption_rate_percent || 0}
+            icon={TrendingUp}
+            color="cyan"
+            suffix="%"
+          />
+          <StatCard
+            label="Total Discount Given"
+            value={`$${(stats?.total_discount_given || 0).toFixed(0)}`}
+            icon={Award}
+            color="amber"
+          />
+        </div>
+        
+        {/* Tiers Overview */}
+        <div className={styles.sectionCard}>
+          <div className={styles.sectionCardInner} />
+          <div className="p-5 sm:p-8">
+            <h2 className={cn(styles.sectionHeading, 'mb-4')}>Loyalty Tiers</h2>
+            
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {tiers.map((tier) => (
+                <div 
+                  key={tier.id}
+                  className={cn(
+                    'relative overflow-hidden rounded-lg border p-4 sm:rounded-xl',
+                    tier.tier_name === 'bronze' 
+                      ? 'border-amber-500/30 bg-amber-500/5' 
+                      : 'border-cyan-500/30 bg-cyan-500/5'
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={cn(
+                      'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                      tier.tier_name === 'bronze'
+                        ? 'bg-amber-500/20 text-amber-300'
+                        : 'bg-cyan-500/20 text-cyan-300'
+                    )}>
+                      {tier.tier_name}
+                    </span>
+                    <span className={cn(
+                      'text-xs',
+                      tier.is_active ? 'text-green-400' : 'text-foreground/40'
+                    )}>
+                      {tier.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  
+                  <p className="text-xl font-semibold">{tier.discount_percent}% Off</p>
+                  <p className={styles.bodyText}>{tier.display_name}</p>
+                  
+                  <div className="mt-3 space-y-1 text-xs text-foreground/50">
+                    <p>• {tier.bookings_required} bookings required</p>
+                    <p>• Min order: ${tier.minimum_order_amount}</p>
+                    <p>• Max savings: ${tier.max_discount_cap}</p>
+                    <p>• Expires: {tier.code_expiration_days} days</p>
+                  </div>
                 </div>
-                
-                <p className="text-xl font-semibold">{tier.discount_percent}% Off</p>
-                <p className={styles.bodyText}>{tier.display_name}</p>
-                
-                <div className="mt-3 space-y-1 text-xs text-foreground/50">
-                  <p>• {tier.bookings_required} bookings required</p>
-                  <p>• Min order: ${tier.minimum_order_amount}</p>
-                  <p>• Max savings: ${tier.max_discount_cap}</p>
-                  <p>• Expires: {tier.code_expiration_days} days</p>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
+        
+        {/* Rewards List (Client Component) */}
+        <Suspense fallback={<RewardsListSkeleton />}>
+          <LoyaltyRewardsClient 
+            initialRewards={rewardsResult.rewards}
+            totalCount={rewardsResult.total}
+          />
+        </Suspense>
       </div>
-      
-      {/* Rewards List (Client Component) */}
-      <Suspense fallback={<RewardsListSkeleton />}>
-        <LoyaltyRewardsClient 
-          initialRewards={rewardsResult.rewards}
-          totalCount={rewardsResult.total}
-        />
-      </Suspense>
     </div>
   );
 }

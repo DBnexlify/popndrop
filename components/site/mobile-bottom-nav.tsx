@@ -18,6 +18,23 @@ const SCROLL_THRESHOLD = 60;
 // Minimum scroll delta to trigger state change (prevents jitter)
 const SCROLL_DELTA_MIN = 8;
 
+/**
+ * MOBILE BOTTOM NAVIGATION
+ * ========================
+ * Cross-platform fixed bottom navigation that handles:
+ * - iOS home indicator (via safe-area-inset-bottom)
+ * - Android gesture navigation (Chrome 135+ edge-to-edge)
+ * - Android button navigation (no safe area needed)
+ * - Dynamic collapse on scroll for more content visibility
+ * 
+ * ARCHITECTURE:
+ * - Uses position: fixed with bottom: 0
+ * - Content area has fixed height (NAV_HEIGHT)
+ * - Safe area handled by extending background INTO the safe area
+ * - This follows Chrome's recommended pattern to avoid layout thrashing
+ * 
+ * @see https://developer.chrome.com/docs/css-ui/edge-to-edge
+ */
 export function MobileBottomNav() {
   const pathname = usePathname();
   const navRef = useRef<HTMLDivElement>(null);
@@ -48,7 +65,6 @@ export function MobileBottomNav() {
   }, []);
 
   const handleScroll = useCallback(() => {
-    // Use requestAnimationFrame for smooth, non-blocking updates
     if (!ticking.current) {
       requestAnimationFrame(updateNavState);
       ticking.current = true;
@@ -56,52 +72,69 @@ export function MobileBottomNav() {
   }, [updateNavState]);
 
   useEffect(() => {
-    // Set initial state
     lastScrollY.current = window.scrollY;
-    
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
   return (
-    <nav 
+    <nav
       ref={navRef}
       data-collapsed="false"
       aria-label="Mobile navigation"
-      className="group/nav fixed bottom-0 left-0 right-0 z-50 sm:hidden"
+      className="group/nav fixed inset-x-0 bottom-0 z-50 sm:hidden"
+      style={{
+        /*
+         * CROSS-PLATFORM SAFE AREA STRATEGY:
+         * 
+         * We position the nav at bottom: 0, then use padding-bottom to push
+         * the CONTENT up above the safe area. The nav's background extends
+         * into the safe area, creating a seamless edge-to-edge appearance.
+         * 
+         * This follows Chrome's edge-to-edge guidelines:
+         * - iOS: Gets ~34px safe area for home indicator
+         * - Android gesture nav: Gets 0-24px depending on device
+         * - Android button nav: Gets 0px (buttons are outside viewport)
+         * 
+         * The GPU acceleration hints prevent jank on Android during scroll.
+         */
+        transform: 'translateZ(0)',
+        WebkitTransform: 'translateZ(0)',
+        willChange: 'transform',
+      }}
     >
       {/* 
-        CROSS-PLATFORM SAFE AREA HANDLING:
-        - iOS: env(safe-area-inset-bottom) provides home indicator padding
-        - Android gesture nav: May or may not have safe area, but we ensure minimum padding
-        - Android button nav: No safe area needed, but minimum padding still applies
-        
-        Using inline style with fallback to ensure consistent behavior across platforms.
-        The calc() ensures we ALWAYS have at least 12px padding, plus any safe area.
+        BACKGROUND LAYER
+        Extends into safe area for seamless edge-to-edge appearance.
+        Uses same glassmorphism as the content but covers full nav height + safe area.
       */}
       <div 
-        className="mx-auto max-w-5xl px-3"
+        className="absolute inset-0 border-t border-white/5 bg-background/80 backdrop-blur-xl"
         style={{
-          // Cross-platform safe area: 12px base + safe area inset
-          // This works on all platforms - Android ignores env() and gets 12px
-          // iOS gets 12px + safe area inset
-          paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+          // Extend background down into safe area
+          bottom: 'calc(-1 * env(safe-area-inset-bottom, 0px))',
+          height: 'calc(100% + env(safe-area-inset-bottom, 0px))',
         }}
-      >
+        aria-hidden="true"
+      />
+
+      {/* 
+        CONTENT CONTAINER
+        This is the actual nav content area. It sits ABOVE the safe area.
+        The px-3 provides horizontal margins, and the inner card provides the visual container.
+      */}
+      <div className="relative mx-auto max-w-5xl px-3 pb-3 pt-2">
         <div
           className={cn(
             "rounded-2xl border bg-background/70 backdrop-blur-xl",
-            // GPU-accelerated transitions
             "transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
-            "will-change-transform",
-            // Ensure the nav card itself has consistent styling
             "border-white/10"
           )}
         >
           <div className="grid grid-cols-4 px-1.5 py-1.5" role="menubar">
             {NAV_ITEMS.map(({ href, label, Icon }) => {
               const isActive = pathname === href;
-              
+
               return (
                 <Link
                   key={href}
@@ -111,14 +144,11 @@ export function MobileBottomNav() {
                   className={cn(
                     "relative flex flex-col items-center justify-center rounded-xl",
                     "px-1 py-2 transition-all duration-300 ease-out",
-                    // Collapsed state: tighter padding
                     "group-data-[collapsed=true]/nav:py-1.5",
-                    isActive 
-                      ? "bg-muted/70" 
-                      : "active:bg-muted/40"
+                    isActive ? "bg-muted/70" : "active:bg-muted/40"
                   )}
                 >
-                  <Icon 
+                  <Icon
                     className={cn(
                       "h-5 w-5 transition-opacity duration-200",
                       isActive ? "opacity-100" : "opacity-70"
@@ -126,11 +156,10 @@ export function MobileBottomNav() {
                     strokeWidth={isActive ? 2.25 : 2}
                     aria-hidden="true"
                   />
-                  <span 
+                  <span
                     className={cn(
                       "mt-1 text-[11px] leading-none",
                       "transition-all duration-300 ease-out origin-top",
-                      // Collapsed: scale to 0 height, fade out
                       "group-data-[collapsed=true]/nav:mt-0",
                       "group-data-[collapsed=true]/nav:h-0",
                       "group-data-[collapsed=true]/nav:opacity-0",
@@ -140,7 +169,6 @@ export function MobileBottomNav() {
                   >
                     {label}
                   </span>
-                  {/* Screen reader always gets the label */}
                   <span className="sr-only">{label}</span>
                 </Link>
               );
@@ -148,6 +176,19 @@ export function MobileBottomNav() {
           </div>
         </div>
       </div>
+
+      {/* 
+        SAFE AREA SPACER
+        This invisible element creates space for the safe area (home indicator, gesture bar).
+        It ensures the nav visually "sits above" the safe area on all devices.
+      */}
+      <div 
+        className="pointer-events-none"
+        style={{
+          height: 'env(safe-area-inset-bottom, 0px)',
+        }}
+        aria-hidden="true"
+      />
     </nav>
   );
 }

@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
 // =============================================================================
-// STYLES
+// STYLES (Following Design System)
 // =============================================================================
 
 const styles = {
