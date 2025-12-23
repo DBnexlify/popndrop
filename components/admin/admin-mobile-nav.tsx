@@ -53,7 +53,12 @@ const SCROLL_DELTA_MIN = 8;
  * ADMIN MOBILE BOTTOM NAVIGATION
  * ===============================
  * Pure floating pill design - NO background banner.
- * The pill floats above content with proper safe area spacing.
+ * 
+ * Cross-platform architecture:
+ * - Uses additive safe area padding (base + env())
+ * - Explicit left/right positioning for consistent centering
+ * - GPU acceleration for smooth Android scrolling
+ * - Works with iOS home indicator and Android gesture nav
  */
 export function AdminMobileNav() {
   const pathname = usePathname();
@@ -104,21 +109,46 @@ export function AdminMobileNav() {
         FLOATING PILL NAVIGATION
         ========================
         - NO background banner - just the floating pill
-        - Uses safe-area-inset-bottom for iOS home indicator spacing
-        - Pill floats above content
+        - Explicit positioning for cross-platform consistency
+        - Additive safe area padding
       */}
       <nav 
         ref={navRef}
         data-collapsed="false"
         aria-label="Admin navigation"
-        className="group/nav fixed inset-x-0 bottom-0 z-50 pointer-events-none lg:hidden"
+        className="group/nav fixed z-50 lg:hidden"
+        style={{
+          /*
+           * CROSS-PLATFORM POSITIONING:
+           * Use explicit left/right/bottom instead of inset-x-0
+           * for consistent behavior across iOS and Android.
+           */
+          left: 0,
+          right: 0,
+          bottom: 0,
+          // GPU acceleration prevents Android scroll jank
+          transform: 'translateZ(0)',
+          WebkitTransform: 'translateZ(0)',
+          // Disable pointer events on container
+          pointerEvents: 'none',
+        }}
       >
         {/* Floating pill container with safe area margin */}
         <div 
-          className="pointer-events-auto mx-auto max-w-5xl px-3"
+          className="mx-auto w-full max-w-5xl px-3"
           style={{
-            // Add safe area margin at bottom (iOS home indicator)
-            paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))',
+            /*
+             * CROSS-PLATFORM SAFE AREA:
+             * Uses ADDITIVE approach: 12px base + safe area inset
+             * - iOS: 12px + ~34px = 46px (home indicator clearance)
+             * - Android gesture: 12px + 0-24px = 12-36px
+             * - Android buttons: 12px + 0 = 12px (minimum)
+             * 
+             * Do NOT use max() - inconsistent on Android.
+             */
+            paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+            // Re-enable pointer events on actual content
+            pointerEvents: 'auto',
           }}
         >
           {/* The floating pill itself */}

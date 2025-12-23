@@ -21,17 +21,15 @@ const SCROLL_DELTA_MIN = 8;
 /**
  * MOBILE BOTTOM NAVIGATION
  * ========================
- * Cross-platform fixed bottom navigation that handles:
- * - iOS home indicator (via safe-area-inset-bottom)
- * - Android gesture navigation (Chrome 135+ edge-to-edge)
- * - Android button navigation (no safe area needed)
- * - Dynamic collapse on scroll for more content visibility
+ * Pure floating pill navigation - NO background banner.
  * 
- * ARCHITECTURE:
- * - Uses position: fixed with bottom: 0
- * - Content area has fixed height (NAV_HEIGHT)
- * - Safe area handled by extending background INTO the safe area
- * - This follows Chrome's recommended pattern to avoid layout thrashing
+ * Cross-platform architecture:
+ * - iOS: Uses env(safe-area-inset-bottom) for home indicator
+ * - Android gesture nav: Falls back to minimum padding
+ * - Android button nav: Falls back to minimum padding
+ * 
+ * The floating pill sits above the safe area with proper spacing.
+ * NO full-width background layer - just the floating card.
  * 
  * @see https://developer.chrome.com/docs/css-ui/edge-to-edge
  */
@@ -82,51 +80,59 @@ export function MobileBottomNav() {
       ref={navRef}
       data-collapsed="false"
       aria-label="Mobile navigation"
-      className="group/nav fixed inset-x-0 bottom-0 z-50 sm:hidden"
+      className="group/nav fixed z-50 sm:hidden"
       style={{
         /*
-         * CROSS-PLATFORM SAFE AREA STRATEGY:
+         * CROSS-PLATFORM POSITIONING:
          * 
-         * We position the nav at bottom: 0, then use padding-bottom to push
-         * the CONTENT up above the safe area. The nav's background extends
-         * into the safe area, creating a seamless edge-to-edge appearance.
+         * Use explicit left/right/bottom positioning instead of inset-x-0
+         * to ensure consistent behavior across iOS and Android.
          * 
-         * This follows Chrome's edge-to-edge guidelines:
-         * - iOS: Gets ~34px safe area for home indicator
-         * - Android gesture nav: Gets 0-24px depending on device
-         * - Android button nav: Gets 0px (buttons are outside viewport)
-         * 
-         * The GPU acceleration hints prevent jank on Android during scroll.
+         * The nav is positioned as a floating element with pointer-events
+         * only on the actual pill (not the full width).
          */
+        left: 0,
+        right: 0,
+        bottom: 0,
+        // GPU acceleration prevents Android scroll jank
         transform: 'translateZ(0)',
         WebkitTransform: 'translateZ(0)',
-        willChange: 'transform',
+        // Disable pointer events on container (only pill is interactive)
+        pointerEvents: 'none',
       }}
     >
       {/* 
-        BACKGROUND LAYER
-        Extends into safe area for seamless edge-to-edge appearance.
-        Uses same glassmorphism as the content but covers full nav height + safe area.
+        FLOATING PILL CONTAINER
+        =======================
+        Pure floating pill - NO background banner.
+        Uses additive safe area: base padding + any safe area inset.
+        This ensures minimum spacing on all platforms.
       */}
       <div 
-        className="absolute inset-0 border-t border-white/5 bg-background/80 backdrop-blur-xl"
+        className="mx-auto w-full max-w-5xl px-3"
         style={{
-          // Extend background down into safe area
-          bottom: 'calc(-1 * env(safe-area-inset-bottom, 0px))',
-          height: 'calc(100% + env(safe-area-inset-bottom, 0px))',
+          /*
+           * CROSS-PLATFORM SAFE AREA:
+           * Uses ADDITIVE approach: 12px base + safe area inset
+           * - iOS: 12px + ~34px = 46px (proper home indicator clearance)
+           * - Android gesture: 12px + 0-24px = 12-36px
+           * - Android buttons: 12px + 0 = 12px (minimum always applies)
+           * 
+           * IMPORTANT: Do NOT use max() - it behaves inconsistently on Android.
+           */
+          paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+          // Re-enable pointer events on the actual content
+          pointerEvents: 'auto',
         }}
-        aria-hidden="true"
-      />
-
-      {/* 
-        CONTENT CONTAINER
-        This is the actual nav content area. It sits ABOVE the safe area.
-        The px-3 provides horizontal margins, and the inner card provides the visual container.
-      */}
-      <div className="relative mx-auto max-w-5xl px-3 pb-3 pt-2">
+      >
+        {/* The floating pill itself */}
         <div
           className={cn(
+            // Glassmorphism styling
             "rounded-2xl border bg-background/70 backdrop-blur-xl",
+            // Subtle shadow for floating effect
+            "shadow-[0_4px_24px_rgba(0,0,0,0.35)]",
+            // Smooth collapse animation
             "transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
             "border-white/10"
           )}
@@ -176,19 +182,6 @@ export function MobileBottomNav() {
           </div>
         </div>
       </div>
-
-      {/* 
-        SAFE AREA SPACER
-        This invisible element creates space for the safe area (home indicator, gesture bar).
-        It ensures the nav visually "sits above" the safe area on all devices.
-      */}
-      <div 
-        className="pointer-events-none"
-        style={{
-          height: 'env(safe-area-inset-bottom, 0px)',
-        }}
-        aria-hidden="true"
-      />
     </nav>
   );
 }

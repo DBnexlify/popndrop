@@ -85,12 +85,27 @@ export default async function AdminDashboardLayout({
         
         {/* Main content */}
         <div className="lg:pl-64">
-          {/* Mobile header - with safe area support for PWA standalone mode */}
-          <header className="sticky top-0 z-40 border-b border-white/10 bg-neutral-950/80 backdrop-blur-xl lg:hidden">
-            {/* Safe area spacer - fills the status bar area in PWA mode */}
-            <div className="h-[env(safe-area-inset-top,0px)] bg-neutral-950/80" />
+          {/* 
+            Mobile header - cross-platform sticky header
+            - Uses sticky positioning with top: 0
+            - Safe area padding for iOS notch and Android status bar
+            - GPU acceleration hints for smooth scroll behavior
+            - Consistent with site header patterns
+          */}
+          <header 
+            className="sticky top-0 z-40 border-b border-white/10 bg-neutral-950/80 backdrop-blur-xl lg:hidden"
+            style={{
+              // Safe area padding for iOS notch
+              paddingTop: 'env(safe-area-inset-top, 0px)',
+              // GPU acceleration for smooth sticky behavior
+              transform: 'translateZ(0)',
+              WebkitTransform: 'translateZ(0)',
+              // Optimize for position changes (helps Android with dynamic viewport)
+              willChange: 'transform',
+            }}
+          >
             {/* Header content */}
-            <div className="flex h-14 items-center justify-between px-4">
+            <div className="flex min-h-14 items-center justify-between px-4">
             <div className="flex items-center gap-2">
               <Image
                 src="/brand/logo.png"

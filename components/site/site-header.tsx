@@ -7,7 +7,8 @@ import Link from "next/link";
  * ===========
  * Cross-platform sticky header that handles:
  * - iOS status bar / notch (via safe-area-inset-top)
- * - Android status bar overlay
+ * - Android status bar (via safe area or fallback padding)
+ * - Android Chrome's dynamic viewport (URL bar hide/show)
  * - Consistent vertical centering across font rendering differences
  * 
  * ARCHITECTURE:
@@ -15,6 +16,12 @@ import Link from "next/link";
  * - Safe area padding applied to header element itself
  * - Content uses flexbox centering with min-height for resilience
  * - GPU acceleration hints for smooth scroll behavior
+ * 
+ * ANDROID BROWSER CHROME BEHAVIOR:
+ * When scrolling on Android Chrome, the URL bar hides, changing the viewport.
+ * Position: sticky with top: 0 handles this correctly because the element
+ * stays at the top of the viewport regardless of viewport changes.
+ * The header background fills the status bar area on both platforms.
  * 
  * @see https://developer.chrome.com/docs/css-ui/edge-to-edge
  */
@@ -25,15 +32,25 @@ export function SiteHeader() {
       style={{
         /*
          * CROSS-PLATFORM SAFE AREA:
-         * - iOS: env() returns notch height (~44-47px on iPhone X+)
-         * - Android: env() typically returns 0 (status bar is outside viewport)
-         * - Fallback ensures no padding on devices without safe areas
          * 
-         * GPU acceleration prevents sticky jank on Android
+         * iOS: env(safe-area-inset-top) returns notch height (~44-47px on iPhone X+)
+         * Android: env() returns 0 (status bar is handled differently)
+         * 
+         * On Android, the status bar overlays the viewport when viewport-fit=cover.
+         * We handle this by:
+         * 1. Using safe area for iOS notch
+         * 2. The header's background color extends under the status bar on Android
+         * 
+         * GPU acceleration prevents sticky jank during scroll.
          */
         paddingTop: 'env(safe-area-inset-top, 0px)',
         transform: 'translateZ(0)',
         WebkitTransform: 'translateZ(0)',
+        /*
+         * will-change: transform tells the browser to optimize this element
+         * for position changes, which helps with sticky behavior on Android
+         */
+        willChange: 'transform',
       }}
     >
       {/*

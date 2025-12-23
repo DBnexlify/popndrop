@@ -249,19 +249,26 @@ function WizardHeader({
       {/*
         STICKY CONTAINER
         
-        CRITICAL: Do NOT apply transforms directly to sticky elements on Android.
-        Instead, apply GPU hints to INNER elements only.
+        CROSS-PLATFORM STICKY BEHAVIOR:
+        - Uses position: sticky with top: 0 (works on both iOS and Android)
+        - will-change: transform tells the browser to optimize for position changes
+        - This helps Android Chrome handle sticky elements during URL bar hide/show
+        - Safe area padding is applied when docked (iOS notch)
         
-        The sticky element uses top: 0 which anchors it to viewport top.
-        Safe area is handled by the inner content padding.
+        IMPORTANT: Do NOT apply transforms to sticky elements on Android.
+        The will-change hint is sufficient without actual transform.
       */}
       <div
         className="sticky z-50"
         style={{
-          // Position at top, accounting for safe area on iOS
+          // Position at top
           top: 0,
-          // Safe area padding when docked (iOS notch)
+          // Safe area padding when docked (iOS notch, Android status bar)
           paddingTop: isAtTop ? 'env(safe-area-inset-top, 0px)' : undefined,
+          // Optimize for position changes (helps Android with dynamic viewport)
+          willChange: 'transform',
+          // Background extends under safe area when docked
+          backgroundColor: isAtTop ? 'hsl(var(--background) / 0.8)' : 'transparent',
         }}
       >
         {/* Outer wrapper - handles spacing transitions */}
