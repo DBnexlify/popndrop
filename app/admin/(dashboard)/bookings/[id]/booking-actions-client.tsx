@@ -40,7 +40,7 @@ import {
 } from "./booking-actions";
 
 // =============================================================================
-// STYLES
+// STYLES - Fixed modal structure for proper iOS scrolling
 // =============================================================================
 
 const styles = {
@@ -50,12 +50,28 @@ const styles = {
   input:
     "border-white/10 bg-white/5 placeholder:text-foreground/40 focus:border-white/20 focus:ring-1 focus:ring-white/10",
   label: "text-sm font-medium text-foreground/70",
+  
+  // FIXED: Modal overlay with proper centering
   modalOverlay:
-    "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4",
+    "fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm",
+  
+  // FIXED: Modal card - no inner overlay that blocks touch
+  // Uses flex-col structure: header (fixed) -> content (scrollable) -> footer (fixed)
   modalCard:
-    "relative w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-neutral-900 shadow-[0_20px_70px_rgba(0,0,0,0.4)]",
-  modalCardInner:
-    "pointer-events-none absolute inset-0 rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_70px_rgba(0,0,0,0.2)]",
+    "relative flex flex-col w-full sm:max-w-md bg-neutral-900 border border-white/10 shadow-[0_20px_70px_rgba(0,0,0,0.4)] max-h-[95vh] sm:max-h-[85vh] sm:rounded-2xl rounded-t-2xl overflow-hidden",
+  
+  // Modal header - sticky at top
+  modalHeader:
+    "flex-shrink-0 flex items-center justify-between border-b border-white/10 bg-neutral-900 p-4",
+  
+  // Modal content - scrollable area
+  // Key iOS fixes: -webkit-overflow-scrolling, overscroll-behavior
+  modalContent:
+    "flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5",
+  
+  // Modal footer - sticky at bottom with safe area padding
+  modalFooter:
+    "flex-shrink-0 border-t border-white/10 bg-neutral-900 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]",
 } as const;
 
 // =============================================================================
@@ -301,6 +317,9 @@ export function BookingActions({
 
 // =============================================================================
 // SMART CANCEL MODAL WITH PAYMENT DETECTION & MANUAL OVERRIDE
+// FIXED: Proper scrolling structure with fixed header/footer
+// FIXED: Removed inner shadow overlay that was causing visual artifacts
+// FIXED: iOS safe area support at bottom
 // =============================================================================
 
 function CancelModal({
@@ -457,12 +476,15 @@ function CancelModal({
 
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
+      {/* FIXED MODAL STRUCTURE: flex-col with header/content/footer */}
       <div 
-        className={`${styles.modalCard} max-h-[90vh] overflow-y-auto`} 
+        className={styles.modalCard}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-neutral-900 p-4">
+        {/* ============================================================
+            FIXED HEADER - Always visible at top
+        ============================================================ */}
+        <div className={styles.modalHeader}>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10">
               <XCircle className="h-5 w-5 text-red-400" />
@@ -477,8 +499,14 @@ function CancelModal({
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-4 sm:p-5">
+        {/* ============================================================
+            SCROLLABLE CONTENT AREA
+            iOS-optimized with overscroll-contain and touch momentum
+        ============================================================ */}
+        <div 
+          className={styles.modalContent}
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           <div className="space-y-4">
             {/* Cancelled By */}
             <div className="space-y-2">
@@ -855,9 +883,14 @@ function CancelModal({
               </div>
             )}
           </div>
+        </div>
 
-          {/* Actions */}
-          <div className="mt-6 flex gap-3">
+        {/* ============================================================
+            FIXED FOOTER - Always visible with action buttons
+            Includes iOS safe area padding at bottom
+        ============================================================ */}
+        <div className={styles.modalFooter}>
+          <div className="flex gap-3">
             <Button
               type="button"
               variant="outline"
@@ -868,7 +901,8 @@ function CancelModal({
               Keep Booking
             </Button>
             <Button
-              type="submit"
+              type="button"
+              onClick={handleSubmit}
               className="flex-1 bg-red-600 text-white hover:bg-red-700"
               disabled={isPending}
             >
@@ -882,16 +916,14 @@ function CancelModal({
               )}
             </Button>
           </div>
-        </form>
-
-        <div className={styles.modalCardInner} />
+        </div>
       </div>
     </div>
   );
 }
 
 // =============================================================================
-// PAYMENT MODAL
+// PAYMENT MODAL - Updated with same fixed structure
 // =============================================================================
 
 function PaymentModal({
@@ -945,9 +977,13 @@ function PaymentModal({
 
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 p-4">
+      {/* FIXED MODAL STRUCTURE */}
+      <div 
+        className={styles.modalCard}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Fixed Header */}
+        <div className={styles.modalHeader}>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10">
               <DollarSign className="h-5 w-5 text-green-400" />
@@ -962,8 +998,11 @@ function PaymentModal({
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-4 sm:p-5">
+        {/* Scrollable Content */}
+        <div 
+          className={styles.modalContent}
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           <div className="space-y-4">
             {/* Payment Type */}
             <div className="space-y-2">
@@ -1041,9 +1080,11 @@ function PaymentModal({
               </div>
             )}
           </div>
+        </div>
 
-          {/* Actions */}
-          <div className="mt-6 flex gap-3">
+        {/* Fixed Footer with iOS safe area */}
+        <div className={styles.modalFooter}>
+          <div className="flex gap-3">
             <Button
               type="button"
               variant="outline"
@@ -1054,7 +1095,8 @@ function PaymentModal({
               Cancel
             </Button>
             <Button
-              type="submit"
+              type="button"
+              onClick={handleSubmit}
               className="flex-1 bg-green-600 text-white hover:bg-green-700"
               disabled={isPending}
             >
@@ -1068,9 +1110,7 @@ function PaymentModal({
               )}
             </Button>
           </div>
-        </form>
-
-        <div className={styles.modalCardInner} />
+        </div>
       </div>
     </div>
   );

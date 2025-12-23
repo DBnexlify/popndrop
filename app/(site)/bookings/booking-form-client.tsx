@@ -621,9 +621,16 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
       />
 
       {/* ===================================================================== */}
-      {/* STICKY PROGRESS BAR - Sticks under header on scroll */}
+      {/* STICKY PROGRESS BAR - Premium sticky bar with smooth transitions */}
+      {/* Sticks directly below site header on desktop, matches header styling */}
       {/* ===================================================================== */}
-      <div className="sticky top-14 z-40 -mx-4 border-b border-white/5 bg-background/80 backdrop-blur-xl sm:-mx-6 sm:top-16">
+      <div 
+        className="sticky top-14 z-40 -mx-4 border-b border-white/5 bg-background/80 backdrop-blur-xl sm:-mx-6 sm:top-16"
+        style={{ transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
+      >
+        {/* Inner feather overlay for premium depth */}
+        <div className="pointer-events-none absolute inset-0 [box-shadow:inset_0_-1px_0_0_rgba(255,255,255,0.03)]" />
+        
         {/* Desktop version */}
         <div className="hidden px-4 py-4 sm:block sm:px-6">
           <div className="mx-auto max-w-2xl">
@@ -641,9 +648,9 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
             />
           </div>
           
-          {/* Price pill on mobile - always visible in sticky bar */}
+          {/* Price pill on mobile - premium styling matching wizard */}
           {selectedOption && (
-            <div className="shrink-0 rounded-full bg-cyan-500/20 px-3 py-1.5 text-sm font-semibold text-cyan-400">
+            <div className="shrink-0 rounded-full bg-gradient-to-r from-fuchsia-500/20 to-purple-600/20 border border-fuchsia-500/30 px-3 py-1.5 text-sm font-semibold text-fuchsia-300 transition-all duration-200">
               ${selectedOption.price}
             </div>
           )}

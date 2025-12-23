@@ -2,7 +2,7 @@
 
 > **Purpose**: Quick reference for navigating this codebase. Check here FIRST before exploring files.
 > 
-> **Last Updated**: December 2024
+> **Last Updated**: December 22, 2024 (Added Supabase Storage for images)
 
 ---
 
@@ -177,7 +177,12 @@ popndrop/
 │   └── ...                                 # Images, icons, etc.
 │
 ├── scripts/                                # Utility scripts
-│   └── ...
+│   ├── compress-images.js                 # Local PNG/JPG compression
+│   ├── compress-png-safe.js               # PNG compression (keeps transparency)
+│   ├── upload-to-supabase.js              # Upload images to Supabase Storage
+│   ├── fix-image-migration.js             # Database URL fixes
+│   ├── fix-windows.js                     # Windows file lock workaround
+│   └── README.md                          # Script documentation
 │
 ├── .env.local                              # Environment variables (DO NOT COMMIT)
 ├── .env.example                            # Example env file
@@ -187,6 +192,7 @@ popndrop/
 ├── tsconfig.json                           # TypeScript configuration
 ├── package.json                            # Dependencies
 ├── vercel.json                             # Vercel deployment config
+├── .vercelignore                           # Files excluded from Vercel deploy
 ├── PROJECT-DESIGN-SYSTEM.md                # Visual design system reference
 ├── PRODUCTION-CHECKLIST.md                 # Go-live checklist
 └── STRIPE-CLOUDFLARE-SETUP.md              # Stripe + Cloudflare setup
@@ -223,8 +229,13 @@ popndrop/
 
 ### next.config.ts
 - Next.js configuration
-- Image domains
+- Image domains (includes Supabase Storage)
 - Redirects/rewrites if any
+- Security headers
+
+### .vercelignore
+- Excludes `/scripts`, `/docs`, `*.md` from deploys
+- Reduces deployment size
 
 ### tailwind.config.ts
 - Custom colors, spacing
@@ -1247,7 +1258,114 @@ DEPOSIT_AMOUNT_DOLLARS = 50    // $50.00 for display
 
 ---
 
-## SECTION 8: EMAIL SYSTEM
+## SECTION 8: IMAGE STORAGE (Supabase Storage)
+
+### Overview
+
+Product images are stored in **Supabase Storage**, not in the `/public` folder. This enables:
+- Admin uploads without redeploying
+- Smaller Git repository
+- CDN delivery with caching
+- Dynamic image management
+
+### Storage Configuration
+
+| Setting | Value |
+|---------|-------|
+| **Bucket Name** | `product-images` |
+| **Access** | Public (no auth required) |
+| **Max File Size** | 10 MB |
+| **CDN** | Supabase CDN with global edge caching |
+
+### URL Structure
+
+```
+https://fmglwxfgognptuiyfkzn.supabase.co/storage/v1/object/public/product-images/[path]
+
+Examples:
+- /glitch/combo/hero.png
+- /glitch/combo/photo-1.png
+- /glitch/combo/photo-6.jpg
+```
+
+### Database Fields
+
+Product images are referenced in the `products` table:
+
+| Column | Type | Example |
+|--------|------|----------|
+| `image_url` | text | Full Supabase URL to hero image |
+| `gallery_urls` | text[] | Array of Supabase URLs for gallery |
+
+### Next.js Configuration
+
+Supabase hostname must be in `next.config.ts`:
+
+```typescript
+images: {
+  remotePatterns: [
+    {
+      protocol: 'https',
+      hostname: 'fmglwxfgognptuiyfkzn.supabase.co',
+      pathname: '/storage/v1/object/public/**',
+    },
+  ],
+},
+```
+
+### Image Compression Applied
+
+| Original Size | Compressed Size | Savings |
+|--------------|-----------------|----------|
+| 112 MB | ~8 MB | 93% |
+
+**Compression Settings:**
+- PNG quality: 80 (preserves transparency)
+- JPG quality: 82 (visually lossless)
+- Max dimensions: 2400 x 2400px
+
+### Files That Stay Local (`/public/brand/`)
+
+| File | Reason |
+|------|--------|
+| `logo.png` | Used in email templates at fixed URL |
+| `contact-card.jpg` | Static brand asset |
+
+### Migration Scripts (`/scripts/`)
+
+| Script | Purpose |
+|--------|----------|
+| `compress-png-safe.js` | Compress PNGs while keeping transparency |
+| `upload-to-supabase.js` | Upload images to Supabase Storage |
+| `upload-to-supabase.js --cleanup` | Upload + delete local files |
+
+### Adding New Product Images
+
+1. **Via Supabase Dashboard:**
+   - Go to Storage → `product-images` bucket
+   - Upload images to appropriate folder (e.g., `new-product/`)
+   - Copy public URL
+   - Update product's `image_url` and `gallery_urls` in database
+
+2. **Via Script (bulk):**
+   ```bash
+   # Place images in /public/rentals/[product-slug]/
+   node scripts/compress-png-safe.js
+   node scripts/upload-to-supabase.js --cleanup
+   ```
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "hostname not configured" error | Add domain to `next.config.ts` remotePatterns |
+| Images not loading | Check bucket is set to Public in Supabase |
+| Transparent background is black | Image was converted to JPG; use PNG |
+| Slow Safari performance | Ensure images are compressed (<1MB each) |
+
+---
+
+## SECTION 9: EMAIL SYSTEM
 
 ### Configuration
 
@@ -1288,7 +1406,7 @@ NOTIFY_EMAIL = 'bookings@popndroprentals.com'
 
 ---
 
-## SECTION 9: STYLING & DESIGN SYSTEM
+## SECTION 10: STYLING & DESIGN SYSTEM
 
 ### Key Files
 
@@ -1327,7 +1445,7 @@ Cyan: #22d3ee (secondary accent)
 
 ---
 
-## SECTION 10: QUICK REFERENCE — Common Tasks
+## SECTION 11: QUICK REFERENCE — Common Tasks
 
 ### Customer-Facing
 
@@ -1405,9 +1523,19 @@ Cyan: #22d3ee (secondary accent)
 | Edit Vercel settings | `vercel.json` |
 | Fix middleware/auth | `middleware.ts` |
 
+### Image Management
+
+| Task | Go To |
+|------|-------|
+| Add new product images | Supabase Dashboard → Storage → `product-images` |
+| Compress images | `node scripts/compress-png-safe.js` |
+| Upload images to Supabase | `node scripts/upload-to-supabase.js` |
+| Fix image URLs in database | `node scripts/fix-image-migration.js` |
+| Add allowed image domain | `next.config.ts` → `images.remotePatterns` |
+
 ---
 
-## SECTION 11: KEY RELATIONSHIPS
+## SECTION 12: KEY RELATIONSHIPS
 
 ### Customer Booking Flow
 
@@ -1487,12 +1615,13 @@ Cyan: #22d3ee (secondary accent)
 
 ---
 
-## SECTION 12: DOCUMENTATION INDEX
+## SECTION 13: DOCUMENTATION INDEX
 
 | Document | Location | Purpose |
 |----------|----------|--------|
 | Project Blueprint | `PROJECT-BLUEPRINT.md` | This file - codebase navigation |
 | Design System | `PROJECT-DESIGN-SYSTEM.md` | Visual patterns & styling rules |
+| **Scripts README** | `scripts/README.md` | **Image compression & migration scripts** |
 | Stripe Setup | `docs/STRIPE-SETUP-GUIDE.md` | Stripe configuration guide |
 | Cloudflare Domain | `docs/CLOUDFLARE-DOMAIN-GUIDE.md` | DNS & domain setup |
 | PWA Setup | `docs/PWA-SETUP.md` | Progressive web app config |
@@ -1503,7 +1632,7 @@ Cyan: #22d3ee (secondary accent)
 
 ---
 
-## SECTION 13: SAFARI & PERFORMANCE OPTIMIZATIONS
+## SECTION 14: SAFARI & PERFORMANCE OPTIMIZATIONS
 
 > **Last Updated**: December 2024
 
@@ -1645,6 +1774,276 @@ export const viewport: Viewport = {
 
 ---
 
+## SECTION 15: STICKY HEADER MORPH TRANSITIONS
+
+> **Last Updated**: December 2024
+> **Primary Files**: `components/site/mobile-booking-wizard.tsx`, `app/(site)/bookings/booking-form-client.tsx`
+
+### Overview
+
+The booking wizard uses a premium "morph" transition where the progress header:
+- **FLOATING STATE**: Appears as a glassmorphism card with rounded corners and shadow
+- **DOCKED STATE**: Morphs into a full-width header that matches the site header exactly
+
+This creates an Apple-quality user experience where the header feels intentionally designed, not "thrown together."
+
+### State Machine
+
+```
+STATE 1: FLOATING (User at top of page)
+└─→ Glassmorphism card with rounded-2xl corners
+└─→ Elevated shadow, border-white/10
+└─→ Padding: px-4 pt-3 pb-1
+└─→ Background: bg-background/60
+
+    ↓ (user scrolls down)
+
+STATE 2: TRANSITIONING (~280ms)
+└─→ All properties animate simultaneously
+└─→ Bezier curve: cubic-bezier(0.25, 0.46, 0.45, 0.94)
+└─→ No "popping" or jarring state changes
+
+    ↓ (transition complete)
+
+STATE 3: DOCKED (Stuck at top)
+└─→ Full-width, no rounded corners
+└─→ Matches site header: h-14 (56px) on mobile
+└─→ Same styling: bg-background/80, border-b border-white/5
+└─→ iOS safe area support for notch devices
+└─→ No shadow (matches header)
+
+    ↓ (user scrolls back up)
+
+STATE 4: UNDOCKING
+└─→ Reverse transition, equally smooth
+└─→ Returns to floating glassmorphism card
+```
+
+### Implementation Details
+
+#### Detection Method: IntersectionObserver
+
+Using IntersectionObserver instead of scroll events for better performance:
+
+```tsx
+// Sentinel element sits at top of page
+<div ref={sentinelRef} className="absolute top-0 h-1 w-full" />
+
+// When sentinel scrolls out of view, header is docked
+const observer = new IntersectionObserver(
+  ([entry]) => setIsAtTop(!entry.isIntersecting),
+  { rootMargin: "-1px 0px 0px 0px", threshold: 0 }
+);
+```
+
+#### GPU Acceleration
+
+Force GPU compositing for smooth transitions:
+
+```tsx
+style={{ transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
+```
+
+#### iOS Safe Area Handling
+
+When docked, the header respects the iPhone notch:
+
+```tsx
+style={isAtTop ? { paddingTop: 'env(safe-area-inset-top, 0px)' } : undefined}
+```
+
+### Key Measurements
+
+| Property | Floating | Docked |
+|----------|----------|--------|
+| Height | auto (py-3) | h-14 (56px) |
+| Width | calc(100% - 32px) | 100% |
+| Border radius | rounded-2xl | none |
+| Shadow | Multi-layer elevated | none |
+| Background | bg-background/60 | bg-background/80 |
+| Border | border-white/10 | border-b border-white/5 |
+
+### Files Involved
+
+| File | Component | Purpose |
+|------|-----------|--------|
+| `components/site/mobile-booking-wizard.tsx` | `WizardHeader` | Mobile morph header |
+| `app/(site)/bookings/booking-form-client.tsx` | Sticky div | Desktop progress bar |
+| `components/site/booking-progress.tsx` | `BookingProgressCompact` | Progress UI |
+| `app/globals.css` | `.sticky-morph-container` | CSS optimizations |
+
+### Testing Checklist
+
+#### Must Test On:
+- [ ] iPhone Safari (PRIMARY - client uses this)
+- [ ] iPhone Chrome
+- [ ] Android Chrome
+- [ ] Desktop Safari
+- [ ] Desktop Chrome
+- [ ] Desktop Firefox
+- [ ] Desktop Edge
+
+#### Verify:
+- [ ] Smooth morph transition (no janking)
+- [ ] Docked state matches site header exactly
+- [ ] Progress bar updates correctly
+- [ ] Price pill animates with transition
+- [ ] Back button works in both states
+- [ ] Scroll in both directions works smoothly
+- [ ] Rapid scrolling doesn't break state
+- [ ] Safe area respected on iPhone with notch
+- [ ] No layout shift during transition
+
+---
+
+## SECTION 16: MOBILE MODAL PATTERN
+
+### Problem
+
+Mobile modals on iOS often have these issues:
+- Cannot scroll to see bottom content/buttons
+- Double shadow artifacts from nested containers
+- Touch events blocked by overlay elements
+- No safe area padding causing buttons to be cut off
+
+### Solution: Fixed Header/Content/Footer Structure
+
+```
+┌─────────────────────────────────────┐
+│ FIXED HEADER (flex-shrink-0)        │ ← Always visible
+│ Title, close button                 │
+├─────────────────────────────────────┤
+│ SCROLLABLE CONTENT (flex-1)         │ ← Scrolls independently
+│ overflow-y-auto                     │
+│ overscroll-contain                  │
+│ -webkit-overflow-scrolling: touch   │
+│                                     │
+│ ... form fields ...                 │
+│                                     │
+├─────────────────────────────────────┤
+│ FIXED FOOTER (flex-shrink-0)        │ ← Always visible
+│ Action buttons                      │
+│ pb-[calc(1rem+env(safe-area-...))]  │ ← iOS safe area
+└─────────────────────────────────────┘
+```
+
+### Implementation Pattern
+
+```tsx
+const modalStyles = {
+  // Overlay - centers on desktop, bottom-sheet on mobile
+  overlay: "fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm",
+  
+  // Card - flex column, mobile bottom-sheet style
+  card: "relative flex flex-col w-full sm:max-w-md bg-neutral-900 border border-white/10 shadow-[0_20px_70px_rgba(0,0,0,0.4)] max-h-[95vh] sm:max-h-[85vh] sm:rounded-2xl rounded-t-2xl overflow-hidden",
+  
+  // Header - sticky top
+  header: "flex-shrink-0 flex items-center justify-between border-b border-white/10 bg-neutral-900 p-4",
+  
+  // Content - scrollable with iOS momentum
+  content: "flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5",
+  
+  // Footer - sticky bottom with safe area
+  footer: "flex-shrink-0 border-t border-white/10 bg-neutral-900 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]",
+};
+```
+
+### Key iOS Fixes
+
+1. **`overscroll-contain`**: Prevents scroll chaining to body
+2. **`WebkitOverflowScrolling: 'touch'`**: Momentum scrolling
+3. **`env(safe-area-inset-bottom)`**: Padding for iPhone home indicator
+4. **NO inner overlay div**: Removed `modalCardInner` that blocked touch events
+5. **`items-end` on mobile**: Bottom-sheet style presentation
+
+### Files Using This Pattern
+
+| File | Modal(s) |
+|------|----------|
+| `app/admin/(dashboard)/bookings/[id]/booking-actions-client.tsx` | CancelModal, PaymentModal |
+
+---
+
+## SECTION 17: FILTER PILL PATTERN
+
+### Problem
+
+Filter pills on mobile can have:
+- Misaligned active vs inactive pills
+- Inconsistent sizing due to shadow differences
+- Shape distortion from transforms or improper flex alignment
+
+### Solution: Consistent Pill Styling
+
+```tsx
+const pillStyles = {
+  // Base - ensures ALL pills have identical dimensions
+  base: cn(
+    'inline-flex items-center justify-center',  // Proper vertical/horizontal centering
+    'rounded-full px-3 py-1.5',                 // Consistent padding
+    'text-sm font-medium leading-none',         // Text sizing
+    'whitespace-nowrap',                        // Prevent wrapping
+    'transition-colors duration-200',           // Smooth state change
+    'min-h-[32px]',                             // Explicit minimum height
+  ),
+  
+  // Active - gradient with subtle shadow (NOT shadow-lg)
+  active: cn(
+    'bg-gradient-to-r from-fuchsia-500 to-purple-600',
+    'text-white',
+    'shadow-md shadow-fuchsia-500/25',  // Subtle, not large
+  ),
+  
+  // Inactive - subtle background
+  inactive: cn(
+    'bg-white/5',
+    'text-foreground/60',
+    'hover:bg-white/10 hover:text-foreground',
+  ),
+};
+```
+
+### Key Alignment Fixes
+
+1. **`inline-flex items-center justify-center`**: Proper centering
+2. **`min-h-[32px]`**: Explicit height prevents size variance
+3. **`leading-none`**: Prevents line-height affecting pill height
+4. **`shadow-md` not `shadow-lg`**: Large shadows cause visual misalignment on mobile
+5. **No transforms**: Avoid `scale` or `translate` on hover which can cause jank
+
+### Files Using This Pattern
+
+| File | Purpose |
+|------|--------|
+| `components/admin/status-filter-pills.tsx` | Reusable pill component |
+| `app/admin/(dashboard)/bookings/page.tsx` | Uses StatusFilterPills |
+| `app/admin/(dashboard)/calendar/page.tsx` | Uses ClientStatusFilterPills |
+
+### Usage
+
+```tsx
+// Server component (URL-based filtering)
+<StatusFilterPills
+  options={[
+    { value: 'all', label: 'All' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'confirmed', label: 'Confirmed' },
+  ]}
+  activeValue={currentFilter}
+  baseUrl="/admin/bookings"
+  paramName="status"
+/>
+
+// Client component (state-based filtering)
+<ClientStatusFilterPills
+  options={options}
+  activeValue={filter}
+  onChange={setFilter}
+/>
+```
+
+---
+
 ## USAGE INSTRUCTIONS
 
 ### Before Making Changes
@@ -1662,5 +2061,5 @@ export const viewport: Viewport = {
 
 ---
 
-*Blueprint Complete — Last Updated: December 2024*
+*Blueprint Complete — Last Updated: December 22, 2024*
 

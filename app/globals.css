@@ -403,6 +403,36 @@
   backface-visibility: hidden;
 }
 
+/* ==========================================================================
+ * STICKY HEADER MORPH TRANSITIONS
+ * Smooth, Apple-quality transitions for sticky elements that morph
+ * from floating card to docked header state.
+ * ========================================================================== */
+
+/* GPU-accelerated sticky container */
+.sticky-morph-container {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Optimized border-radius transition (Safari can be choppy) */
+.morph-radius {
+  /* Use border-radius with GPU compositing */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+/* iOS Safari: Prevent momentum scroll from interfering with sticky */
+@supports (-webkit-touch-callout: none) {
+  .sticky-morph-container {
+    /* Force repaint layer on iOS */
+    -webkit-transform: translate3d(0, 0, 0);
+  }
+}
+
 /* Optimize blur elements that don't need interaction */
 [aria-hidden="true"] .blur-3xl,
 [aria-hidden="true"] .blur-2xl,

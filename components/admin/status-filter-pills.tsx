@@ -36,13 +36,36 @@ interface ClientStatusFilterPillsProps {
 
 // -----------------------------------------------------------------------------
 // STYLES
-// These match the design system and ensure consistency across all admin pages
+// Fixed pill styling for consistent alignment and shape across all states
+// Key fixes:
+// - Added inline-flex items-center for proper vertical alignment
+// - Added explicit min-height for consistent sizing
+// - Added justify-center for centered content
+// - Removed problematic shadow-lg that caused visual misalignment on mobile
 // -----------------------------------------------------------------------------
 
 const pillStyles = {
-  base: 'rounded-full px-3 py-1.5 text-sm font-medium transition-all whitespace-nowrap',
-  active: 'bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20',
-  inactive: 'bg-white/5 text-foreground/60 hover:bg-white/10 hover:text-foreground',
+  // Base styles ensure all pills have identical dimensions and alignment
+  base: cn(
+    'inline-flex items-center justify-center',
+    'rounded-full px-3 py-1.5',
+    'text-sm font-medium leading-none',
+    'whitespace-nowrap',
+    'transition-colors duration-200',
+    'min-h-[32px]', // Explicit height for consistency
+  ),
+  // Active pill - gradient background, subtle shadow (not shadow-lg which causes visual issues)
+  active: cn(
+    'bg-gradient-to-r from-fuchsia-500 to-purple-600',
+    'text-white',
+    'shadow-md shadow-fuchsia-500/25',
+  ),
+  // Inactive pill - subtle background with hover state
+  inactive: cn(
+    'bg-white/5',
+    'text-foreground/60',
+    'hover:bg-white/10 hover:text-foreground',
+  ),
 } as const;
 
 // -----------------------------------------------------------------------------

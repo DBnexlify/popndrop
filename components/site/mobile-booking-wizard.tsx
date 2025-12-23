@@ -186,7 +186,9 @@ function Toast({
 }
 
 // =============================================================================
-// PROGRESS HEADER COMPONENT - with scroll morph behavior
+// PROGRESS HEADER COMPONENT - Premium scroll-morph behavior
+// Transitions smoothly from floating glassmorphism card to docked header
+// Matches site header dimensions exactly when docked (h-14 mobile, h-16 desktop)
 // =============================================================================
 
 function WizardHeader({
@@ -206,106 +208,157 @@ function WizardHeader({
 }) {
   const progressPercentage = ((currentStep - 1) / (totalSteps - 1)) * 100;
   const headerRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   const [isAtTop, setIsAtTop] = useState(false);
 
-  // Detect when header reaches top of viewport
+  // Use IntersectionObserver for smoother, more reliable detection
+  // This detects when the sentinel element scrolls out of view
   useEffect(() => {
-    const handleScroll = () => {
-      if (headerRef.current) {
-        // Get the sticky element's position
-        const rect = headerRef.current.getBoundingClientRect();
-        // When top is 0 (or very close), we're "stuck" at the top
-        setIsAtTop(rect.top <= 1);
-      }
-    };
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll(); // Check initial state
-    
-    return () => window.removeEventListener("scroll", handleScroll);
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        // When sentinel is not visible (scrolled past), header is docked
+        setIsAtTop(!entry.isIntersecting);
+      },
+      {
+        // Trigger slightly before the sentinel is fully out of view
+        rootMargin: "-1px 0px 0px 0px",
+        threshold: 0,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
   }, []);
 
   return (
-    <div 
-      ref={headerRef}
-      className={cn(
-        "sticky top-0 z-50 transition-all duration-300 ease-out",
-        isAtTop 
-          ? "px-0 pt-0 pb-0" // Full width when at top
-          : "px-4 pt-4 pb-2"  // Floating card with padding
-      )}
-    >
-      {/* Morphing container */}
+    <>
+      {/* Sentinel element - sits above the header to detect scroll position */}
+      <div ref={sentinelRef} className="absolute top-0 h-1 w-full" />
+
       <div
-        className={cn(
-          "relative overflow-hidden transition-all duration-300 ease-out",
-          isAtTop 
-            ? "rounded-none border-x-0 border-t-0 border-b border-white/5 bg-background/80 shadow-[0_4px_30px_rgba(0,0,0,0.15)]" 
-            : "rounded-2xl border border-white/10 bg-background/70 shadow-[0_14px_50px_rgba(0,0,0,0.25)]",
-          "backdrop-blur-xl"
-        )}
+        ref={headerRef}
+        className="sticky top-0 z-50"
+        // GPU acceleration for smooth transforms
+        style={{ transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
       >
-        <div className={cn(
-          "flex items-center gap-3 transition-all duration-300",
-          isAtTop ? "px-4 py-2.5" : "px-4 py-3"
-        )}>
-          {/* Back button */}
-          <button
-            onClick={() => {
-              if (canGoBack) {
-                hapticNavigate();
-                onBack();
-              }
-            }}
-            disabled={!canGoBack}
-            aria-label="Go back"
+        {/* Outer wrapper handles the spacing transition */}
+        <div
+          className={cn(
+            "transition-all duration-[280ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
+            isAtTop
+              ? "px-0 py-0" // Full-width docked state
+              : "px-4 pt-3 pb-1" // Floating card with margin
+          )}
+        >
+          {/* Main morphing container */}
+          <div
             className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-full transition-all",
-              canGoBack
-                ? "bg-white/10 text-foreground active:scale-95"
-                : "text-foreground/20"
+              "relative overflow-hidden backdrop-blur-xl",
+              // Smooth transition for ALL morph properties
+              "transition-all duration-[280ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
+              isAtTop
+                ? [
+                    // DOCKED STATE - Matches site header exactly
+                    "rounded-none",
+                    "border-b border-white/5", // Match site header border
+                    "bg-background/80", // Match site header background
+                    "shadow-none", // No shadow when docked (matches header)
+                  ]
+                : [
+                    // FLOATING STATE - Premium glassmorphism card
+                    "rounded-2xl",
+                    "border border-white/10",
+                    "bg-background/60",
+                    "shadow-[0_8px_32px_rgba(0,0,0,0.25),0_2px_8px_rgba(0,0,0,0.15)]",
+                  ]
             )}
           >
-            <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-          </button>
+            {/* Content container - height matches site header when docked */}
+            <div
+              className={cn(
+                "flex items-center gap-3",
+                "transition-all duration-[280ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
+                isAtTop
+                  ? "h-14 px-4" // Match site header: h-14 (56px) on mobile
+                  : "h-auto px-4 py-3" // Floating: natural height with padding
+              )}
+              // iOS safe area support when docked at top
+              style={isAtTop ? { paddingTop: 'env(safe-area-inset-top, 0px)' } : undefined}
+            >
+              {/* Back button */}
+              <button
+                onClick={() => {
+                  if (canGoBack) {
+                    hapticNavigate();
+                    onBack();
+                  }
+                }}
+                disabled={!canGoBack}
+                aria-label="Go back"
+                className={cn(
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                  "transition-all duration-200 ease-out",
+                  canGoBack
+                    ? "bg-white/10 text-foreground active:scale-95 active:bg-white/20"
+                    : "text-foreground/20"
+                )}
+              >
+                <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+              </button>
 
-          {/* Progress section */}
-          <div className="flex-1">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-foreground/80">{stepLabel}</span>
-              <span className="text-foreground/50">
-                {currentStep} of {totalSteps}
-              </span>
+              {/* Progress section */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-foreground/80 truncate">
+                    {stepLabel}
+                  </span>
+                  <span className="text-foreground/50 shrink-0 ml-2">
+                    {currentStep} of {totalSteps}
+                  </span>
+                </div>
+
+                {/* Progress bar - fuchsia gradient with glow */}
+                <div className="mt-1.5 relative h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(217,70,239,0.4)]"
+                    style={{ width: `${progressPercentage}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Price pill */}
+              {price !== undefined && price > 0 && (
+                <div
+                  className={cn(
+                    "shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold",
+                    "transition-all duration-[280ms] ease-out",
+                    isAtTop
+                      ? "bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/20"
+                      : "bg-gradient-to-r from-fuchsia-500/20 to-purple-600/20 border border-fuchsia-500/30 text-fuchsia-300"
+                  )}
+                >
+                  ${price}
+                </div>
+              )}
             </div>
-            
-            {/* Progress bar with fuchsia gradient */}
-            <div className="mt-1.5 relative h-1.5 overflow-hidden rounded-full bg-white/10">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(217,70,239,0.5)]"
-                style={{ width: `${progressPercentage}%` }}
-              />
-            </div>
+
+            {/* Inner feather overlay - creates the premium glass depth effect */}
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-0",
+                "transition-all duration-[280ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
+                isAtTop
+                  ? "[box-shadow:inset_0_-1px_0_0_rgba(255,255,255,0.03)]" // Subtle bottom edge only when docked
+                  : "rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.08),inset_0_1px_0_0_rgba(255,255,255,0.1),inset_0_0_40px_rgba(0,0,0,0.15)]"
+              )}
+            />
           </div>
-
-          {/* Price pill */}
-          {price !== undefined && price > 0 && (
-            <div className="shrink-0 rounded-full bg-gradient-to-r from-fuchsia-500/20 to-purple-600/20 border border-fuchsia-500/30 px-3 py-1.5 text-sm font-semibold text-fuchsia-300">
-              ${price}
-            </div>
-          )}
         </div>
-        
-        {/* Inner feather overlay - adapts to morph state */}
-        <div 
-          className={cn(
-            "pointer-events-none absolute inset-0 transition-all duration-300",
-            isAtTop
-              ? "[box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.03),inset_0_0_30px_rgba(0,0,0,0.1)]"
-              : "rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]"
-          )} 
-        />
       </div>
-    </div>
+    </>
   );
 }
 
