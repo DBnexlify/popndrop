@@ -649,22 +649,30 @@ export function getBookingTypeLabel(type: BookingType): string {
   return labels[type];
 }
 
+/**
+ * Get delivery window as actual time display
+ * @example getDeliveryWindowLabel('morning') => "8–11 AM"
+ */
 export function getDeliveryWindowLabel(window: string): string {
   const labels: Record<string, string> = {
-    'morning': 'Morning (8–11 AM)',
-    'midday': 'Midday (11 AM–2 PM)',
-    'afternoon': 'Afternoon (2–5 PM)',
-    'saturday-evening': 'Saturday Evening (5–7 PM)',
+    'morning': '8–11 AM',
+    'midday': '11 AM–2 PM',
+    'afternoon': '2–5 PM',
+    'saturday-evening': '5–7 PM',
   };
   return labels[window] || window;
 }
 
+/**
+ * Get pickup window as actual time display
+ * @example getPickupWindowLabel('evening') => "6–8 PM"
+ */
 export function getPickupWindowLabel(window: string): string {
   const labels: Record<string, string> = {
-    'evening': 'Evening (6–8 PM)',
-    'next-morning': 'Next Morning (by 10 AM)',
-    'monday-morning': 'Monday Morning (by 10 AM)',
-    'monday-afternoon': 'Monday Afternoon (2–5 PM)',
+    'evening': '6–8 PM',
+    'next-morning': 'By 10 AM',
+    'monday-morning': 'By 10 AM',
+    'monday-afternoon': '2–5 PM',
   };
   return labels[window] || window;
 }

@@ -23,6 +23,8 @@ import {
   ExternalLink,
   LogOut,
   Ban,
+  Gift,
+  Tag,
 } from 'lucide-react';
 import { NotificationToggle, SoundToggle } from './pwa-provider';
 
@@ -37,6 +39,8 @@ const menuItems = [
   { href: '/admin/blackout-dates', label: 'Blackout Dates', icon: CalendarOff },
   { href: '/admin/cancellations', label: 'Cancellations', icon: Ban },
   { href: '/admin/inventory', label: 'Inventory', icon: Package },
+  { href: '/admin/promo-codes', label: 'Promo Codes', icon: Tag },
+  { href: '/admin/loyalty', label: 'Loyalty Rewards', icon: Gift },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 

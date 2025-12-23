@@ -46,7 +46,8 @@ interface CreateBookingRequest {
   address: string;
   city: string;
   notes?: string;
-  paymentType?: 'deposit' | 'full'; // NEW: deposit only or pay in full
+  paymentType?: 'deposit' | 'full';
+  promoCode?: string | null; // Promo code to apply
 }
 
 interface Product {
@@ -161,7 +162,8 @@ export async function POST(request: NextRequest) {
       address,
       city,
       notes,
-      paymentType = 'deposit', // Default to deposit if not specified
+      paymentType = 'deposit',
+      promoCode,
     } = body;
 
     // Validate required fields
@@ -198,7 +200,7 @@ export async function POST(request: NextRequest) {
     // ========================================================================
     const { deliveryDate, pickupDate } = calculateDates(eventDate, bookingType);
     const priceTotal = getPrice(product as Product, bookingType);
-    const balanceDue = priceTotal - DEPOSIT_AMOUNT;
+    let balanceDue = priceTotal - DEPOSIT_AMOUNT;
 
     console.log('Booking details:', { 
       productSlug, 
@@ -209,6 +211,69 @@ export async function POST(request: NextRequest) {
       priceTotal,
       paymentType,
     });
+
+    // ========================================================================
+    // 2.5. VALIDATE PROMO CODE (if provided)
+    // ========================================================================
+    let promoCodeId: string | null = null;
+    let promoDiscount = 0;
+    let finalPrice = priceTotal;
+
+    if (promoCode && promoCode.trim()) {
+      console.log('Validating promo code:', promoCode);
+
+      // Get customer ID for promo validation (if existing customer)
+      const { data: existingCustomerForPromo } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('email', customerEmail.toLowerCase())
+        .single();
+
+      const customerIdForPromo = existingCustomerForPromo?.id || null;
+
+      // Call validation function
+      const { data: promoResult, error: promoError } = await supabase
+        .rpc('validate_promo_code', {
+          p_code: promoCode.trim().toUpperCase(),
+          p_customer_id: customerIdForPromo,
+          p_product_id: product.id,
+          p_order_amount: priceTotal,
+        });
+
+      if (promoError) {
+        console.error('Error validating promo code:', promoError);
+        return NextResponse.json(
+          { success: false, error: 'Unable to validate promo code. Please try again.' },
+          { status: 500 }
+        );
+      }
+
+      // RPC returns array, get first result
+      const validation = Array.isArray(promoResult) ? promoResult[0] : promoResult;
+
+      if (!validation || !validation.valid) {
+        const errorMsg = validation?.error_message || 'Invalid promo code';
+        console.log('Promo code invalid:', errorMsg);
+        return NextResponse.json(
+          { success: false, error: errorMsg },
+          { status: 400 }
+        );
+      }
+
+      // Promo code is valid! Apply the discount
+      promoCodeId = validation.promo_code_id;
+      promoDiscount = validation.calculated_discount || 0;
+      finalPrice = priceTotal - promoDiscount;
+      balanceDue = finalPrice - DEPOSIT_AMOUNT;
+
+      console.log('Promo code applied:', {
+        promoCodeId,
+        promoDiscount,
+        originalPrice: priceTotal,
+        finalPrice,
+        balanceDue,
+      });
+    }
 
     // ========================================================================
     // 3. FIND AVAILABLE UNIT
@@ -307,8 +372,10 @@ export async function POST(request: NextRequest) {
       delivery_address: address,
       delivery_city: city,
       subtotal: priceTotal,
+      discount_amount: promoDiscount,
+      promo_code_id: promoCodeId,
       deposit_amount: DEPOSIT_AMOUNT,
-      balance_due: balanceDue,
+      balance_due: Math.max(0, balanceDue), // Ensure non-negative
       customer_notes: notes || null,
       product_snapshot: {
         slug: product.slug,
@@ -316,6 +383,8 @@ export async function POST(request: NextRequest) {
         price_daily: product.price_daily,
         price_weekend: product.price_weekend,
         price_sunday: product.price_sunday,
+        promo_code: promoCodeId ? promoCode?.trim().toUpperCase() : null,
+        promo_discount: promoDiscount,
       },
       // ⚠️ IMPORTANT: Status is PENDING until payment confirmed via webhook
       status: 'pending',
@@ -359,17 +428,25 @@ export async function POST(request: NextRequest) {
     // 6. CREATE STRIPE CHECKOUT SESSION
     // ========================================================================
     const isFullPayment = paymentType === 'full';
-    const amountCents = isFullPayment ? dollarsToCents(priceTotal) : DEPOSIT_AMOUNT_CENTS;
+    // Use discounted price for full payment, deposit stays the same
+    const amountCents = isFullPayment ? dollarsToCents(finalPrice) : DEPOSIT_AMOUNT_CENTS;
+    const actualBalanceDue = Math.max(0, finalPrice - DEPOSIT_AMOUNT);
     
     // Build nice descriptions for Stripe checkout
     const eventDateFormatted = formatDateShort(eventDate);
-    const lineItemName = isFullPayment
+    
+    // Include promo code in line item name if applied
+    let lineItemName = isFullPayment
       ? `${product.name} - Paid in Full`
       : `${product.name} - Deposit`;
     
+    if (promoDiscount > 0) {
+      lineItemName += ` (${promoCode?.trim().toUpperCase()} -${promoDiscount})`;
+    }
+    
     const lineItemDescription = isFullPayment
       ? `Booking ${booking.booking_number} • ${eventDateFormatted} • Nothing due on delivery!`
-      : `Booking ${booking.booking_number} • ${eventDateFormatted} • $${balanceDue} due on delivery`;
+      : `Booking ${booking.booking_number} • ${eventDateFormatted} • ${actualBalanceDue} due on delivery`;
 
     // Get base URL
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
@@ -387,6 +464,12 @@ export async function POST(request: NextRequest) {
           customer_id: customerId,
           product_name: product.name,
           event_date: eventDate,
+          // Promo code info for webhook processing
+          promo_code_id: promoCodeId || '',
+          promo_code: promoCode?.trim().toUpperCase() || '',
+          promo_discount: promoDiscount.toString(),
+          original_price: priceTotal.toString(),
+          final_price: finalPrice.toString(),
         },
         line_items: [
           {

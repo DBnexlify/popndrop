@@ -11,10 +11,9 @@ import {
   getTodaysPickups,
   getUpcomingSchedule,
 } from '@/lib/admin-queries';
+import { getPendingAttentionItemsWithBookings } from '@/lib/automation-queries';
 import {
   formatCurrency,
-  getStatusColor,
-  getStatusLabel,
 } from '@/lib/database-types';
 import {
   getTodayDisplayET,
@@ -25,6 +24,7 @@ import {
 } from '@/lib/timezone';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { AttentionPanel } from '@/components/admin/attention-panel';
 import {
   Truck,
   Package,
@@ -47,11 +47,12 @@ const styles = {
 
 export default async function AdminDashboardPage() {
   // Fetch all data in parallel using pre-built views
-  const [stats, deliveries, pickups, schedule] = await Promise.all([
+  const [stats, deliveries, pickups, schedule, attentionItems] = await Promise.all([
     getDashboardStats(),
     getTodaysDeliveries(),
     getTodaysPickups(),
     getUpcomingSchedule(),
+    getPendingAttentionItemsWithBookings().catch(() => []), // Graceful fallback if table doesn't exist yet
   ]);
   
   const today = getTodayDisplayET();
@@ -64,6 +65,11 @@ export default async function AdminDashboardPage() {
           Dashboard
         </h1>
         <p className="mt-1 text-sm text-foreground/70">{today}</p>
+      </div>
+      
+      {/* Attention Panel - Shows bookings needing action */}
+      <div className="mb-6 sm:mb-8">
+        <AttentionPanel items={attentionItems} />
       </div>
       
       {/* Stats Grid */}

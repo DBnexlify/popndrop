@@ -418,9 +418,15 @@ export function NotificationToggle() {
     retryServiceWorker,
   } = usePWA();
   
+  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showTooltip, setShowTooltip] = useState(false);
+
+  // Ensure consistent render between server and client (fixes hydration mismatch)
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleToggle = async () => {
     setLoading(true);
@@ -443,8 +449,19 @@ export function NotificationToggle() {
     }
   };
 
-  // Not supported - show disabled state
-  if (typeof window === "undefined" || !("Notification" in window)) {
+  // CRITICAL: This must be FIRST - before any window/browser checks
+  // Both server AND client render this initially, preventing hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-foreground/40">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="text-xs">Loading...</span>
+      </div>
+    );
+  }
+
+  // Now safe to check browser APIs (only runs on client after mount)
+  if (!("Notification" in window)) {
     return (
       <div className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-foreground/40">
         <BellOff className="h-4 w-4" />

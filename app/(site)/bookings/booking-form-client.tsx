@@ -57,7 +57,9 @@ import { TermsCheckbox } from "@/components/site/terms-acceptance";
 import { TrustBadges, LowStockIndicator } from "@/components/site/social-proof";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { MobileBookingWizard } from "@/components/site/mobile-booking-wizard";
+import { PromoCodeInput } from "@/components/site/promo-code-input";
 import { useCustomerAutofill, saveCustomerInfo } from "@/lib/use-customer-autofill";
+import type { AppliedPromoCode } from "@/lib/promo-code-types";
 
 // =============================================================================
 // MOBILE DETECTION HOOK
@@ -264,6 +266,9 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   
   // Payment type - deposit or full
   const [paymentType, setPaymentType] = useState<'deposit' | 'full'>('deposit');
+  
+  // Promo code state
+  const [appliedPromoCode, setAppliedPromoCode] = useState<AppliedPromoCode | null>(null);
 
   // Track the previous date to detect date changes
   const [prevEventDate, setPrevEventDate] = useState<Date | undefined>();
@@ -435,6 +440,10 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
 
   const showSundayExplanation = selectedOption?.type === "sunday";
 
+  // Calculate final price with promo code discount
+  const discountAmount = appliedPromoCode?.calculatedDiscount || 0;
+  const finalPrice = selectedOption ? selectedOption.price - discountAmount : 0;
+
   const minDate = new Date();
   const maxDate = addMonths(new Date(), 6);
 
@@ -548,6 +557,7 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
           city: formData.city,
           notes: formData.notes.trim(),
           paymentType,
+          promoCode: appliedPromoCode?.code || null,
         }),
       });
 
@@ -964,8 +974,8 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                           </p>
                           <p className="mt-1 text-foreground/70">
                             {isSundayEvent
-                              ? `Upgrade and we'll deliver Saturday morning instead — enjoy both days for just $${upgradePriceDiff} more!`
-                              : `Keep it through Sunday for just $${upgradePriceDiff} more. We'll pick up Monday morning.`}
+                              ? `Upgrade and we'll deliver Saturday 8–11 AM instead — enjoy both days for just ${upgradePriceDiff} more!`
+                              : `Keep it through Sunday for just ${upgradePriceDiff} more. We'll pick up Monday by 10 AM.`}
                           </p>
                         </div>
                         
@@ -1008,11 +1018,11 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                         <ul className="mt-2 space-y-1.5 text-foreground/70">
                           <li className="flex items-start gap-2">
                             <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400/60" />
-                            <span>We&apos;ll deliver <strong className="text-foreground/90">Saturday evening (5–7 PM)</strong> so it&apos;s ready for your Sunday event</span>
+                            <span>We&apos;ll deliver <strong className="text-foreground/90">Saturday 5–7 PM</strong> so it&apos;s ready for your Sunday event</span>
                           </li>
                           <li className="flex items-start gap-2">
                             <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400/60" />
-                            <span>Pickup is <strong className="text-foreground/90">Monday morning</strong> — no rush!</span>
+                            <span>Pickup is <strong className="text-foreground/90">Monday by 10 AM</strong> — no rush!</span>
                           </li>
                         </ul>
                       </div>
@@ -1325,6 +1335,23 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                   )}
 
                   {/* ============================================================= */}
+                  {/* PROMO CODE INPUT */}
+                  {/* ============================================================= */}
+                  {selectedOption && (
+                    <div className="border-t border-white/5 pt-4">
+                      <PromoCodeInput
+                        orderAmount={selectedOption.price}
+                        customerEmail={formData.email || undefined}
+                        productSlug={selectedProduct?.slug}
+                        appliedCode={appliedPromoCode}
+                        onApply={setAppliedPromoCode}
+                        onRemove={() => setAppliedPromoCode(null)}
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  )}
+
+                  {/* ============================================================= */}
                   {/* TERMS ACCEPTANCE */}
                   {/* ============================================================= */}
                   <div className="border-t border-white/5 pt-4">
@@ -1462,16 +1489,46 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                               ${selectedOption.price}
                             </span>
                           </div>
+                          
+                          {/* Promo code discount */}
+                          {appliedPromoCode && discountAmount > 0 && (
+                            <div className="mt-2 flex justify-between text-sm">
+                              <span className="text-green-400">
+                                Promo: {appliedPromoCode.code}
+                              </span>
+                              <span className="font-semibold text-green-400">
+                                -${discountAmount.toFixed(0)}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-baseline justify-between">
                           <span className="font-semibold">Total</span>
-                          <span className="text-xl font-semibold text-cyan-400">
-                            ${selectedOption.price}
-                          </span>
+                          <div className="text-right">
+                            {appliedPromoCode && discountAmount > 0 ? (
+                              <>
+                                <span className="text-sm text-foreground/50 line-through mr-2">
+                                  ${selectedOption.price}
+                                </span>
+                                <span className="text-xl font-semibold text-green-400">
+                                  ${finalPrice}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-xl font-semibold text-cyan-400">
+                                ${selectedOption.price}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
-                        <p className={styles.helperText}>Payment due on delivery</p>
+                        <p className={styles.helperText}>
+                          {paymentType === 'deposit' 
+                            ? `$50 deposit now, ${finalPrice - 50} due on delivery`
+                            : 'Payment due on delivery'
+                          }
+                        </p>
                       </>
                     )}
 

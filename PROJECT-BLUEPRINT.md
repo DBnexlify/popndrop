@@ -2,7 +2,7 @@
 
 > **Purpose**: Quick reference for navigating this codebase. Check here FIRST before exploring files.
 > 
-> **Last Updated**: December 22, 2024 (Added Supabase Storage for images)
+> **Last Updated**: December 23, 2024 (Added Notification Nudge System)
 
 ---
 
@@ -61,6 +61,8 @@ popndrop/
 │   │
 │   ├── api/                                # API Routes
 │   │   ├── admin/
+│   │   │   ├── notifications/
+│   │   │   │   └── route.ts                # Notification CRUD & actions
 │   │   │   └── ...                         # Admin-specific endpoints
 │   │   ├── bookings/
 │   │   │   └── route.ts                    # Booking CRUD operations
@@ -94,6 +96,8 @@ popndrop/
 │   │   ├── booking-payment-actions.tsx     # Payment action buttons
 │   │   ├── booking-status-actions.tsx      # Status change buttons
 │   │   ├── new-booking-listener.tsx        # Real-time booking notifications
+│   │   ├── notification-bell.tsx           # Bell icon with dropdown (nudge system)
+│   │   ├── quick-action-modal.tsx          # Mini-checklist action modal
 │   │   └── pwa-provider.tsx                # PWA service worker provider
 │   │
 │   ├── site/                               # Public site components
@@ -163,6 +167,8 @@ popndrop/
 │
 ├── supabase/                               # Supabase Config
 │   ├── migrations/                         # Database migrations
+│   │   ├── 20241222_add_booking_automation.sql  # Automation schema
+│   │   └── 20241223_add_notification_fields.sql # Notification enhancements
 │   └── push-notifications.sql              # Push notification schema
 │
 ├── docs/                                   # Documentation
@@ -302,6 +308,8 @@ ADMIN_PASSWORD=
 | `booking-status-actions.tsx` | Status change dropdown/buttons | Booking detail page |
 | `booking-payment-actions.tsx` | Mark paid, refund actions | Booking detail page |
 | `new-booking-listener.tsx` | Real-time Supabase subscription for new bookings | Admin layout (shows toast + sound) |
+| `notification-bell.tsx` | Bell icon with badge and dropdown for nudge notifications | Admin header (mobile + desktop) |
+| `quick-action-modal.tsx` | Mini-checklist modal for quick booking actions | Triggered from notification dropdown |
 | `pwa-provider.tsx` | Service worker registration | Admin layout |
 
 ### Site Components (`components/site/`)
@@ -401,6 +409,8 @@ ADMIN_PASSWORD=
 | Route | Method | Purpose |
 |-------|--------|--------|
 | `/api/admin/booking-check` | GET | Check booking conflicts |
+| `/api/admin/notifications` | GET | Fetch pending notifications with counts |
+| `/api/admin/notifications` | POST | Mark viewed, snooze, dismiss, resolve |
 
 #### Cron Jobs (Vercel Cron)
 | Route | Schedule | Purpose |
@@ -1923,7 +1933,7 @@ Mobile modals on iOS often have these issues:
 ├─────────────────────────────────────┤
 │ FIXED FOOTER (flex-shrink-0)        │ ← Always visible
 │ Action buttons                      │
-│ pb-[calc(1rem+env(safe-area-...))]  │ ← iOS safe area
+│ `pb-[calc(1rem+env(safe-area-inset-bottom,0px))]` │ ← iOS safe area
 └─────────────────────────────────────┘
 ```
 
@@ -2044,6 +2054,251 @@ const pillStyles = {
 
 ---
 
+## SECTION 18: BOOKING AUTOMATION SYSTEM
+
+> **Added**: December 22, 2024
+> **Status**: Phase 1 Complete (Schema, Types, Core Logic)
+
+### Overview
+
+The automation system intelligently manages booking status transitions:
+- **Auto-completes** bookings when confident (paid in full, window passed)
+- **Creates attention items** when human input is needed
+- **Runs via cron job** every 2 hours
+
+### Architecture
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  CRON JOB       │────▶│ AUTOMATION      │────▶│ ATTENTION       │
+│  (Every 2hrs)   │     │ PROCESSOR       │     │ ITEMS           │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                       │                       │
+        │                       ▼                       ▼
+        │               ┌─────────────────┐     ┌─────────────────┐
+        └──────────────▶│ AUTO-COMPLETE   │     │ QUICK ACTIONS   │
+                        │ (When confident)│     │ (Dashboard UI)  │
+                        └─────────────────┘     └─────────────────┘
+```
+
+### New Files
+
+| File | Purpose |
+|------|--------|
+| `supabase/migrations/20241222_add_booking_automation.sql` | Database schema changes |
+| `lib/automation-types.ts` | TypeScript types for automation |
+| `lib/automation.ts` | Core automation business logic |
+| `lib/automation-queries.ts` | Database queries for automation |
+| `app/api/cron/booking-automation/route.ts` | Cron job endpoint |
+
+### Database Schema Additions
+
+#### New Columns on `bookings` Table
+
+| Column | Type | Purpose |
+|--------|------|--------|
+| `delivery_window_end` | timestamptz | Computed end time of delivery window |
+| `pickup_window_end` | timestamptz | Computed end time of pickup window |
+| `auto_completed` | boolean | Was this booking auto-completed? |
+| `auto_completed_at` | timestamptz | When was it auto-completed? |
+| `auto_completed_reason` | text | Why was it auto-completed? |
+| `needs_attention` | boolean | Flag for dashboard filtering |
+| `attention_reason` | text | Why does it need attention? |
+| `last_automation_check` | timestamptz | Last time automation ran on this booking |
+
+#### New Table: `attention_items`
+
+Queue of bookings needing admin action.
+
+| Column | Type | Purpose |
+|--------|------|--------|
+| `id` | uuid | Primary key |
+| `booking_id` | uuid | FK to bookings |
+| `attention_type` | attention_type | delivery_confirmation, pickup_confirmation, etc. |
+| `priority` | attention_priority | low, medium, high, urgent |
+| `status` | attention_status | pending, in_progress, resolved, dismissed |
+| `title` | text | Display title |
+| `description` | text | Longer explanation |
+| `suggested_actions` | jsonb | Array of quick action buttons |
+| `resolved_by` | uuid | Who resolved it |
+| `resolved_at` | timestamptz | When resolved |
+
+#### New Table: `automation_log`
+
+Audit trail of all automation actions.
+
+| Column | Type | Purpose |
+|--------|------|--------|
+| `id` | uuid | Primary key |
+| `booking_id` | uuid | Related booking |
+| `booking_number` | text | Denormalized for history |
+| `action_type` | text | auto_complete, create_attention, etc. |
+| `action_details` | jsonb | Full context |
+| `success` | boolean | Did it succeed? |
+| `error_message` | text | Error if failed |
+
+#### New View: `bookings_needing_attention`
+
+Real-time view of all bookings requiring action.
+
+### Automation Rules
+
+**CONFIRMED → DELIVERED** (After delivery window):
+- If paid in full: Create attention item (can auto-advance in future)
+- If balance due: Create attention item with payment collection
+
+**DELIVERED → PICKED_UP → COMPLETED** (After pickup window):
+- If paid in full + no issues: Auto-complete booking
+- If balance due: Create attention item for payment collection
+
+### Window End Time Mapping
+
+| Window | End Time (Eastern) |
+|--------|--------------------|
+| `morning` | 11:00 AM |
+| `midday` | 2:00 PM |
+| `afternoon` | 5:00 PM |
+| `saturday-evening` | 7:00 PM |
+| `evening` | 8:00 PM |
+| `next-morning` | 10:00 AM |
+| `monday-morning` | 10:00 AM |
+| `monday-afternoon` | 5:00 PM |
+
+### Cron Job Configuration
+
+**vercel.json**:
+```json
+{
+  "path": "/api/cron/booking-automation",
+  "schedule": "0 */2 * * *"
+}
+```
+
+Runs every 2 hours (at the top of even hours).
+
+### Key Functions
+
+| Function | File | Purpose |
+|----------|------|--------|
+| `processBookingAutomation()` | `lib/automation.ts` | Main automation loop |
+| `canAutoComplete()` | `lib/automation.ts` | Check if booking can auto-complete |
+| `autoCompleteBooking()` | `lib/automation.ts` | Execute auto-completion |
+| `createAttentionItem()` | `lib/automation.ts` | Create attention queue item |
+| `resolveAttentionItem()` | `lib/automation.ts` | Mark item resolved |
+| `getBookingsNeedingAttention()` | `lib/automation-queries.ts` | Query attention view |
+| `getPendingAttentionItemsWithBookings()` | `lib/automation-queries.ts` | Dashboard query |
+
+### Remaining Work (Prompts 2-6)
+
+- [x] **Prompt 2**: Notification nudge system (bell, dropdown, quick actions)
+- [ ] **Prompt 3**: Dashboard attention panel integration
+- [ ] **Prompt 4**: Booking detail automation info
+- [ ] **Prompt 5**: Push notification integration
+- [ ] **Prompt 6**: Admin settings for automation rules
+
+---
+
+## SECTION 19: NOTIFICATION NUDGE SYSTEM
+
+> **Added**: December 23, 2024
+> **Status**: Complete (Pending migration run)
+
+### Overview
+
+The nudge system brings actions TO the admin instead of making them hunt:
+- **Bell icon** in header shows pending action count
+- **Dropdown panel** lists notifications with quick actions
+- **Snooze/dismiss** options to manage workflow
+- **One-tap actions** to resolve most items without navigating
+
+### New Files
+
+| File | Purpose |
+|------|--------|
+| `components/admin/notification-bell.tsx` | Bell icon with badge and dropdown panel |
+| `components/admin/quick-action-modal.tsx` | Mini-checklist modal for completing actions |
+| `app/api/admin/notifications/route.ts` | API for fetching and managing notifications |
+| `supabase/migrations/20241223_add_notification_fields.sql` | Database enhancements |
+
+### Database Additions
+
+#### New Columns on `attention_items`
+
+| Column | Type | Purpose |
+|--------|------|--------|
+| `viewed_at` | timestamptz | When admin first saw this notification |
+| `snoozed_until` | timestamptz | Hide until this time (snooze feature) |
+
+#### New Database Functions
+
+| Function | Purpose |
+|----------|--------|
+| `get_pending_notifications(limit)` | Fetch notifications with booking details |
+| `get_notification_counts()` | Get counts by priority for badge |
+| `mark_notification_viewed(id)` | Mark as seen |
+| `snooze_notification(id, duration)` | Snooze for 1hr/4hr/tomorrow |
+
+### UI Components
+
+#### NotificationBell
+- Badge shows count (red for urgent, fuchsia for normal)
+- Pulses when urgent items exist
+- Dropdown panel with scrollable notification list
+- 30-second polling for new notifications
+- Mobile-optimized touch targets
+
+#### Notification Cards
+- Icon + color based on attention type (delivery, pickup, payment, etc.)
+- Unread indicator (gradient bar on left)
+- Customer name, booking number, product
+- Balance due highlight when applicable
+- Quick action button → goes to booking
+- Snooze dropdown (1 hour, 4 hours, tomorrow)
+- Dismiss button
+- Relative timestamp
+
+#### QuickActionModal
+- Context-aware actions based on attention type
+- Primary action prominent (gradient button)
+- Secondary actions (outline buttons)
+- Direct call customer button
+- Balance due reminder
+- Uses existing server actions (no new API needed)
+
+### API Endpoints
+
+**GET `/api/admin/notifications`**
+- `?limit=20` - Number of notifications to fetch
+- `?counts=true` - Only return badge counts (lighter weight)
+- Returns: `{ notifications: [...], counts: { total, unviewed, urgent, high, medium, low } }`
+
+**POST `/api/admin/notifications`**
+- `action: 'mark_viewed'` - Mark notification as seen
+- `action: 'snooze'` + `data.duration` - Snooze for period
+- `action: 'dismiss'` - Remove from queue
+- `action: 'resolve'` + `data.resolutionAction` - Complete the action
+
+### Integration Points
+
+- **Admin Layout**: NotificationBell added to mobile header
+- **Admin Nav**: NotificationBell added to desktop sidebar header
+- **Automation System**: Builds on `attention_items` table created in Phase 1
+- **Server Actions**: Uses existing `updateBookingStatus()` and `markBalancePaid()`
+
+### Migration Required
+
+Run in Supabase SQL Editor:
+```sql
+-- File: supabase/migrations/20241223_add_notification_fields.sql
+```
+
+This adds:
+- `viewed_at` and `snoozed_until` columns
+- Indexes for efficient querying
+- Helper functions for notification operations
+
+---
+
 ## USAGE INSTRUCTIONS
 
 ### Before Making Changes
@@ -2061,5 +2316,260 @@ const pillStyles = {
 
 ---
 
-*Blueprint Complete — Last Updated: December 22, 2024*
+*Blueprint Complete — Last Updated: December 23, 2024*
+
+---
+
+## SECTION 21: PROMO CODE SYSTEM
+
+> Added: December 23, 2024
+
+### Overview
+
+Discount code system for checkout that allows percentage or fixed-amount discounts with various restrictions and usage limits.
+
+### Database Schema
+
+#### Table: `promo_codes`
+
+| Column | Type | Purpose |
+|--------|------|--------|
+| `id` | uuid | Primary key |
+| `code` | varchar(20) | Unique code (e.g., "PND-7F39K2") |
+| `discount_type` | enum | 'percent' or 'fixed' |
+| `discount_amount` | numeric | Percent value or dollar amount |
+| `max_discount_cap` | numeric | Optional cap for percent discounts |
+| `minimum_order_amount` | numeric | Optional minimum order |
+| `expiration_date` | timestamptz | Optional expiration |
+| `customer_id` | uuid | Optional - customer-specific code |
+| `usage_limit` | integer | How many times code can be used |
+| `usage_count` | integer | Current usage count |
+| `single_use_per_customer` | boolean | One use per customer |
+| `applicable_products` | uuid[] | Optional - limit to products |
+| `excluded_products` | uuid[] | Optional - exclude products |
+| `status` | enum | 'active', 'used', 'expired', 'disabled' |
+| `description` | text | Public description |
+| `internal_notes` | text | Admin-only notes |
+| `campaign_name` | varchar | For grouping/reporting |
+| `created_by` | uuid | Admin who created it |
+
+#### Table: `promo_code_usage`
+
+| Column | Type | Purpose |
+|--------|------|--------|
+| `id` | uuid | Primary key |
+| `promo_code_id` | uuid | FK to promo_codes |
+| `booking_id` | uuid | FK to bookings |
+| `customer_id` | uuid | FK to customers |
+| `original_amount` | numeric | Order amount before discount |
+| `discount_applied` | numeric | Actual discount given |
+| `final_amount` | numeric | Amount after discount |
+| `used_at` | timestamptz | When code was used |
+
+#### Added to `bookings` table:
+
+- `promo_code_id` - FK to promo_codes
+- `discount_amount` - Amount discounted
+- `discount_code` - Code used (for display)
+
+### Database Functions
+
+| Function | Purpose |
+|----------|--------|
+| `validate_promo_code(code, customer_id, product_id, order_amount)` | Validates and returns discount info |
+| `apply_promo_code(promo_id, booking_id, customer_id, original, discount)` | Records usage |
+| `generate_promo_code()` | Auto-generates unique PND-XXXXXX code |
+
+### File Locations
+
+| File | Purpose |
+|------|--------|
+| `lib/promo-code-types.ts` | TypeScript types and helpers |
+| `app/api/promo-codes/validate/route.ts` | Public validation endpoint |
+| `app/api/admin/promo-codes/route.ts` | Admin CRUD API |
+| `components/site/promo-code-input.tsx` | Checkout input component |
+| `app/admin/(dashboard)/promo-codes/page.tsx` | Admin management page |
+| `app/admin/(dashboard)/promo-codes/promo-codes-client.tsx` | Admin UI client |
+| `supabase/migrations/20241223_promo_codes.sql` | Database migration |
+
+### Validation Rules
+
+When a code is validated, these checks run in order:
+
+1. Code exists in database
+2. Status is 'active'
+3. Not expired (checks expiration_date)
+4. Usage limit not exceeded
+5. Customer-specific check (if applicable)
+6. Single-use-per-customer check
+7. Minimum order amount check
+8. Product restrictions check
+
+### Integration Points
+
+- **Checkout Form**: `PromoCodeInput` component in payment section
+- **Booking API**: Pass `promoCode` field to apply discount
+- **Stripe**: Discount applied to checkout session amount
+- **Admin Sidebar**: "Promo Codes" nav item with Tag icon
+
+### Migration Required
+
+Run in Supabase SQL Editor:
+```sql
+-- File: supabase/migrations/20241223_promo_codes.sql
+```
+
+---
+
+## SECTION 22: CUSTOMER LOYALTY REWARDS SYSTEM
+
+> Added: December 23, 2024
+
+### Overview
+
+Automated loyalty rewards program that generates discount codes when customers hit booking milestones. Integrates with the promo code system for seamless discount application.
+
+### How It Works
+
+```
+Booking status → 'completed'
+        ↓
+Trigger checks customer's completed_bookings_count
+        ↓
+If tier threshold reached AND not yet awarded:
+        ↓
+Generate loyalty promo code (customer-specific)
+        ↓
+Record reward in customer_loyalty_rewards
+        ↓
+Send celebration email to customer
+```
+
+### Loyalty Tiers (Default Configuration)
+
+| Tier | Bookings Required | Discount | Max Cap | Min Order | Code Expiry |
+|------|-------------------|----------|---------|-----------|-------------|
+| Bronze | 3 | 10% | $50 | $150 | 60 days |
+| Silver | 5 | 20% | $50 | $150 | 60 days |
+
+### Database Schema
+
+#### Table: `loyalty_tiers`
+
+| Column | Type | Purpose |
+|--------|------|--------|
+| `id` | uuid | Primary key |
+| `tier_name` | varchar | 'bronze', 'silver', etc. |
+| `tier_level` | integer | Ordering (1, 2, 3...) |
+| `bookings_required` | integer | Threshold to reach tier |
+| `discount_percent` | integer | 10, 20, etc. |
+| `max_discount_cap` | numeric | Max discount in dollars |
+| `minimum_order_amount` | numeric | Min order to use code |
+| `code_expiration_days` | integer | Days until code expires |
+| `code_prefix` | varchar | 'LYL10', 'LYL20' |
+| `display_name` | varchar | For emails/UI |
+| `badge_color` | varchar | For UI display |
+| `is_active` | boolean | Enable/disable tier |
+
+#### Table: `customer_loyalty_rewards`
+
+| Column | Type | Purpose |
+|--------|------|--------|
+| `id` | uuid | Primary key |
+| `customer_id` | uuid | FK to customers |
+| `tier_id` | uuid | FK to loyalty_tiers |
+| `promo_code_id` | uuid | FK to promo_codes |
+| `bookings_at_award` | integer | Booking count when earned |
+| `triggering_booking_id` | uuid | Which booking triggered |
+| `awarded_at` | timestamptz | When reward was earned |
+| `code_used` | boolean | Has code been redeemed |
+| `code_used_at` | timestamptz | When code was used |
+| `code_expired` | boolean | Has code expired |
+| `email_sent` | boolean | Notification email sent |
+| `reminder_sent` | boolean | Expiry reminder sent |
+
+**Constraint**: `UNIQUE (customer_id, tier_id)` - One reward per tier per customer
+
+#### Table: `loyalty_audit_log`
+
+Tracks all loyalty actions for debugging and analytics.
+
+#### View: `loyalty_dashboard_stats`
+
+Aggregated stats for admin dashboard.
+
+### Database Functions
+
+| Function | Purpose |
+|----------|--------|
+| `check_loyalty_tier_eligibility(customer_id, bookings)` | Check if customer qualifies for new tier |
+| `award_loyalty_reward(customer_id, tier_id, booking_id)` | Award reward and generate code |
+| `get_customer_loyalty_status(customer_id)` | Get customer's progress and available rewards |
+
+### Triggers
+
+| Trigger | Table | Purpose |
+|---------|-------|--------|
+| `trigger_check_loyalty_on_complete` | bookings | Auto-check for rewards on booking completion |
+| `trigger_sync_loyalty_usage` | promo_codes | Sync usage back to loyalty rewards |
+
+### File Locations
+
+| File | Purpose |
+|------|--------|
+| `lib/loyalty-types.ts` | TypeScript types and helpers |
+| `lib/loyalty-queries.ts` | Database query functions |
+| `lib/emails/loyalty-emails.ts` | Email templates |
+| `app/api/loyalty/route.ts` | Public API (status by email) |
+| `app/api/admin/loyalty/route.ts` | Admin API (management) |
+| `components/site/loyalty-status.tsx` | Checkout loyalty display |
+| `app/admin/(dashboard)/loyalty/page.tsx` | Admin dashboard page |
+| `app/admin/(dashboard)/loyalty/loyalty-client.tsx` | Admin client component |
+| `supabase/migrations/20241223_loyalty_rewards.sql` | Database migration |
+
+### Admin Features
+
+- **Dashboard Stats**: Total issued, redeemed, redemption rate, total discount given
+- **Tier Management**: View/edit tier configuration
+- **Rewards List**: Filter by status (all/unused/used/expired)
+- **Manual Actions**: Resend email, view customer
+
+### Customer Features
+
+- **Checkout Display**: Shows loyalty progress and available rewards
+- **Auto-Apply**: One-click apply loyalty discount
+- **Progress Bar**: Visual progress toward next tier
+- **Reward Notification**: Email when reward is earned
+
+### Navigation
+
+- **Admin Sidebar**: "Loyalty Rewards" nav item with Gift icon
+- **Route**: `/admin/loyalty`
+
+### Email Templates
+
+| Email | Trigger |
+|-------|--------|
+| Loyalty Reward Earned | Booking completion triggers new tier |
+| Loyalty Reminder | 7 days before code expires (cron) |
+| Admin Notification | Optional - when customer earns reward |
+
+### Guardrails
+
+- **Max Discount Cap**: $50 default (configurable per tier)
+- **Minimum Order**: $150 default (configurable per tier)
+- **One Per Tier**: Customer can only earn each tier's reward once
+- **Customer-Specific Codes**: Codes are tied to customer, can't be shared
+- **Single Use**: Each loyalty code can only be used once
+
+### Migration Required
+
+Run in Supabase SQL Editor:
+```sql
+-- File: supabase/migrations/20241223_loyalty_rewards.sql
+```
+
+---
+
+*Blueprint Complete — Last Updated: December 23, 2024*
 

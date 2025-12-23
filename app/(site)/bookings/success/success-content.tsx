@@ -7,6 +7,7 @@ import { Calendar, Phone, Mail, Check, MapPin, Clock, Copy, Share2, Facebook, Tw
 import { Confetti } from "@/components/ui/confetti";
 import { AddToCalendar } from "@/components/ui/add-to-calendar";
 import { buildCustomerCalendarEvent, type CustomerCalendarData } from "@/lib/calendar";
+import { getDeliveryWindowLabel, getPickupWindowLabel } from "@/lib/timezone";
 
 /* ---------------------------------------------------------------------------
  * Types
@@ -397,7 +398,7 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
               icon={<Clock className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />}
               iconStyle={styles.iconCyan}
               label="Delivery Time"
-              value={booking.delivery_window}
+              value={getDeliveryWindowLabel(booking.delivery_window)}
               labelClass={styles.label}
               valueClass="text-sm sm:text-base"
             />
@@ -413,7 +414,7 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
               icon={<Calendar className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />}
               iconStyle={styles.iconCyan}
               label="Pickup"
-              value={`${pickupDate} at ${booking.pickup_window}`}
+              value={`${pickupDate}, ${getPickupWindowLabel(booking.pickup_window)}`}
               labelClass={styles.label}
               valueClass="text-sm sm:text-base"
             />

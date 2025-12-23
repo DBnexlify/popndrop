@@ -34,6 +34,7 @@ import {
 import { isAudioEnabled, setAudioEnabled, playNewBookingSound } from "@/lib/admin-sounds";
 import { Button } from "@/components/ui/button";
 import { usePWA } from "@/components/admin/pwa-provider";
+import { NotificationPreferencesEditor } from "@/components/admin/notification-preferences";
 import type { AdminUser } from "@/lib/database-types";
 
 interface SettingsClientProps {
@@ -449,6 +450,25 @@ export function SettingsClient({ admin }: SettingsClientProps) {
             <p>Subscribed: {isSubscribed ? "✓" : "✗"}</p>
           </div>
         </details>
+      </section>
+
+      {/* ================================================================== */}
+      {/* NOTIFICATION PREFERENCES - Customize what you receive */}
+      {/* ================================================================== */}
+      <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-500/20">
+            <Bell className="h-5 w-5 text-fuchsia-400" />
+          </div>
+          <div>
+            <h2 className="font-semibold">Notification Preferences</h2>
+            <p className="text-sm text-foreground/60">
+              Customize which alerts you receive
+            </p>
+          </div>
+        </div>
+        
+        <NotificationPreferencesEditor isSubscribed={isSubscribed} />
       </section>
 
       {/* ================================================================== */}

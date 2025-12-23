@@ -35,6 +35,7 @@ import {
   Ban,
 } from "lucide-react";
 import { CancellationModal } from "@/components/site/cancellation-modal";
+import { getDeliveryWindowLabel, getPickupWindowLabel } from "@/lib/timezone";
 
 // =============================================================================
 // DESIGN SYSTEM STYLES
@@ -238,7 +239,7 @@ function BookingCard({
           </div>
           <div className="flex items-center gap-2 text-sm text-foreground/70">
             <Clock className="h-4 w-4 shrink-0 text-foreground/40" />
-            <span>Delivery: {booking.delivery_window}</span>
+            <span>Delivery: {getDeliveryWindowLabel(booking.delivery_window)}</span>
           </div>
         </div>
 

@@ -99,6 +99,20 @@ export function getMonthShort(dateStr: string): string {
   });
 }
 
+/**
+ * Format a date string for short display with year
+ * @example formatDateWithYear('2024-12-25') => "Dec 25, 2024"
+ */
+export function formatDateWithYear(dateStr: string): string {
+  const date = new Date(dateStr + (dateStr.includes('T') ? '' : 'T12:00:00'));
+  return date.toLocaleDateString('en-US', {
+    timeZone: EASTERN_TIMEZONE,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 // =============================================================================
 // TIMESTAMP FORMATTING (for created_at, updated_at, etc.)
 // These are full ISO timestamps stored in UTC - convert to Eastern for display
@@ -220,6 +234,31 @@ export function formatRelativeTime(isoString: string): string {
   return formatTimestampShort(isoString);
 }
 
+/**
+ * Format a timestamp as compact relative time (for notifications)
+ * @example formatRelativeTimeShort('2024-12-22T05:17:00Z') => "2h"
+ */
+export function formatRelativeTimeShort(isoString: string): string {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 1) return 'now';
+  if (diffMins < 60) return `${diffMins}m`;
+  if (diffHours < 24) return `${diffHours}h`;
+  if (diffDays < 7) return `${diffDays}d`;
+  
+  // Fall back to short date
+  return date.toLocaleDateString('en-US', {
+    timeZone: EASTERN_TIMEZONE,
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 // =============================================================================
 // TIME-ONLY FORMATTING
 // =============================================================================
@@ -265,45 +304,54 @@ export function isTomorrow(dateStr: string): boolean {
 }
 
 // =============================================================================
-// DELIVERY/PICKUP WINDOW LABELS
+// DELIVERY/PICKUP WINDOW TIME LABELS
+// Shows actual times (e.g., "8–11 AM") instead of abstract labels ("Morning")
 // =============================================================================
 
+/**
+ * Get delivery window as actual time display
+ * @example getDeliveryWindowLabel('morning') => "8–11 AM"
+ */
 export function getDeliveryWindowLabel(window: string): string {
   const labels: Record<string, string> = {
-    'morning': 'Morning (8–11 AM)',
-    'midday': 'Midday (11 AM–2 PM)',
-    'afternoon': 'Afternoon (2–5 PM)',
-    'saturday-evening': 'Saturday Evening (5–7 PM)',
-  };
-  return labels[window] || window;
-}
-
-export function getPickupWindowLabel(window: string): string {
-  const labels: Record<string, string> = {
-    'evening': 'Evening (6–8 PM)',
-    'next-morning': 'Next Morning (by 10 AM)',
-    'monday-morning': 'Monday Morning (by 10 AM)',
-    'monday-afternoon': 'Monday Afternoon (2–5 PM)',
+    'morning': '8–11 AM',
+    'midday': '11 AM–2 PM',
+    'afternoon': '2–5 PM',
+    'saturday-evening': '5–7 PM',
   };
   return labels[window] || window;
 }
 
 /**
- * Format any time window (delivery or pickup)
- * Combines both delivery and pickup window labels
+ * Get pickup window as actual time display
+ * @example getPickupWindowLabel('evening') => "6–8 PM"
+ */
+export function getPickupWindowLabel(window: string): string {
+  const labels: Record<string, string> = {
+    'evening': '6–8 PM',
+    'next-morning': 'By 10 AM',
+    'monday-morning': 'By 10 AM',
+    'monday-afternoon': '2–5 PM',
+  };
+  return labels[window] || window;
+}
+
+/**
+ * Format any time window (delivery or pickup) as actual time
+ * @example formatTimeWindow('morning') => "8–11 AM"
  */
 export function formatTimeWindow(window: string): string {
   const allLabels: Record<string, string> = {
     // Delivery windows
-    'morning': 'Morning (8–11 AM)',
-    'midday': 'Midday (11 AM–2 PM)',
-    'afternoon': 'Afternoon (2–5 PM)',
-    'saturday-evening': 'Saturday Evening (5–7 PM)',
+    'morning': '8–11 AM',
+    'midday': '11 AM–2 PM',
+    'afternoon': '2–5 PM',
+    'saturday-evening': '5–7 PM',
     // Pickup windows
-    'evening': 'Evening (6–8 PM)',
-    'next-morning': 'Next Morning (by 10 AM)',
-    'monday-morning': 'Monday Morning (by 10 AM)',
-    'monday-afternoon': 'Monday Afternoon (2–5 PM)',
+    'evening': '6–8 PM',
+    'next-morning': 'By 10 AM',
+    'monday-morning': 'By 10 AM',
+    'monday-afternoon': '2–5 PM',
   };
   return allLabels[window] || window;
 }

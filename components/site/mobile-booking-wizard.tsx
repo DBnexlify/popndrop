@@ -50,8 +50,10 @@ import {
 import { hapticSelect, hapticSuccess, hapticNavigate, hapticError, hapticConfirm } from "@/lib/haptics";
 import { TermsCheckbox } from "@/components/site/terms-acceptance";
 import { TrustBadges, LowStockIndicator } from "@/components/site/social-proof";
+import { PromoCodeInputCompact } from "@/components/site/promo-code-input";
 import { useCustomerAutofill, saveCustomerInfo } from "@/lib/use-customer-autofill";
 import { PhoneInput } from "@/components/ui/phone-input";
+import type { AppliedPromoCode } from "@/lib/promo-code-types";
 
 // =============================================================================
 // DESIGN SYSTEM STYLES - Premium Glassmorphism (matching desktop)
@@ -776,7 +778,7 @@ function Step2DateTime({
                 <div>
                   <p className="font-medium text-cyan-300">Sunday rental:</p>
                   <p className="mt-0.5 text-foreground/60">
-                    Delivered Saturday evening, picked up Monday morning
+                    Delivered Saturday 5–7 PM, picked up Monday by 10 AM
                   </p>
                 </div>
               </div>
@@ -1041,6 +1043,8 @@ function Step4Review({
   setTermsAccepted,
   paymentType,
   setPaymentType,
+  appliedPromoCode,
+  setAppliedPromoCode,
   isSubmitting,
   submitError,
   onSubmit,
@@ -1054,11 +1058,16 @@ function Step4Review({
   setTermsAccepted: (accepted: boolean) => void;
   paymentType: 'deposit' | 'full';
   setPaymentType: (type: 'deposit' | 'full') => void;
+  appliedPromoCode: AppliedPromoCode | null;
+  setAppliedPromoCode: (code: AppliedPromoCode | null) => void;
   isSubmitting: boolean;
   submitError: string | null;
   onSubmit: () => void;
   onEdit: (step: number) => void;
 }) {
+  // Calculate discount
+  const discountAmount = appliedPromoCode?.calculatedDiscount || 0;
+  const finalPrice = selectedOption.price - discountAmount;
   return (
     <div className="px-4 pt-4 pb-6">
       {/* Floating Section Card */}
@@ -1171,11 +1180,39 @@ function Step4Review({
               <div className="h-px bg-white/5" />
 
               {/* Total */}
-              <div className="flex items-center justify-between">
-                <span className="text-lg font-semibold">Total</span>
-                <span className="text-2xl font-semibold text-cyan-400">
-                  ${selectedOption.price}
-                </span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-foreground/70">{selectedOption.label}</span>
+                  <span className="font-semibold">${selectedOption.price}</span>
+                </div>
+                
+                {/* Promo discount */}
+                {appliedPromoCode && discountAmount > 0 && (
+                  <div className="flex items-center justify-between text-green-400">
+                    <span className="text-sm">Promo: {appliedPromoCode.code}</span>
+                    <span className="font-semibold">-${discountAmount.toFixed(0)}</span>
+                  </div>
+                )}
+                
+                <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                  <span className="text-lg font-semibold">Total</span>
+                  <div className="text-right">
+                    {appliedPromoCode && discountAmount > 0 ? (
+                      <>
+                        <span className="text-sm text-foreground/50 line-through mr-2">
+                          ${selectedOption.price}
+                        </span>
+                        <span className="text-2xl font-semibold text-green-400">
+                          ${finalPrice}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-2xl font-semibold text-cyan-400">
+                        ${selectedOption.price}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
               <p className={styles.helperText}>Payment selection below</p>
             </div>
@@ -1271,6 +1308,19 @@ function Step4Review({
             </div>
           </div>
 
+          {/* Promo Code */}
+          <div className="mt-5">
+            <PromoCodeInputCompact
+              orderAmount={selectedOption.price}
+              customerEmail={formData.email || undefined}
+              productSlug={selectedProduct.slug}
+              appliedCode={appliedPromoCode}
+              onApply={setAppliedPromoCode}
+              onRemove={() => setAppliedPromoCode(null)}
+              disabled={isSubmitting}
+            />
+          </div>
+
           {/* Terms */}
           <div className="mt-5">
             <TermsCheckbox
@@ -1364,6 +1414,7 @@ export function MobileBookingWizard({
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [paymentType, setPaymentType] = useState<'deposit' | 'full'>('deposit');
+  const [appliedPromoCode, setAppliedPromoCode] = useState<AppliedPromoCode | null>(null);
   
   // UI state
   const [unavailableDates, setUnavailableDates] = useState<Date[]>([]);
@@ -1519,7 +1570,8 @@ export function MobileBookingWizard({
           address: formData.address.trim(),
           city: formData.city,
           notes: formData.notes.trim(),
-          paymentType, // NEW: 'deposit' or 'full'
+          paymentType,
+          promoCode: appliedPromoCode?.code || null,
         }),
       });
 
@@ -1649,6 +1701,8 @@ export function MobileBookingWizard({
               setTermsAccepted={setTermsAccepted}
               paymentType={paymentType}
               setPaymentType={setPaymentType}
+              appliedPromoCode={appliedPromoCode}
+              setAppliedPromoCode={setAppliedPromoCode}
               isSubmitting={isSubmitting}
               submitError={submitError}
               onSubmit={handleSubmit}

@@ -110,6 +110,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const bookingId = session.metadata?.booking_id;
   const paymentType = session.metadata?.payment_type || 'deposit';
   const customerId = session.metadata?.customer_id;
+  const promoCodeId = session.metadata?.promo_code_id || null;
+  const promoDiscount = parseFloat(session.metadata?.promo_discount || '0');
+  const originalPrice = parseFloat(session.metadata?.original_price || '0');
+  const finalPrice = parseFloat(session.metadata?.final_price || '0');
   
   if (!bookingId) {
     console.error('❌ No booking_id in session metadata:', session.id);
@@ -219,7 +223,32 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   if (paymentError) {
     console.error('❌ Error creating payment record:', paymentError);
   } else {
-    console.log(`✅ Payment record created: $${amountPaid}`);
+    console.log(`✅ Payment record created: ${amountPaid}`);
+  }
+
+  // ==========================================================================
+  // 3.5. RECORD PROMO CODE USAGE (if promo code was applied)
+  // ==========================================================================
+  if (promoCodeId && promoDiscount > 0 && customerId) {
+    try {
+      // Call the apply_promo_code function to record usage and increment count
+      const { error: promoUsageError } = await supabase
+        .rpc('apply_promo_code', {
+          p_promo_code_id: promoCodeId,
+          p_booking_id: bookingId,
+          p_customer_id: customerId,
+          p_original_amount: originalPrice,
+          p_discount_applied: promoDiscount,
+        });
+
+      if (promoUsageError) {
+        console.error('❌ Error recording promo code usage:', promoUsageError);
+      } else {
+        console.log(`✅ Promo code usage recorded: -${promoDiscount}`);
+      }
+    } catch (promoErr) {
+      console.error('❌ Error in promo code usage:', promoErr);
+    }
   }
 
   // ==========================================================================

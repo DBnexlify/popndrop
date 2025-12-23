@@ -51,30 +51,30 @@ export const SCHEDULE = {
   // Days we pick up
   pickupDays: [1, 2, 3, 4, 5, 6], // Mon-Sat
   
-  // Delivery time windows
+  // Delivery time windows (show actual times, not labels like "Morning")
   deliveryWindows: [
-    { label: "Morning (8–11 AM)", value: "morning" },
-    { label: "Midday (11 AM–2 PM)", value: "midday" },
-    { label: "Afternoon (2–5 PM)", value: "afternoon" },
+    { label: "8–11 AM", value: "morning" },
+    { label: "11 AM–2 PM", value: "midday" },
+    { label: "2–5 PM", value: "afternoon" },
   ],
   
   // Saturday evening delivery (for Sunday-only rentals)
   saturdayEveningWindow: [
-    { label: "Saturday evening (5–7 PM)", value: "saturday-evening" },
+    { label: "5–7 PM (Saturday)", value: "saturday-evening" },
   ],
   
-  // Pickup windows
+  // Pickup windows (show actual times)
   sameDayPickupWindows: [
-    { label: "Evening (6–8 PM)", value: "evening" },
+    { label: "6–8 PM", value: "evening" },
   ],
   
   nextMorningPickupWindows: [
-    { label: "Next morning (by 10 AM)", value: "next-morning" },
+    { label: "By 10 AM (next day)", value: "next-morning" },
   ],
   
   mondayPickupWindows: [
-    { label: "Monday morning (by 10 AM)", value: "monday-morning" },
-    { label: "Monday afternoon (2–5 PM)", value: "monday-afternoon" },
+    { label: "By 10 AM (Monday)", value: "monday-morning" },
+    { label: "2–5 PM (Monday)", value: "monday-afternoon" },
   ],
 } as const;
 
@@ -155,7 +155,7 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
           type: "sunday",
           price: product.pricing.sunday,
           label: "Sunday only",
-          description: "Delivered Saturday evening (5-7 PM), pickup Monday",
+          description: "Delivered Saturday 5–7 PM, pickup Monday",
           deliveryDay: "Saturday",
           deliveryWindows: SCHEDULE.saturdayEveningWindow,
           pickupDay: "Monday",
@@ -166,7 +166,7 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
           type: "weekend",
           price: product.pricing.weekend,
           label: "Full weekend",
-          description: "Delivered Saturday morning, pickup Monday — more time!",
+          description: "Delivered Saturday 8–11 AM, pickup Monday — more time!",
           deliveryDay: "Saturday",
           deliveryWindows: SCHEDULE.deliveryWindows,
           pickupDay: "Monday",

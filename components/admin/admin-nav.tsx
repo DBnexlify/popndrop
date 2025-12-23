@@ -19,9 +19,12 @@ import {
   LogOut,
   ExternalLink,
   Ban,
+  Tag,
+  Gift,
 } from 'lucide-react';
 import type { AdminUser } from '@/lib/database-types';
 import { NotificationToggle, SoundToggle } from './pwa-provider';
+import { NotificationBell } from './notification-bell';
 
 interface AdminNavProps {
   admin: AdminUser;
@@ -34,6 +37,8 @@ const navItems = [
   { href: '/admin/cancellations', label: 'Cancellations', icon: Ban },
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/inventory', label: 'Inventory', icon: Package },
+  { href: '/admin/promo-codes', label: 'Promo Codes', icon: Tag },
+  { href: '/admin/loyalty', label: 'Loyalty Rewards', icon: Gift },
   { href: '/admin/blackout-dates', label: 'Blackout Dates', icon: CalendarOff },
 ];
 
@@ -45,15 +50,21 @@ export function AdminNav({ admin }: AdminNavProps) {
   const pathname = usePathname();
   
   return (
-    <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r border-white/10 bg-neutral-950 lg:flex">
-      {/* Logo */}
-      <div className="flex h-16 items-center gap-2 border-b border-white/10 px-6">
-        <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-lg font-semibold text-transparent">
-          Pop & Drop
-        </span>
-        <span className="rounded bg-fuchsia-500/20 px-1.5 py-0.5 text-[10px] font-medium text-fuchsia-300">
-          ADMIN
-        </span>
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/10 bg-neutral-950 lg:flex overflow-visible">
+      {/* Logo & Notifications */}
+      <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
+        <div className="flex items-center gap-2">
+          <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-cyan-400 bg-clip-text text-lg font-semibold text-transparent">
+            Pop & Drop
+          </span>
+          <span className="rounded bg-fuchsia-500/20 px-1.5 py-0.5 text-[10px] font-medium text-fuchsia-300">
+            ADMIN
+          </span>
+        </div>
+        {/* Bell with extra padding to prevent cutoff */}
+        <div className="relative -mr-1">
+          <NotificationBell />
+        </div>
       </div>
       
       {/* Navigation */}

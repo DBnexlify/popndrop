@@ -76,10 +76,17 @@ export function parseTimeString(timeStr: string): { hours: number; minutes: numb
   // Clean up the string
   const cleaned = timeStr.trim().toLowerCase();
   
-  // Handle descriptive time windows
-  if (cleaned.includes('morning')) return { hours: 9, minutes: 0 };
-  if (cleaned.includes('afternoon')) return { hours: 13, minutes: 0 };
-  if (cleaned.includes('evening')) return { hours: 17, minutes: 0 };
+  // Handle descriptive time windows (legacy support + fallback)
+  // These match the values stored in the database
+  if (cleaned.includes('8') && cleaned.includes('11')) return { hours: 8, minutes: 0 }; // 8-11 AM
+  if (cleaned.includes('11') && cleaned.includes('2')) return { hours: 11, minutes: 0 }; // 11 AM-2 PM
+  if (cleaned.includes('2') && cleaned.includes('5')) return { hours: 14, minutes: 0 }; // 2-5 PM
+  if (cleaned.includes('5') && cleaned.includes('7')) return { hours: 17, minutes: 0 }; // 5-7 PM
+  if (cleaned.includes('6') && cleaned.includes('8')) return { hours: 18, minutes: 0 }; // 6-8 PM
+  if (cleaned.includes('morning')) return { hours: 8, minutes: 0 };
+  if (cleaned.includes('midday')) return { hours: 11, minutes: 0 };
+  if (cleaned.includes('afternoon')) return { hours: 14, minutes: 0 };
+  if (cleaned.includes('evening')) return { hours: 18, minutes: 0 };
   
   // Try to find a specific time pattern like "9:00 AM", "9 AM", "9:30 am"
   const match = timeStr.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
@@ -116,15 +123,38 @@ export function parseTimeWindow(timeWindow: string): {
   
   const cleaned = timeWindow.toLowerCase().trim();
   
-  // Handle descriptive windows
+  // Handle descriptive windows (legacy support + database values)
+  // Match both new format ("8–11 AM") and legacy ("morning")
+  if (cleaned.includes('8') && cleaned.includes('11')) {
+    return { startHours: 8, startMinutes: 0, endHours: 11, endMinutes: 0 };
+  }
+  if (cleaned.includes('11') && (cleaned.includes('2') || cleaned.includes('14'))) {
+    return { startHours: 11, startMinutes: 0, endHours: 14, endMinutes: 0 };
+  }
+  if ((cleaned.includes('2') || cleaned.includes('14')) && (cleaned.includes('5') || cleaned.includes('17'))) {
+    return { startHours: 14, startMinutes: 0, endHours: 17, endMinutes: 0 };
+  }
+  if ((cleaned.includes('5') || cleaned.includes('17')) && (cleaned.includes('7') || cleaned.includes('19'))) {
+    return { startHours: 17, startMinutes: 0, endHours: 19, endMinutes: 0 };
+  }
+  if ((cleaned.includes('6') || cleaned.includes('18')) && (cleaned.includes('8') || cleaned.includes('20'))) {
+    return { startHours: 18, startMinutes: 0, endHours: 20, endMinutes: 0 };
+  }
+  if (cleaned.includes('by 10') || cleaned.includes('10 am')) {
+    return { startHours: 8, startMinutes: 0, endHours: 10, endMinutes: 0 };
+  }
+  // Legacy fallbacks
   if (cleaned.includes('morning')) {
-    return { startHours: 9, startMinutes: 0, endHours: 11, endMinutes: 0 };
+    return { startHours: 8, startMinutes: 0, endHours: 11, endMinutes: 0 };
+  }
+  if (cleaned.includes('midday')) {
+    return { startHours: 11, startMinutes: 0, endHours: 14, endMinutes: 0 };
   }
   if (cleaned.includes('afternoon')) {
-    return { startHours: 13, startMinutes: 0, endHours: 15, endMinutes: 0 };
+    return { startHours: 14, startMinutes: 0, endHours: 17, endMinutes: 0 };
   }
   if (cleaned.includes('evening')) {
-    return { startHours: 17, startMinutes: 0, endHours: 19, endMinutes: 0 };
+    return { startHours: 18, startMinutes: 0, endHours: 20, endMinutes: 0 };
   }
   
   // Try to split by common separators

@@ -9,6 +9,7 @@ import { AdminNav } from '@/components/admin/admin-nav';
 import { AdminMobileNav } from '@/components/admin/admin-mobile-nav';
 import { PWAProvider, PWAInstallPrompt, OfflineIndicator } from '@/components/admin/pwa-provider';
 import { NewBookingListener } from '@/components/admin/new-booking-listener';
+import { NotificationBell } from '@/components/admin/notification-bell';
 import { ScrollToTop } from '@/components/scroll-to-top';
 import type { Metadata, Viewport } from 'next';
 import Image from 'next/image';
@@ -108,9 +109,10 @@ export default async function AdminDashboardLayout({
               </div>
             </div>
             
-            {/* Admin badge */}
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-gradient-to-r from-fuchsia-500/20 to-purple-500/20 px-2.5 py-1 text-[10px] font-semibold text-fuchsia-300">
+            {/* Notifications & Admin badge */}
+            <div className="flex items-center gap-3">
+              <NotificationBell />
+              <span className="shrink-0 rounded-full bg-gradient-to-r from-fuchsia-500/20 to-purple-500/20 px-2.5 py-1 text-[10px] font-semibold text-fuchsia-300">
                 ADMIN
               </span>
             </div>
