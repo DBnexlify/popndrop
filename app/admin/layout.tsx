@@ -32,11 +32,12 @@ export default function AdminRootLayout({
 }) {
   return (
     <div className="min-h-screen bg-neutral-950">
-      {/* Background gradient */}
+      {/* Background gradient - OPTIMIZED FOR SAFARI
+          Reduced blur from 100px to 48px (blur-3xl) for smooth performance */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-neutral-950" />
-        <div className="absolute -top-40 left-1/2 h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-fuchsia-600 opacity-[0.08] blur-[100px]" />
-        <div className="absolute top-[50%] right-[-120px] h-[800px] w-[400px] rounded-full bg-cyan-500 opacity-[0.05] blur-[100px]" />
+        <div className="absolute -top-40 left-1/2 h-[500px] w-[700px] -translate-x-1/2 rounded-full bg-fuchsia-600 opacity-[0.06] blur-3xl" />
+        <div className="absolute top-[50%] right-[-80px] h-[500px] w-[350px] rounded-full bg-cyan-500 opacity-[0.04] blur-3xl" />
       </div>
       {children}
     </div>

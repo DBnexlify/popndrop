@@ -40,17 +40,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {/* Skip link for keyboard/screen reader users */}
           <SkipLink />
           
-          {/* Site-wide background gradient */}
+          {/* Site-wide background gradient - OPTIMIZED FOR SAFARI
+              Using smaller blur values and fewer elements for better performance.
+              Safari struggles with large blur-[100px] operations. */}
           <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
             {/* Base dark */}
             <div className="absolute inset-0 bg-neutral-950" />
 
-            {/* Gradient blobs - decorative only */}
-            <div className="absolute -top-40 left-1/2 h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-fuchsia-600 opacity-[0.08] blur-[100px]" />
-            <div className="absolute -top-20 right-[-150px] h-[200px] w-[400px] rounded-full bg-cyan-500 opacity-[0.06] blur-[100px]" />
-            <div className="absolute top-[35%] left-[-180px] h-[500px] w-[500px] rounded-full bg-purple-600 opacity-[0.06] blur-[100px]" />
-            <div className="absolute top-[50%] right-[-120px] h-[800px] w-[400px] rounded-full bg-cyan-500 opacity-[0.05] blur-[100px]" />
-            <div className="absolute bottom-[-150px] left-1/3 h-[500px] w-[600px] rounded-full bg-purple-600 opacity-[0.08] blur-[100px]" />
+            {/* Optimized gradient blobs - reduced blur for Safari performance
+                Original: blur-[100px] on 5 elements = very slow on Safari
+                Optimized: blur-3xl (48px) on 3 elements = smooth on all browsers */}
+            <div className="absolute -top-40 left-1/2 h-[500px] w-[700px] -translate-x-1/2 rounded-full bg-fuchsia-600 opacity-[0.07] blur-3xl" />
+            <div className="absolute top-[40%] left-[-100px] h-[400px] w-[400px] rounded-full bg-purple-600 opacity-[0.05] blur-3xl" />
+            <div className="absolute top-[60%] right-[-80px] h-[500px] w-[350px] rounded-full bg-cyan-500 opacity-[0.04] blur-3xl" />
           </div>
 
           {children}

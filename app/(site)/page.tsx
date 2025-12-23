@@ -142,13 +142,13 @@ export default function HomePage() {
           <div className="pointer-events-none absolute inset-0 [background:radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.15)_70%,rgba(0,0,0,0.28)_100%)]" />
 
           <div className="relative grid gap-8 p-5 sm:grid-cols-2 sm:items-center sm:gap-10 sm:p-10 lg:p-12">
-            {/* Logo Card */}
+            {/* Logo Card - Optimized blur effects for Safari */}
             <div className="order-1 flex items-center justify-center sm:order-2">
-              <div className="relative w-full max-w-[280px] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.22)] backdrop-blur-2xl sm:max-w-sm sm:rounded-3xl sm:p-6">
-                {/* Logo glow effects */}
+              <div className="relative w-full max-w-[280px] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.22)] backdrop-blur-lg sm:max-w-sm sm:rounded-3xl sm:p-6">
+                {/* Logo glow effects - reduced blur for Safari performance */}
                 <div className="pointer-events-none absolute inset-0">
-                  <div className="absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-fuchsia-500/15 blur-3xl" />
-                  <div className="absolute -bottom-28 right-[-70px] h-80 w-80 rounded-full bg-cyan-400/12 blur-3xl" />
+                  <div className="absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-fuchsia-500/12 blur-2xl" />
+                  <div className="absolute -bottom-28 right-[-70px] h-80 w-80 rounded-full bg-cyan-400/10 blur-2xl" />
                   <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-black/10" />
                 </div>
 

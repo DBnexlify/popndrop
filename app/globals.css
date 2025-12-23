@@ -384,3 +384,31 @@
   padding-bottom: env(safe-area-inset-bottom, 0);
   padding-left: env(safe-area-inset-left, 0);
 }
+
+/* ==========================================================================
+ * SAFARI PERFORMANCE OPTIMIZATIONS
+ * Safari/WebKit handles blur operations less efficiently than Chrome.
+ * These optimizations help with GPU compositing and reduce jank.
+ * ========================================================================== */
+
+/* Force GPU acceleration for fixed positioned elements with blur */
+.backdrop-blur-xl,
+.backdrop-blur-lg,
+.backdrop-blur-2xl {
+  /* Hint to browser to use GPU compositing layer */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  /* Prevent subpixel rendering issues on Safari */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Optimize blur elements that don't need interaction */
+[aria-hidden="true"] .blur-3xl,
+[aria-hidden="true"] .blur-2xl,
+[aria-hidden="true"] .blur-xl {
+  /* Force GPU layer for decorative blur elements */
+  will-change: opacity;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}

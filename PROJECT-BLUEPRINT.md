@@ -1503,6 +1503,148 @@ Cyan: #22d3ee (secondary accent)
 
 ---
 
+## SECTION 13: SAFARI & PERFORMANCE OPTIMIZATIONS
+
+> **Last Updated**: December 2024
+
+### Why Safari is Different
+
+Safari uses WebKit/JavaScriptCore, while Chrome uses Blink/V8. Key differences that affect this site:
+
+| Feature | Chrome | Safari | Impact |
+|---------|--------|--------|---------|
+| CSS `blur()` | Hardware accelerated, efficient | GPU but less optimized | Blurred elements render slowly |
+| `backdrop-filter` | Batches compositing layers | Creates many layers | Many glassmorphism elements = slow |
+| `will-change` | Respected | Sometimes ignored | Manual GPU hints needed |
+
+### Optimizations Applied
+
+#### 1. Background Gradient Blurs (CRITICAL)
+
+**Problem**: 5 elements with `blur-[100px]` (100px blur radius) were extremely slow on Safari.
+
+**Solution**: Reduced to 3 elements with `blur-3xl` (48px blur radius).
+
+```tsx
+// BEFORE - Very slow on Safari
+<div className="blur-[100px] h-[600px] w-[800px]" />
+
+// AFTER - Smooth on all browsers
+<div className="blur-3xl h-[500px] w-[700px]" />
+```
+
+**Files Changed**:
+- `app/layout.tsx` - Main site background
+- `app/admin/layout.tsx` - Admin background
+
+#### 2. Logo Card Blur Effects
+
+**Problem**: Nested `blur-3xl` and `backdrop-blur-2xl` caused jank.
+
+**Solution**: Reduced to `blur-2xl` and `backdrop-blur-lg`.
+
+**File**: `app/(site)/page.tsx`
+
+#### 3. GPU Compositing Hints
+
+**Problem**: Safari doesn't always promote blurred elements to GPU layers.
+
+**Solution**: Added CSS rules in `globals.css`:
+
+```css
+.backdrop-blur-xl,
+.backdrop-blur-lg {
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+}
+```
+
+**File**: `app/globals.css`
+
+### Blur Reference Guide
+
+| Tailwind Class | Blur Radius | Safari Performance |
+|----------------|-------------|--------------------|
+| `blur-sm` | 4px | ✅ Excellent |
+| `blur` | 8px | ✅ Excellent |
+| `blur-md` | 12px | ✅ Good |
+| `blur-lg` | 16px | ✅ Good |
+| `blur-xl` | 24px | ⚠️ Moderate |
+| `blur-2xl` | 40px | ⚠️ Use sparingly |
+| `blur-3xl` | 64px | ⚠️ Use sparingly |
+| `blur-[100px]` | 100px | ❌ Avoid on Safari |
+
+### Design System Blur Guidelines
+
+**DO**:
+- Use `blur-3xl` (48px) maximum for decorative backgrounds
+- Use `backdrop-blur-lg` instead of `backdrop-blur-xl` where possible
+- Add `transform: translateZ(0)` to fixed blurred elements
+- Limit backdrop-blur elements to 5-6 per page
+
+**DON'T**:
+- Use `blur-[100px]` or larger custom values
+- Stack multiple backdrop-blur layers
+- Apply blur to large elements (>500px)
+- Animate blur values
+
+### Testing Safari Performance
+
+1. **Use Safari's Web Inspector**:
+   - Develop → Show Web Inspector → Timelines
+   - Look for long "Composite Layers" times
+
+2. **Check compositing layers**:
+   - Develop → Show Compositing Borders
+   - Yellow borders = GPU layers (good for blur)
+   - Red borders = too many layers (bad)
+
+3. **Test on real iOS device**:
+   - iOS Safari behaves differently than macOS Safari
+   - Always test on iPhone before shipping
+
+### PWA (Progressive Web App) Optimizations
+
+#### Apple Touch Icons
+
+Apple ignores `manifest.json` icons. Must use `<link>` tags:
+
+```tsx
+// In layout metadata
+icons: {
+  apple: [
+    { url: '/admin/apple-touch-icon.png', sizes: '180x180' },
+  ],
+}
+```
+
+**Required Files**:
+- `/public/admin/apple-touch-icon.png` (180x180)
+- `/public/apple-touch-icon.png` (180x180) - fallback
+- `/app/admin/apple-icon.png` (180x180) - Next.js file-based
+
+#### Safe Area Insets
+
+iPhone notch and home indicator require safe area handling:
+
+```tsx
+// Viewport must include viewport-fit
+export const viewport: Viewport = {
+  viewportFit: 'cover',
+};
+
+// CSS utility classes (in globals.css)
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pt-safe { padding-top: env(safe-area-inset-top); }
+```
+
+**Files Using Safe Areas**:
+- `components/admin/admin-mobile-nav.tsx`
+- `components/site/mobile-bottom-nav.tsx`
+- `app/admin/(dashboard)/layout.tsx` (header)
+
+---
+
 ## USAGE INSTRUCTIONS
 
 ### Before Making Changes
