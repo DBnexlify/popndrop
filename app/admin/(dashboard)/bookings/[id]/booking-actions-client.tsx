@@ -51,9 +51,9 @@ const styles = {
     "border-white/10 bg-white/5 placeholder:text-foreground/40 focus:border-white/20 focus:ring-1 focus:ring-white/10",
   label: "text-sm font-medium text-foreground/70",
   
-  // FIXED: Modal overlay with proper centering
+  // FIXED: Modal overlay - z-[70] to appear above admin mobile nav (z-50)
   modalOverlay:
-    "fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm",
+    "fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm",
   
   // FIXED: Modal card - no inner overlay that blocks touch
   // Uses flex-col structure: header (fixed) -> content (scrollable) -> footer (fixed)
