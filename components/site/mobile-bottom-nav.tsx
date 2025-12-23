@@ -70,7 +70,8 @@ export function MobileBottomNav() {
       aria-label="Mobile navigation"
       className="group/nav fixed bottom-0 left-0 right-0 z-50 sm:hidden"
     >
-      <div className="mx-auto max-w-5xl px-3 pb-3">
+      {/* pb-safe ensures proper padding above Apple's home indicator */}
+      <div className="mx-auto max-w-5xl px-3 pb-3 pb-safe">
         <div
           className={cn(
             "rounded-2xl border bg-background/70 backdrop-blur-xl",

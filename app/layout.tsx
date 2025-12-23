@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -6,6 +6,19 @@ import { SkipLink } from "@/components/ui/skip-link";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+
+// =============================================================================
+// VIEWPORT CONFIGURATION
+// viewportFit: 'cover' is REQUIRED for safe area insets to work on iOS
+// This allows content to extend to screen edges, then we use CSS
+// env(safe-area-inset-*) to add proper padding
+// =============================================================================
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover', // Required for safe area insets
+  themeColor: '#d946ef', // Fuchsia brand color
+};
 
 export const metadata: Metadata = {
   title: "Pop and Drop Party Rentals | Bounce House Rentals in Ocala, FL",

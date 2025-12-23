@@ -341,3 +341,46 @@
 [data-slot="select-content"] {
   border-radius: 0.75rem; /* rounded-xl */
 }
+
+/* ==========================================================================
+ * SAFE AREA UTILITIES FOR APPLE DEVICES
+ * Handles iPhone notch, home indicator, and other safe area insets
+ * 
+ * Requirements:
+ * - viewport-fit=cover must be set in viewport meta tag
+ * - env() function provides the safe area inset values
+ * - Fallbacks are provided for devices without safe areas
+ * ========================================================================== */
+
+/* Safe area padding - bottom (for home indicator) */
+.pb-safe {
+  /* Combines minimum 12px padding with safe area inset */
+  /* On devices without safe areas, defaults to the pb-3 (12px) already applied */
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0.75rem));
+}
+
+/* Additional safe area utilities if needed */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+.pl-safe {
+  padding-left: env(safe-area-inset-left, 0);
+}
+
+.pr-safe {
+  padding-right: env(safe-area-inset-right, 0);
+}
+
+/* Margin variants */
+.mb-safe {
+  margin-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Full safe area padding for modals/sheets */
+.p-safe {
+  padding-top: env(safe-area-inset-top, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-left: env(safe-area-inset-left, 0);
+}

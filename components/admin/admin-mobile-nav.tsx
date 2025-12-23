@@ -99,7 +99,13 @@ export function AdminMobileNav() {
         data-collapsed="false"
         className="group/nav fixed bottom-0 left-0 right-0 z-50 lg:hidden"
       >
-        <div className="mx-auto max-w-5xl px-3 pb-3">
+        {/* 
+          Safe area padding for Apple devices:
+          - Uses env(safe-area-inset-bottom) for iPhone home indicator
+          - Falls back to 12px (pb-3) on devices without safe areas
+          - The padding applies BELOW the nav card, not inside it
+        */}
+        <div className="mx-auto max-w-5xl px-3 pb-3 pb-safe">
           <div
             className={cn(
               // Liquid glass effect
@@ -197,7 +203,7 @@ export function AdminMobileNav() {
           onClick={() => setMenuOpen(false)}
         >
           <div 
-            className="absolute bottom-0 left-0 right-0 rounded-t-3xl border-t border-white/10 bg-neutral-900/95 backdrop-blur-xl p-6 animate-in slide-in-from-bottom duration-200"
+            className="absolute bottom-0 left-0 right-0 rounded-t-3xl border-t border-white/10 bg-neutral-900/95 backdrop-blur-xl p-6 pb-safe animate-in slide-in-from-bottom duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Handle bar */}

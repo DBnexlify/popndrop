@@ -21,14 +21,34 @@ export const metadata: Metadata = {
   title: 'Pop & Drop Admin',
   description: 'Manage your bounce house rental business',
   manifest: '/admin/manifest.json',
+  
+  // Apple PWA icons - CRITICAL: Apple ignores manifest.json icons!
+  // These link tags are required for home screen icons on iOS
+  icons: {
+    apple: [
+      { url: '/admin/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+      { url: '/admin/apple-touch-icon-152.png', sizes: '152x152', type: 'image/png' },
+      { url: '/admin/apple-touch-icon-120.png', sizes: '120x120', type: 'image/png' },
+    ],
+  },
+  
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'P&D Admin',
+    // Startup image for iOS (optional but nice)
+    startupImage: [
+      {
+        url: '/admin/apple-splash-1170x2532.png',
+        media: '(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)',
+      },
+    ],
   },
+  
   formatDetection: {
     telephone: true,
   },
+  
   other: {
     'mobile-web-app-capable': 'yes',
   },
