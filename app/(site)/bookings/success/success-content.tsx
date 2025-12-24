@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Calendar, Phone, Mail, Check, MapPin, Clock, Copy, Share2, Facebook, Twitter, MessageCircle } from "lucide-react";
+import { Calendar, Phone, Mail, Check, MapPin, Clock, Copy, Share2, Facebook, Twitter, MessageCircle, Loader2 } from "lucide-react";
 import { Confetti } from "@/components/ui/confetti";
 import { AddToCalendar } from "@/components/ui/add-to-calendar";
 import { buildCustomerCalendarEvent, type CustomerCalendarData } from "@/lib/calendar";
@@ -32,7 +32,6 @@ interface BookingData {
   subtotal: number;
   deposit_amount: number;
   balance_due: number;
-  // Payment status fields - critical for showing correct payment state
   deposit_paid: boolean;
   balance_paid: boolean;
   customers: {
@@ -65,24 +64,102 @@ interface SuccessContentProps {
   eventDate: string;
   pickupDate: string;
   styles: Styles;
+  // URL params passed from Stripe redirect for immediate display
+  paymentTypeFromUrl?: string | null;
+}
+
+interface PaymentStatus {
+  isPaymentConfirmed: boolean;
+  isPaidInFull: boolean;
+  depositPaid: boolean;
+  balancePaid: boolean;
+  balanceDue: number;
+  status: string;
 }
 
 /* ---------------------------------------------------------------------------
- * Animated Success Checkmark (SVG with draw animation)
- * Respects prefers-reduced-motion
+ * Hook: Poll for payment confirmation
+ * Polls the booking status until webhook has processed
+ * --------------------------------------------------------------------------- */
+function usePaymentStatus(bookingId: string, initialData: BookingData, paymentTypeFromUrl?: string | null) {
+  // Determine initial state from URL params or database
+  // If paymentTypeFromUrl is 'full', we know they paid in full even before webhook
+  const initialPaidInFull = paymentTypeFromUrl === 'full' || initialData.balance_paid === true || Number(initialData.balance_due) === 0;
+  
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>({
+    isPaymentConfirmed: initialData.deposit_paid || paymentTypeFromUrl !== null,
+    isPaidInFull: initialPaidInFull,
+    depositPaid: initialData.deposit_paid,
+    balancePaid: initialData.balance_paid,
+    balanceDue: initialPaidInFull ? 0 : Number(initialData.balance_due),
+    status: initialData.deposit_paid ? 'confirmed' : 'pending',
+  });
+  
+  const [isPolling, setIsPolling] = useState(!initialData.deposit_paid);
+  const [pollCount, setPollCount] = useState(0);
+  const maxPolls = 15; // Max 15 polls (30 seconds total)
+
+  const checkStatus = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/bookings/status?id=${bookingId}`);
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      if (data.success) {
+        setPaymentStatus({
+          isPaymentConfirmed: data.isPaymentConfirmed,
+          isPaidInFull: data.isPaidInFull,
+          depositPaid: data.booking.depositPaid,
+          balancePaid: data.booking.balancePaid,
+          balanceDue: data.isPaidInFull ? 0 : Number(data.booking.balanceDue),
+          status: data.booking.status,
+        });
+        
+        // Stop polling if payment is confirmed
+        if (data.isPaymentConfirmed) {
+          setIsPolling(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking payment status:', error);
+    }
+  }, [bookingId]);
+
+  useEffect(() => {
+    if (!isPolling || pollCount >= maxPolls) {
+      setIsPolling(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      checkStatus();
+      setPollCount(prev => prev + 1);
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearTimeout(timer);
+  }, [isPolling, pollCount, checkStatus, maxPolls]);
+
+  // If we have paymentTypeFromUrl, trust it (Stripe redirect happened)
+  // This handles the case where webhook hasn't processed yet
+  const effectivePaidInFull = paymentTypeFromUrl === 'full' || paymentStatus.isPaidInFull;
+
+  return {
+    ...paymentStatus,
+    isPaidInFull: effectivePaidInFull,
+    isPolling,
+    isConfirmed: paymentStatus.isPaymentConfirmed || paymentTypeFromUrl !== null,
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * Animated Success Checkmark
  * --------------------------------------------------------------------------- */
 function AnimatedCheckmark() {
   return (
     <div className="relative mx-auto mb-6 flex h-24 w-24 items-center justify-center sm:h-28 sm:w-28">
-      {/* Gradient glow ring */}
       <div className="absolute inset-0 animate-pulse rounded-full bg-gradient-to-br from-fuchsia-500/30 via-purple-500/30 to-cyan-400/30 blur-xl motion-reduce:animate-none" />
-
-      {/* Outer ring with gradient */}
       <div className="absolute inset-0 rounded-full bg-gradient-to-br from-fuchsia-500/20 via-purple-500/20 to-cyan-400/20" />
-
-      {/* Inner circle */}
       <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-background/80 backdrop-blur-sm sm:h-24 sm:w-24">
-        {/* Animated SVG checkmark */}
         <svg
           className="h-10 w-10 sm:h-12 sm:w-12"
           viewBox="0 0 24 24"
@@ -110,6 +187,18 @@ function AnimatedCheckmark() {
           />
         </svg>
       </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * Processing Indicator (shown while polling)
+ * --------------------------------------------------------------------------- */
+function ProcessingIndicator() {
+  return (
+    <div className="flex items-center justify-center gap-2 rounded-lg bg-cyan-500/10 px-3 py-2 text-xs text-cyan-400">
+      <Loader2 className="h-3 w-3 animate-spin" />
+      <span>Confirming payment...</span>
     </div>
   );
 }
@@ -196,7 +285,6 @@ function ShareSection({ productName, styles }: { productName: string; styles: St
   const shareUrl = "https://popndroprentals.com";
   const shareText = `Just booked a ${productName} from Pop and Drop Party Rentals for our party! 🎉 Check them out for your next event!`;
   
-  // Check if Web Share API is available
   const canShare = typeof navigator !== "undefined" && navigator.share;
   
   const handleNativeShare = async () => {
@@ -207,7 +295,7 @@ function ShareSection({ productName, styles }: { productName: string; styles: St
         url: shareUrl,
       });
     } catch (err) {
-      // User cancelled or error - just ignore
+      // User cancelled
     }
   };
   
@@ -238,7 +326,6 @@ function ShareSection({ productName, styles }: { productName: string; styles: St
         </div>
         
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          {/* Native Share (Mobile) */}
           {canShare && (
             <Button
               onClick={handleNativeShare}
@@ -249,7 +336,6 @@ function ShareSection({ productName, styles }: { productName: string; styles: St
             </Button>
           )}
           
-          {/* Facebook */}
           <Button
             asChild
             variant="outline"
@@ -265,7 +351,6 @@ function ShareSection({ productName, styles }: { productName: string; styles: St
             </a>
           </Button>
           
-          {/* Twitter/X */}
           <Button
             asChild
             variant="outline"
@@ -281,7 +366,6 @@ function ShareSection({ productName, styles }: { productName: string; styles: St
             </a>
           </Button>
           
-          {/* SMS/Text */}
           <Button
             asChild
             variant="outline"
@@ -293,7 +377,6 @@ function ShareSection({ productName, styles }: { productName: string; styles: St
             </a>
           </Button>
           
-          {/* Copy Link */}
           <Button
             onClick={handleCopyLink}
             variant="outline"
@@ -320,26 +403,84 @@ function ShareSection({ productName, styles }: { productName: string; styles: St
 }
 
 /* ---------------------------------------------------------------------------
+ * Payment Summary Component - Now uses real-time status
+ * --------------------------------------------------------------------------- */
+function PaymentSummary({ 
+  subtotal, 
+  depositAmount, 
+  isPaidInFull, 
+  balanceDue,
+  isPolling,
+  styles 
+}: { 
+  subtotal: number;
+  depositAmount: number;
+  isPaidInFull: boolean;
+  balanceDue: number;
+  isPolling: boolean;
+  styles: Styles;
+}) {
+  return (
+    <div className={`mt-6 p-4 sm:p-5 ${styles.nestedCard}`}>
+      <div className="flex items-center justify-between">
+        <span className={styles.smallBody}>Total</span>
+        <span className="font-semibold text-foreground">${subtotal}</span>
+      </div>
+      
+      {isPolling && (
+        <div className="mt-3 border-t border-white/5 pt-3">
+          <ProcessingIndicator />
+        </div>
+      )}
+      
+      {!isPolling && isPaidInFull ? (
+        // PAID IN FULL - Celebratory green styling
+        <div className="mt-3 border-t border-white/5 pt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-green-400">✓ Paid in Full</span>
+            <span className="text-lg font-semibold text-green-400">${subtotal}</span>
+          </div>
+          <p className="mt-2 text-xs text-green-400/70">Nothing due on delivery — you&apos;re all set!</p>
+        </div>
+      ) : !isPolling ? (
+        // DEPOSIT ONLY - Show balance due
+        <>
+          <div className="mt-2 flex items-center justify-between">
+            <span className={styles.smallBody}>Deposit paid</span>
+            <span className="text-sm text-green-400">-${depositAmount}</span>
+          </div>
+          <div className="mt-3 border-t border-white/5 pt-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">Balance due on delivery</span>
+              <span className="text-lg font-semibold text-foreground">${balanceDue}</span>
+            </div>
+          </div>
+        </>
+      ) : null}
+      
+      <div className={styles.nestedCardInner} />
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
  * Main Content Component
  * --------------------------------------------------------------------------- */
-export function SuccessContent({ booking, eventDate, pickupDate, styles }: SuccessContentProps) {
-  // Scroll to top on mount - ensures page loads at the top after redirect
+export function SuccessContent({ booking, eventDate, pickupDate, styles, paymentTypeFromUrl }: SuccessContentProps) {
+  // Use the smart polling hook to get real-time payment status
+  const paymentStatus = usePaymentStatus(booking.id, booking, paymentTypeFromUrl);
+  
+  // Scroll to top on mount
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
-  // Get product name from snapshot
   const productName = booking.product_snapshot?.name || "Bounce House Rental";
-  
-  // Get customer name
   const customerName = booking.customers 
     ? `${booking.customers.first_name} ${booking.customers.last_name}`
     : "Valued Customer";
 
-  // Determine if paid in full (balance_paid is true OR balance_due is 0)
-  const isPaidInFull = booking.balance_paid === true || Number(booking.balance_due) === 0;
-
-  // Build calendar event using the comprehensive calendar builder
+  // Build calendar event using real-time payment status
   const calendarData: CustomerCalendarData = {
     productName,
     bookingNumber: booking.booking_number,
@@ -350,15 +491,14 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
     address: booking.delivery_address,
     city: booking.delivery_city,
     totalPrice: Number(booking.subtotal),
-    balanceDue: Number(booking.balance_due),
-    isPaidInFull,
+    balanceDue: paymentStatus.isPaidInFull ? 0 : paymentStatus.balanceDue,
+    isPaidInFull: paymentStatus.isPaidInFull,
   };
   
   const calendarEvent = buildCustomerCalendarEvent(calendarData);
 
   return (
     <main className="mx-auto max-w-2xl px-4 pb-28 pt-6 sm:px-6 sm:pb-12 sm:pt-10">
-      {/* Confetti burst */}
       <Confetti />
 
       {/* Success Header */}
@@ -370,7 +510,6 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
           Your rental is confirmed. Get ready for an amazing party, {booking.customers?.first_name || "friend"}!
         </p>
         
-        {/* Booking Number */}
         <div className="mt-4 flex items-center justify-center gap-2">
           <span className={styles.helperText}>Booking</span>
           <BookingNumber number={booking.booking_number} />
@@ -420,41 +559,15 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
             />
           </div>
 
-          {/* Pricing Summary - Dynamic based on payment status */}
-          <div className={`mt-6 p-4 sm:p-5 ${styles.nestedCard}`}>
-            <div className="flex items-center justify-between">
-              <span className={styles.smallBody}>Total</span>
-              <span className="font-semibold text-foreground">${booking.subtotal}</span>
-            </div>
-            
-            {/* Show different content based on payment status */}
-            {isPaidInFull ? (
-              // PAID IN FULL - Celebratory green styling
-              <div className="mt-3 border-t border-white/5 pt-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-green-400">✓ Paid in Full</span>
-                  <span className="text-lg font-semibold text-green-400">${booking.subtotal}</span>
-                </div>
-                <p className="mt-2 text-xs text-green-400/70">Nothing due on delivery — you&apos;re all set!</p>
-              </div>
-            ) : (
-              // DEPOSIT ONLY - Show balance due
-              <>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className={styles.smallBody}>Deposit paid</span>
-                  <span className="text-sm text-green-400">-${booking.deposit_amount}</span>
-                </div>
-                <div className="mt-3 border-t border-white/5 pt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-foreground">Balance due on delivery</span>
-                    <span className="text-lg font-semibold text-foreground">${booking.balance_due}</span>
-                  </div>
-                </div>
-              </>
-            )}
-            
-            <div className={styles.nestedCardInner} />
-          </div>
+          {/* Payment Summary - Uses real-time status */}
+          <PaymentSummary
+            subtotal={Number(booking.subtotal)}
+            depositAmount={Number(booking.deposit_amount)}
+            isPaidInFull={paymentStatus.isPaidInFull}
+            balanceDue={paymentStatus.balanceDue}
+            isPolling={paymentStatus.isPolling}
+            styles={styles}
+          />
         </div>
 
         <div className={styles.sectionCardInner} />
@@ -492,8 +605,7 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
           </ul>
 
           {/* Payment status callout - dynamic based on payment */}
-          {isPaidInFull ? (
-            // PAID IN FULL - Positive confirmation
+          {paymentStatus.isPaidInFull ? (
             <div className={`mt-6 p-4 sm:p-5 ${styles.nestedCard}`} style={{ borderColor: 'rgba(34, 197, 94, 0.2)', backgroundColor: 'rgba(34, 197, 94, 0.05)' }}>
               <p className={styles.smallBody}>
                 <strong className="text-green-400">✓ You&apos;re all set!</strong> Your rental is fully paid. 
@@ -502,11 +614,10 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
               <div className={styles.nestedCardInner} />
             </div>
           ) : (
-            // DEPOSIT ONLY - Payment reminder
             <div className={`mt-6 p-4 sm:p-5 ${styles.nestedCard}`}>
               <p className={styles.smallBody}>
                 <strong className="text-foreground">Payment on delivery:</strong> We accept cash, card,
-                Venmo, or Zelle for the remaining ${booking.balance_due} balance.
+                Venmo, or Zelle for the remaining ${paymentStatus.balanceDue} balance.
               </p>
               <div className={styles.nestedCardInner} />
             </div>
@@ -549,12 +660,10 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles }: Succe
         <div className={styles.nestedCardInner} />
       </div>
 
-      {/* ================================================================== */}
-      {/* SHARE / REFER SECTION */}
-      {/* ================================================================== */}
+      {/* Share Section */}
       <ShareSection productName={productName} styles={styles} />
 
-      {/* Subtle footer encouragement */}
+      {/* Footer */}
       <p className={`mt-8 text-center ${styles.helperText}`}>
         Thank you for choosing Pop and Drop Party Rentals! 🎈
       </p>

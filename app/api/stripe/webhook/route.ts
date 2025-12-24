@@ -18,6 +18,7 @@ import { createCustomerEmail, createBusinessEmail } from '@/app/api/bookings/rou
 // =============================================================================
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
   let event: Stripe.Event;
 
   try {
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
     const signature = headersList.get('stripe-signature');
 
     if (!signature) {
-      console.error('❌ Missing stripe-signature header');
+      console.error('❌ [WEBHOOK] Missing stripe-signature header');
       return NextResponse.json(
         { error: 'Missing stripe-signature header' },
         { status: 400 }
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     // Verify webhook secret is configured
     if (!process.env.STRIPE_WEBHOOK_SECRET) {
-      console.error('❌ STRIPE_WEBHOOK_SECRET not configured');
+      console.error('❌ [WEBHOOK] STRIPE_WEBHOOK_SECRET not configured');
       return NextResponse.json(
         { error: 'Webhook secret not configured' },
         { status: 500 }
@@ -54,14 +55,14 @@ export async function POST(request: NextRequest) {
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      console.error('❌ Webhook signature verification failed:', message);
+      console.error('❌ [WEBHOOK] Signature verification failed:', message);
       return NextResponse.json(
         { error: `Webhook signature verification failed: ${message}` },
         { status: 400 }
       );
     }
 
-    console.log(`📨 Received Stripe webhook: ${event.type}`);
+    console.log(`📨 [WEBHOOK] Received: ${event.type} | ID: ${event.id}`);
 
     // ==========================================================================
     // HANDLE EVENTS
@@ -70,31 +71,43 @@ export async function POST(request: NextRequest) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        await handleCheckoutCompleted(session);
+        console.log(`💳 [WEBHOOK] checkout.session.completed | Session: ${session.id} | Booking: ${session.metadata?.booking_id}`);
+        await handleCheckoutCompleted(session, event.id);
         break;
       }
 
       case 'checkout.session.expired': {
         const session = event.data.object as Stripe.Checkout.Session;
+        console.log(`⏰ [WEBHOOK] checkout.session.expired | Session: ${session.id} | Booking: ${session.metadata?.booking_id}`);
         await handleCheckoutExpired(session);
+        break;
+      }
+
+      case 'payment_intent.succeeded': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        console.log(`✅ [WEBHOOK] payment_intent.succeeded | PI: ${paymentIntent.id}`);
+        // We handle this via checkout.session.completed, but log for debugging
         break;
       }
 
       case 'payment_intent.payment_failed': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        console.log(`❌ Payment failed: ${paymentIntent.id}`);
+        console.log(`❌ [WEBHOOK] payment_intent.payment_failed | PI: ${paymentIntent.id} | Error: ${paymentIntent.last_payment_error?.message}`);
         break;
       }
 
       default:
-        console.log(`ℹ️ Unhandled event type: ${event.type}`);
+        console.log(`ℹ️ [WEBHOOK] Unhandled event: ${event.type}`);
     }
+
+    const duration = Date.now() - startTime;
+    console.log(`✅ [WEBHOOK] Processed ${event.type} in ${duration}ms`);
 
     // Always return 200 to acknowledge receipt
     return NextResponse.json({ received: true });
 
   } catch (error) {
-    console.error('❌ Webhook handler error:', error);
+    console.error('❌ [WEBHOOK] Handler error:', error);
     return NextResponse.json(
       { error: 'Webhook handler failed' },
       { status: 500 }
@@ -106,7 +119,7 @@ export async function POST(request: NextRequest) {
 // CHECKOUT COMPLETED - Customer successfully paid!
 // =============================================================================
 
-async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId: string) {
   const bookingId = session.metadata?.booking_id;
   const paymentType = session.metadata?.payment_type || 'deposit';
   const customerId = session.metadata?.customer_id;
@@ -116,11 +129,39 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const finalPrice = parseFloat(session.metadata?.final_price || '0');
   
   if (!bookingId) {
-    console.error('❌ No booking_id in session metadata:', session.id);
+    console.error('❌ [WEBHOOK] No booking_id in session metadata:', session.id);
     return;
   }
 
-  console.log(`✅ Processing payment for booking ${bookingId} (${paymentType})`);
+  console.log(`🔄 [WEBHOOK] Processing payment for booking ${bookingId} | Type: ${paymentType} | Amount: $${(session.amount_total || 0) / 100}`);
+
+  const supabase = createServerClient();
+
+  // ==========================================================================
+  // IDEMPOTENCY CHECK - Don't process the same payment twice
+  // ==========================================================================
+  const { data: existingPayment } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('stripe_checkout_session_id', session.id)
+    .single();
+
+  if (existingPayment) {
+    console.log(`ℹ️ [WEBHOOK] Payment already processed for session ${session.id} - skipping (idempotent)`);
+    return;
+  }
+
+  // Also check if booking is already confirmed (double-safety)
+  const { data: bookingCheck } = await supabase
+    .from('bookings')
+    .select('status, stripe_payment_intent_id')
+    .eq('id', bookingId)
+    .single();
+
+  if (bookingCheck?.status === 'confirmed' && bookingCheck?.stripe_payment_intent_id === session.payment_intent) {
+    console.log(`ℹ️ [WEBHOOK] Booking ${bookingId} already confirmed with this payment - skipping (idempotent)`);
+    return;
+  }
 
   // ==========================================================================
   // FETCH STRIPE PAYMENT DETAILS (for receipt URL, card info)
@@ -143,13 +184,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           cardBrand = charge.payment_method_details.card.brand || null;
         }
       }
-      console.log('✅ Fetched Stripe payment details');
+      console.log(`✅ [WEBHOOK] Fetched payment details | Card: ${cardBrand} ****${cardLast4}`);
     } catch (stripeErr) {
-      console.log('ℹ️ Could not fetch payment details:', stripeErr);
+      console.log('ℹ️ [WEBHOOK] Could not fetch payment details:', stripeErr);
     }
   }
 
-  const supabase = createServerClient();
   const now = new Date().toISOString();
   const amountPaid = (session.amount_total || 0) / 100; // Convert cents to dollars
   const isFullPayment = paymentType === 'full';
@@ -171,9 +211,11 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .single();
 
   if (fetchError || !booking) {
-    console.error('❌ Error fetching booking:', fetchError);
+    console.error('❌ [WEBHOOK] Error fetching booking:', fetchError);
     return;
   }
+
+  console.log(`📋 [WEBHOOK] Booking found: ${booking.booking_number} | Current status: ${booking.status}`);
 
   // ==========================================================================
   // 2. UPDATE BOOKING STATUS TO CONFIRMED
@@ -192,6 +234,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     bookingUpdate.balance_paid_at = now;
     bookingUpdate.balance_payment_method = 'stripe';
     bookingUpdate.balance_due = 0; // Critical: Clear balance when paid in full
+    console.log(`💰 [WEBHOOK] Full payment - setting balance_due to 0`);
   }
 
   const { error: bookingError } = await supabase
@@ -200,9 +243,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .eq('id', bookingId);
 
   if (bookingError) {
-    console.error('❌ Error updating booking:', bookingError);
+    console.error('❌ [WEBHOOK] Error updating booking:', bookingError);
+    // Don't return - try to continue with other operations
   } else {
-    console.log(`✅ Booking ${booking.booking_number} confirmed!`);
+    console.log(`✅ [WEBHOOK] Booking ${booking.booking_number} status updated to CONFIRMED`);
   }
 
   // ==========================================================================
@@ -218,12 +262,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       payment_method: 'card',
       stripe_payment_intent_id: session.payment_intent as string || null,
       stripe_checkout_session_id: session.id,
+      stripe_event_id: eventId, // Track which webhook event created this
     });
 
   if (paymentError) {
-    console.error('❌ Error creating payment record:', paymentError);
+    console.error('❌ [WEBHOOK] Error creating payment record:', paymentError);
   } else {
-    console.log(`✅ Payment record created: ${amountPaid}`);
+    console.log(`✅ [WEBHOOK] Payment record created: $${amountPaid} (${isFullPayment ? 'full' : 'deposit'})`);
   }
 
   // ==========================================================================
@@ -231,7 +276,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // ==========================================================================
   if (promoCodeId && promoDiscount > 0 && customerId) {
     try {
-      // Call the apply_promo_code function to record usage and increment count
       const { error: promoUsageError } = await supabase
         .rpc('apply_promo_code', {
           p_promo_code_id: promoCodeId,
@@ -242,12 +286,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         });
 
       if (promoUsageError) {
-        console.error('❌ Error recording promo code usage:', promoUsageError);
+        console.error('❌ [WEBHOOK] Error recording promo code usage:', promoUsageError);
       } else {
-        console.log(`✅ Promo code usage recorded: -${promoDiscount}`);
+        console.log(`✅ [WEBHOOK] Promo code usage recorded: -$${promoDiscount}`);
       }
     } catch (promoErr) {
-      console.error('❌ Error in promo code usage:', promoErr);
+      console.error('❌ [WEBHOOK] Error in promo code usage:', promoErr);
     }
   }
 
@@ -255,14 +299,19 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // 4. UPDATE CUSTOMER STATS
   // ==========================================================================
   if (customerId) {
-    // Increment booking count and total spent
-    await supabase
+    const { error: customerError } = await supabase
       .from('customers')
       .update({
         booking_count: (booking.customer?.booking_count || 0) + 1,
         total_spent: (Number(booking.customer?.total_spent) || 0) + amountPaid,
       })
       .eq('id', customerId);
+
+    if (customerError) {
+      console.error('❌ [WEBHOOK] Error updating customer stats:', customerError);
+    } else {
+      console.log(`✅ [WEBHOOK] Customer stats updated`);
+    }
   }
 
   // ==========================================================================
@@ -281,9 +330,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       booking.delivery_address,
       booking.delivery_city
     );
-    console.log('✅ Push notification sent');
+    console.log('✅ [WEBHOOK] Push notification sent to admin');
   } catch (pushError) {
-    console.log('ℹ️ Push notification skipped');
+    console.log('ℹ️ [WEBHOOK] Push notification skipped (no subscriptions or error)');
   }
 
   // ==========================================================================
@@ -310,16 +359,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         city: booking.delivery_city,
         totalPrice: Number(booking.subtotal),
         depositAmount: Number(booking.deposit_amount),
-        balanceDue: Number(booking.balance_due),
+        balanceDue: isFullPayment ? 0 : Number(booking.balance_due),
         notes: booking.customer_notes || undefined,
         bookingType: booking.booking_type as 'daily' | 'weekend' | 'sunday',
         paidInFull: isFullPayment,
-        deliveryDate: booking.delivery_date, // For calendar link generation
+        deliveryDate: booking.delivery_date,
       }),
     });
-    console.log('✅ Customer confirmation email sent');
+    console.log('✅ [WEBHOOK] Customer confirmation email sent');
   } catch (emailError) {
-    console.error('❌ Failed to send customer email:', emailError);
+    console.error('❌ [WEBHOOK] Failed to send customer email:', emailError);
   }
 
   // Business notification email
@@ -343,24 +392,23 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         city: booking.delivery_city,
         totalPrice: Number(booking.subtotal),
         depositAmount: Number(booking.deposit_amount),
-        balanceDue: Number(booking.balance_due),
+        balanceDue: isFullPayment ? 0 : Number(booking.balance_due),
         notes: booking.customer_notes || undefined,
         bookingType: booking.booking_type as 'daily' | 'weekend' | 'sunday',
         paidInFull: isFullPayment,
         amountPaid,
-        // Stripe details
         stripePaymentIntentId: session.payment_intent as string || undefined,
         stripeReceiptUrl: stripeReceiptUrl || undefined,
         cardLast4: cardLast4 || undefined,
         cardBrand: cardBrand || undefined,
       }),
     });
-    console.log('✅ Business notification email sent');
+    console.log('✅ [WEBHOOK] Business notification email sent');
   } catch (emailError) {
-    console.error('❌ Failed to send business email:', emailError);
+    console.error('❌ [WEBHOOK] Failed to send business email:', emailError);
   }
 
-  console.log(`🎉 Booking ${booking.booking_number} fully processed!`);
+  console.log(`🎉 [WEBHOOK] Booking ${booking.booking_number} fully processed!`);
 }
 
 // =============================================================================
@@ -371,11 +419,11 @@ async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
   const bookingId = session.metadata?.booking_id;
   
   if (!bookingId) {
-    console.log('ℹ️ Expired session had no booking_id');
+    console.log('ℹ️ [WEBHOOK] Expired session had no booking_id');
     return;
   }
 
-  console.log(`⏰ Checkout expired for booking ${bookingId}`);
+  console.log(`⏰ [WEBHOOK] Checkout expired for booking ${bookingId}`);
 
   const supabase = createServerClient();
 
@@ -387,23 +435,14 @@ async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
     .single();
 
   if (booking?.status === 'pending') {
-    // Option 1: Auto-cancel (frees up the date for others)
-    // Uncomment if you want expired checkouts to auto-cancel:
-    /*
-    await supabase
-      .from('bookings')
-      .update({
-        status: 'cancelled',
-        cancelled_at: new Date().toISOString(),
-        cancelled_by: 'system',
-        cancellation_reason: 'Payment not completed within 30 minutes',
-      })
-      .eq('id', bookingId);
-    console.log(`🗑️ Booking ${booking.booking_number} auto-cancelled`);
-    */
+    // Keep it pending - customer can retry via "My Bookings" page
+    // The "Complete Payment" button will create a new Stripe session
+    console.log(`ℹ️ [WEBHOOK] Booking ${booking.booking_number} remains pending - customer can retry payment`);
     
-    // Option 2: Keep it pending, they might retry
-    console.log(`ℹ️ Booking ${booking.booking_number} still pending after checkout expiry`);
+    // Optionally: You could send a reminder email here
+    // await sendPaymentReminderEmail(bookingId);
+  } else {
+    console.log(`ℹ️ [WEBHOOK] Booking ${booking?.booking_number} is already ${booking?.status}`);
   }
 }
 

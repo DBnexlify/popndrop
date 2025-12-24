@@ -33,6 +33,8 @@ import {
   History,
   Sparkles,
   Ban,
+  CreditCard,
+  ExternalLink,
 } from "lucide-react";
 import { CancellationModal } from "@/components/site/cancellation-modal";
 import { getDeliveryWindowLabel, getPickupWindowLabel } from "@/lib/timezone";
@@ -141,14 +143,24 @@ function StatusBadge({ status }: { status: string }) {
       icon: CheckCircle2,
     },
     pending: {
-      label: "Pending",
+      label: "Payment Pending",
       className: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-      icon: AlertCircle,
+      icon: CreditCard,
     },
     pending_cancellation: {
       label: "Cancellation Pending",
       className: "bg-orange-500/20 text-orange-400 border-orange-500/30",
       icon: AlertCircle,
+    },
+    delivered: {
+      label: "Delivered",
+      className: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+      icon: CheckCircle2,
+    },
+    picked_up: {
+      label: "Picked Up",
+      className: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+      icon: CheckCircle2,
     },
     completed: {
       label: "Completed",
@@ -173,6 +185,121 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // =============================================================================
+// COMPLETE PAYMENT BUTTON COMPONENT
+// =============================================================================
+
+interface CompletePaymentButtonProps {
+  bookingId: string;
+  paymentType: 'deposit' | 'full';
+  onSuccess?: () => void;
+}
+
+function CompletePaymentButton({ bookingId, paymentType, onSuccess }: CompletePaymentButtonProps) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCompletePayment = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, paymentType }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create checkout session');
+      }
+
+      // Redirect to Stripe Checkout
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Button
+        onClick={handleCompletePayment}
+        disabled={isLoading}
+        className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/20 hover:shadow-xl hover:shadow-green-500/30"
+      >
+        {isLoading ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <CreditCard className="mr-2 h-4 w-4" />
+        )}
+        {isLoading ? 'Redirecting...' : 'Complete Payment'}
+        {!isLoading && <ExternalLink className="ml-2 h-3 w-3" />}
+      </Button>
+      {error && (
+        <p className="text-center text-xs text-red-400">{error}</p>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// PAYMENT TYPE SELECTOR FOR PENDING BOOKINGS
+// =============================================================================
+
+interface PaymentTypeSelectorProps {
+  bookingId: string;
+  subtotal: number;
+  depositAmount: number;
+}
+
+function PaymentTypeSelector({ bookingId, subtotal, depositAmount }: PaymentTypeSelectorProps) {
+  const [selectedType, setSelectedType] = useState<'deposit' | 'full'>('deposit');
+  const balanceDue = subtotal - depositAmount;
+
+  return (
+    <div className="space-y-3">
+      {/* Payment Type Options */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => setSelectedType('deposit')}
+          className={cn(
+            "rounded-lg border p-3 text-left transition-all",
+            selectedType === 'deposit'
+              ? "border-cyan-500/50 bg-cyan-500/10"
+              : "border-white/10 bg-white/5 hover:border-white/20"
+          )}
+        >
+          <p className="text-xs font-medium text-foreground/70">Deposit</p>
+          <p className="text-lg font-semibold">${depositAmount}</p>
+          <p className="text-[10px] text-foreground/50">${balanceDue} due on delivery</p>
+        </button>
+
+        <button
+          onClick={() => setSelectedType('full')}
+          className={cn(
+            "rounded-lg border p-3 text-left transition-all",
+            selectedType === 'full'
+              ? "border-green-500/50 bg-green-500/10"
+              : "border-white/10 bg-white/5 hover:border-white/20"
+          )}
+        >
+          <p className="text-xs font-medium text-foreground/70">Pay in Full</p>
+          <p className="text-lg font-semibold">${subtotal}</p>
+          <p className="text-[10px] text-green-400">Nothing due on delivery</p>
+        </button>
+      </div>
+
+      <CompletePaymentButton bookingId={bookingId} paymentType={selectedType} />
+    </div>
+  );
+}
+
+// =============================================================================
 // BOOKING CARD COMPONENT
 // =============================================================================
 
@@ -190,6 +317,7 @@ function BookingCard({
   const [showCancelModal, setShowCancelModal] = useState(false);
   const eventDate = new Date(booking.event_date + "T12:00:00");
   const isPaid = booking.balance_paid;
+  const isPending = booking.status === 'pending' && !booking.deposit_paid;
   
   // Can cancel if upcoming and status is confirmed or pending
   const canCancel = isUpcoming && 
@@ -214,7 +342,11 @@ function BookingCard({
   const calendarEvent = buildCustomerCalendarEvent(calendarData);
 
   return (
-    <div className={cn(styles.card, "transition-all hover:border-white/20")}>
+    <div className={cn(
+      styles.card, 
+      "transition-all hover:border-white/20",
+      isPending && "border-amber-500/30"
+    )}>
       <div className="p-4 sm:p-5">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
@@ -226,6 +358,24 @@ function BookingCard({
           </div>
           <StatusBadge status={booking.status} />
         </div>
+
+        {/* Pending Payment Alert */}
+        {isPending && (
+          <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-950/30 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-400" />
+              <p className="text-sm font-medium text-amber-400">Payment Required</p>
+            </div>
+            <p className="mb-4 text-xs text-amber-300/70">
+              Your booking is reserved but not yet confirmed. Complete payment to secure your rental date.
+            </p>
+            <PaymentTypeSelector 
+              bookingId={booking.id}
+              subtotal={booking.subtotal}
+              depositAmount={booking.deposit_amount}
+            />
+          </div>
+        )}
 
         {/* Date & Location */}
         <div className="mt-4 space-y-2">
@@ -243,32 +393,34 @@ function BookingCard({
           </div>
         </div>
 
-        {/* Payment Status */}
-        <div className="mt-4 flex items-center justify-between rounded-lg bg-white/[0.03] p-3">
-          <div>
-            <p className={styles.helperText}>Total</p>
-            <p className="text-lg font-semibold">${booking.subtotal}</p>
+        {/* Payment Status - Only show if not pending */}
+        {!isPending && (
+          <div className="mt-4 flex items-center justify-between rounded-lg bg-white/[0.03] p-3">
+            <div>
+              <p className={styles.helperText}>Total</p>
+              <p className="text-lg font-semibold">${booking.subtotal}</p>
+            </div>
+            <div className="text-right">
+              {isPaid ? (
+                <Badge className="border-0 bg-green-500/20 text-green-400">
+                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                  Paid in Full
+                </Badge>
+              ) : booking.deposit_paid ? (
+                <div>
+                  <p className={styles.helperText}>Balance Due</p>
+                  <p className="font-semibold text-amber-400">${booking.balance_due}</p>
+                </div>
+              ) : (
+                <Badge className="border-0 bg-amber-500/20 text-amber-400">
+                  Payment Pending
+                </Badge>
+              )}
+            </div>
           </div>
-          <div className="text-right">
-            {isPaid ? (
-              <Badge className="border-0 bg-green-500/20 text-green-400">
-                <CheckCircle2 className="mr-1 h-3 w-3" />
-                Paid in Full
-              </Badge>
-            ) : booking.deposit_paid ? (
-              <div>
-                <p className={styles.helperText}>Balance Due</p>
-                <p className="font-semibold text-amber-400">${booking.balance_due}</p>
-              </div>
-            ) : (
-              <Badge className="border-0 bg-amber-500/20 text-amber-400">
-                Payment Pending
-              </Badge>
-            )}
-          </div>
-        </div>
+        )}
 
-        {/* Calendar Actions */}
+        {/* Calendar Actions - Only for confirmed bookings */}
         {isUpcoming && booking.status === "confirmed" && (
           <div className="mt-4">
             <AddToCalendar event={calendarEvent} usePortal />
@@ -417,6 +569,10 @@ export function MyBookingsContent() {
 
   const hasBookings = data?.stats?.total && data.stats.total > 0;
 
+  // Check for pending bookings that need attention
+  const pendingBookings = data?.upcoming.filter(b => b.status === 'pending' && !b.deposit_paid) || [];
+  const hasPendingPayments = pendingBookings.length > 0;
+
   return (
     <main className="mx-auto max-w-3xl px-4 pb-28 pt-6 sm:px-6 sm:pb-12 sm:pt-10">
       {/* Header */}
@@ -472,6 +628,21 @@ export function MyBookingsContent() {
             <AlertCircle className="h-4 w-4 shrink-0" />
             {error}
           </div>
+        </div>
+      )}
+
+      {/* Pending Payments Alert */}
+      {hasPendingPayments && (
+        <div className="mb-8 rounded-xl border border-amber-500/30 bg-amber-950/30 p-4">
+          <div className="flex items-center gap-2 text-sm text-amber-400">
+            <CreditCard className="h-4 w-4 shrink-0" />
+            <span className="font-medium">
+              You have {pendingBookings.length} booking{pendingBookings.length > 1 ? 's' : ''} awaiting payment
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-amber-300/70">
+            Complete payment below to confirm your rental date.
+          </p>
         </div>
       )}
 

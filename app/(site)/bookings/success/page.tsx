@@ -80,7 +80,11 @@ interface BookingData {
 }
 
 interface PageProps {
-  searchParams: Promise<{ booking_id?: string }>;
+  searchParams: Promise<{ 
+    booking_id?: string;
+    // Payment type passed from Stripe redirect for immediate accurate display
+    payment_type?: string;
+  }>;
 }
 
 /* ---------------------------------------------------------------------------
@@ -121,8 +125,6 @@ async function getBooking(bookingId: string): Promise<BookingData | null> {
     return null;
   }
 
-  // Supabase returns joined data - customers is the related record
-  // With .single() and a foreign key, it returns the object directly (not array)
   return data as unknown as BookingData;
 }
 
@@ -169,6 +171,9 @@ function NoBookingState() {
 export default async function BookingSuccessPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const bookingId = params.booking_id;
+  // Get payment_type from URL - this is passed from Stripe redirect
+  // so we can show accurate payment status before webhook processes
+  const paymentTypeFromUrl = params.payment_type || null;
 
   // No booking ID provided
   if (!bookingId) {
@@ -184,7 +189,6 @@ export default async function BookingSuccessPage({ searchParams }: PageProps) {
   }
 
   // Format dates for display using timezone-aware utilities
-  // These are date-only fields, formatted for Eastern Time
   const eventDate = formatEventDate(booking.event_date);
   const pickupDate = formatEventDateShort(booking.pickup_date);
 
@@ -195,6 +199,7 @@ export default async function BookingSuccessPage({ searchParams }: PageProps) {
         eventDate={eventDate}
         pickupDate={pickupDate}
         styles={styles}
+        paymentTypeFromUrl={paymentTypeFromUrl}
       />
     </Suspense>
   );

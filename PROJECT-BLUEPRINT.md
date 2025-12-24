@@ -2515,6 +2515,394 @@ export const viewport: Viewport = {
 
 ---
 
+## Section 24: Cross-Platform Layout Considerations
+
+### Overview
+
+This section documents critical layout patterns for ensuring consistent behavior across iOS Safari and Android Chrome. Both platforms have different viewport behaviors, safe area handling, and browser chrome dynamics.
+
+### Safe Area Strategy
+
+**CRITICAL: Use additive approach, NOT `max()` function**
+
+The `max()` CSS function evaluates inconsistently on Android. Always use additive safe areas:
+
+```css
+/* ✅ CORRECT - Works on all platforms */
+padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+
+/* ❌ WRONG - Inconsistent on Android */
+padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+```
+
+**Platform Results:**
+| Platform | Calculation | Result |
+|----------|-------------|--------|
+| iOS | 12px + ~34px | 46px (home indicator clearance) |
+| Android gesture nav | 12px + 0-24px | 12-36px |
+| Android button nav | 12px + 0px | 12px (minimum always applies) |
+
+### Sticky Element Optimization
+
+Android Chrome hides the URL bar during scroll, changing viewport height. Sticky elements need optimization:
+
+```tsx
+// On sticky container
+style={{
+  top: 0,
+  paddingTop: 'env(safe-area-inset-top, 0px)',
+  willChange: 'transform', // Tells browser to optimize for position changes
+}}
+
+// On inner content (optional GPU acceleration)
+style={{
+  transform: 'translateZ(0)',
+  WebkitTransform: 'translateZ(0)',
+}}
+```
+
+**Rules:**
+- Apply `willChange: 'transform'` to sticky container itself
+- Apply safe area padding to the sticky element, not inner content
+- Use `min-h-*` instead of `h-*` for resilience
+- Add `leading-none` to centered text to prevent line-height issues
+
+### Floating Navigation Pattern
+
+**Pure floating pill design** - no background banners:
+
+```tsx
+<nav
+  className="fixed z-50 sm:hidden"
+  style={{
+    left: 0,
+    right: 0,
+    bottom: 0,
+    transform: 'translateZ(0)',
+    pointerEvents: 'none', // Container doesn't block taps
+  }}
+>
+  <div
+    className="mx-auto w-full max-w-5xl px-3"
+    style={{
+      paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+      pointerEvents: 'auto', // Re-enable on content
+    }}
+  >
+    {/* Floating pill content */}
+  </div>
+</nav>
+```
+
+### Positioning Best Practices
+
+**Use explicit positioning instead of `inset-x-0`:**
+
+```tsx
+// ✅ More reliable across platforms
+style={{ left: 0, right: 0, bottom: 0 }}
+
+// ⚠️ Can have issues on Android
+className="inset-x-0 bottom-0"
+```
+
+### Viewport Configuration
+
+**Required in `app/layout.tsx`:**
+
+```tsx
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover', // REQUIRED for safe area insets to work
+  themeColor: '#d946ef',
+};
+```
+
+### Platform Differences Reference
+
+| Feature | iOS Safari | Android Chrome | Solution |
+|---------|------------|----------------|----------|
+| Safe area insets | Full `env()` support | Limited/none | Additive with 0px fallback |
+| Viewport height | `100vh` stable | Changes with URL bar | Use `willChange` hints |
+| Status bar | Uses safe-area-inset-top | May overlay content | Padding on sticky element |
+| Home indicator | ~34px safe area | 0-24px (gesture nav) | Additive base + safe area |
+| Sticky behavior | Generally good | Needs optimization | Add `willChange: transform` |
+
+### CSS Utilities (globals.css)
+
+```css
+/* Safe area padding utilities */
+.pb-safe {
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+.pt-safe {
+  padding-top: calc(0px + env(safe-area-inset-top, 0px));
+}
+
+/* GPU acceleration for sticky elements */
+.sticky-morph-container {
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+```
+
+### File Locations
+
+| File | Cross-Platform Fixes Applied |
+|------|-----------------------------|
+| `components/site/mobile-bottom-nav.tsx` | Floating pill, additive safe areas |
+| `components/admin/admin-mobile-nav.tsx` | Matching admin implementation |
+| `components/site/site-header.tsx` | Sticky header with `willChange` |
+| `components/site/mobile-booking-wizard.tsx` | WizardHeader Android optimizations |
+| `app/admin/(dashboard)/layout.tsx` | Admin mobile header consistency |
+
+### Testing Checklist
+
+**Devices (MUST TEST):**
+- [ ] iPhone Safari (latest iOS) - PRIMARY
+- [ ] iPhone Chrome
+- [ ] Android Chrome (Pixel/Samsung with gesture nav)
+- [ ] Android Chrome (device with button nav)
+- [ ] iPad Safari
+- [ ] Android tablet
+
+**Verification:**
+- [ ] Bottom nav fully visible and centered on Android
+- [ ] Header text vertically centered on Android
+- [ ] Sticky elements dock properly during scroll
+- [ ] No content cut off by status bar on Android
+- [ ] Smooth scroll behavior in both directions
+- [ ] URL bar hide/show doesn't break layout
+- [ ] iOS functionality still perfect
+
+### Best Practices Summary
+
+1. **Always use additive safe areas**: `calc(base + env(..., 0px))`
+2. **Test on real devices**: Emulators don't replicate safe area behavior accurately
+3. **Use `min-h-*` over `h-*`**: More resilient to platform rendering differences
+4. **Add `willChange: transform`**: To sticky elements for Android optimization
+5. **Apply safe area to outer wrappers**: Not inner content that transitions
+6. **Use `leading-none`**: On centered text to prevent line-height issues
+7. **Explicit positioning**: Use `left/right/bottom` instead of `inset-x-0`
+8. **Pointer events management**: Disable on container, enable on content
+
+---
+
+## SECTION 25: PAYMENT FLOW ARCHITECTURE
+
+> Added: December 23, 2024
+> Status: Complete - Revenue-critical fixes implemented
+
+### Overview
+
+The payment system handles three critical flows:
+1. **First-time payment** - Customer completes checkout immediately
+2. **Abandoned checkout recovery** - Customer returns to complete payment
+3. **Webhook processing** - Stripe confirms payment asynchronously
+
+### Payment Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     FIRST-TIME PAYMENT FLOW                         │
+└─────────────────────────────────────────────────────────────────────┘
+
+1. Customer fills booking form
+   └─→ POST /api/bookings
+   └─→ Creates booking (status: 'pending')
+   └─→ Creates Stripe checkout session
+   └─→ Returns checkout URL
+
+2. Customer redirected to Stripe
+   └─→ Chooses deposit ($50) or full payment
+   └─→ Enters card details
+   └─→ Submits payment
+
+3. Stripe processes payment
+   └─→ Redirects to /bookings/success?booking_id=X&payment_type=Y
+   └─→ Sends webhook to /api/stripe/webhook (async)
+
+4. Success page loads
+   └─→ Shows payment info from URL params (immediate)
+   └─→ Starts polling /api/bookings/status (2s intervals)
+   └─→ Shows "Confirming payment..." indicator
+
+5. Webhook processes
+   └─→ Updates booking status to 'confirmed'
+   └─→ Sets deposit_paid/balance_paid flags
+   └─→ Creates payment record
+   └─→ Sends confirmation emails
+   └─→ Sends push notification to admin
+
+6. Polling detects confirmation
+   └─→ Removes loading indicator
+   └─→ Customer sees confirmed booking
+```
+
+### Abandoned Checkout Recovery
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                   PAYMENT RECOVERY FLOW                              │
+└─────────────────────────────────────────────────────────────────────┘
+
+1. Customer starts checkout → backs out of Stripe
+   └─→ Booking stays status: 'pending'
+   └─→ Stripe session expires (30 min)
+
+2. Customer visits /my-bookings
+   └─→ Enters email address
+   └─→ Sees pending booking with amber alert
+
+3. Payment recovery UI shows:
+   └─→ "Payment Required" alert banner
+   └─→ Payment type selector (deposit vs full)
+   └─→ "Complete Payment" button
+
+4. Customer clicks "Complete Payment"
+   └─→ POST /api/stripe/create-checkout
+   └─→ Creates NEW Stripe session for existing booking
+   └─→ Redirects to Stripe checkout
+
+5. Customer completes payment
+   └─→ Same flow as first-time payment (step 3+)
+```
+
+### Database Status Flow
+
+```
+BOOKING CREATION:
+├── status: 'pending'
+├── deposit_paid: false
+├── balance_paid: false
+└── balance_due: subtotal - deposit_amount
+
+WEBHOOK (deposit payment):
+├── status: 'confirmed'
+├── deposit_paid: true
+├── deposit_paid_at: timestamp
+├── confirmed_at: timestamp
+└── stripe_payment_intent_id: pi_xxx
+
+WEBHOOK (full payment):
+├── status: 'confirmed'
+├── deposit_paid: true
+├── balance_paid: true
+├── balance_due: 0  ← CRITICAL
+├── deposit_paid_at: timestamp
+├── balance_paid_at: timestamp
+├── confirmed_at: timestamp
+└── stripe_payment_intent_id: pi_xxx
+```
+
+### Key Files
+
+| File | Purpose |
+|------|--------|
+| `app/api/bookings/route.ts` | Create booking + initial Stripe session |
+| `app/api/stripe/create-checkout/route.ts` | Create Stripe session (new or retry) |
+| `app/api/stripe/webhook/route.ts` | Process Stripe payment confirmations |
+| `app/api/bookings/status/route.ts` | Polling endpoint for payment confirmation |
+| `app/(site)/bookings/success/page.tsx` | Success page (server component) |
+| `app/(site)/bookings/success/success-content.tsx` | Success UI with smart polling |
+| `app/(site)/my-bookings/my-bookings-content.tsx` | Payment recovery UI |
+
+### Smart Polling Hook
+
+```typescript
+// In success-content.tsx
+const usePaymentStatus = (bookingId: string) => {
+  // Polls /api/bookings/status every 2 seconds
+  // Max 15 polls (30 seconds total)
+  // Returns: { isPaymentConfirmed, isPaidInFull, isPolling }
+  // Stops when payment confirmed
+};
+```
+
+### Webhook Idempotency
+
+The webhook handler prevents duplicate processing:
+
+1. **Payment record check**: Looks for existing payment with same `stripe_checkout_session_id`
+2. **Booking status check**: Verifies booking isn't already confirmed with same payment intent
+3. **Logging**: All webhook events logged with `[WEBHOOK]` prefix for debugging
+
+### Stripe Checkout Session Metadata
+
+```typescript
+metadata: {
+  booking_id: string,      // UUID of booking
+  payment_type: 'deposit' | 'full',
+  customer_id: string,     // UUID of customer
+  promo_code_id?: string,  // If promo applied
+  promo_discount?: string, // Discount amount
+  original_price?: string, // Pre-discount price
+  final_price?: string,    // Post-discount price
+}
+```
+
+### Success URL Structure
+
+```
+/bookings/success?booking_id={uuid}&payment_type={deposit|full}
+```
+
+The `payment_type` param provides immediate accuracy while webhook processes asynchronously.
+
+### Edge Cases Handled
+
+| Scenario | Solution |
+|----------|----------|
+| Webhook arrives before page load | URL params show correct info immediately |
+| Webhook delayed >30s | Polling stops, URL params still accurate |
+| Customer refreshes success page | Polling restarts, data remains accurate |
+| Multiple checkout attempts | Each creates new session, old sessions expire |
+| Webhook fails | Customer sees correct info from URL, can contact support |
+| Network issues during polling | Graceful degradation, shows URL param data |
+
+### Testing Checklist
+
+#### Happy Path Tests
+- [ ] Book rental → pay deposit → success shows deposit paid
+- [ ] Book rental → pay full → success shows $0 balance
+- [ ] Webhook processes → My Bookings shows "Confirmed"
+- [ ] Admin dashboard shows correct payment status
+
+#### Recovery Path Tests
+- [ ] Start checkout → back out → My Bookings shows "Pending"
+- [ ] Pending booking → select deposit → complete payment → confirmed
+- [ ] Pending booking → select full → complete payment → $0 balance
+
+#### Edge Case Tests
+- [ ] Rapid page refresh during polling
+- [ ] Multiple pending bookings, complete one
+- [ ] Webhook delay simulation (>5 seconds)
+
+### Stripe Configuration Requirements
+
+**Webhook Events to Subscribe:**
+- `checkout.session.completed` ✅ (primary)
+- `checkout.session.expired` ✅ (logging)
+- `payment_intent.succeeded` ✅ (logging)
+- `payment_intent.payment_failed` ✅ (logging)
+
+**Webhook Endpoint:**
+```
+https://popndroprentals.com/api/stripe/webhook
+```
+
+**Environment Variables:**
+```
+STRIPE_SECRET_KEY=sk_live_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_xxx
+```
+
+---
+
 *Blueprint Complete — Last Updated: December 23, 2024*
 
 ---

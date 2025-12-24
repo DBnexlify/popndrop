@@ -484,7 +484,7 @@ export async function POST(request: NextRequest) {
             quantity: 1,
           },
         ],
-        success_url: `${baseUrl}/bookings/success?booking_id=${booking.id}`,
+        success_url: `${baseUrl}/bookings/success?booking_id=${booking.id}&payment_type=${paymentType}`,
         cancel_url: `${baseUrl}/bookings?cancelled=true&r=${product.slug}`,
         // Expire after 30 minutes
         expires_at: Math.floor(Date.now() / 1000) + (30 * 60),

@@ -112,8 +112,8 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      // Success: redirect to success page
-      success_url: `${baseUrl}/bookings/success?booking_id=${booking.id}`,
+      // Success: redirect to success page with payment_type for immediate accurate display
+      success_url: `${baseUrl}/bookings/success?booking_id=${booking.id}&payment_type=${paymentType}`,
       // Cancel: return to booking form with state preserved
       cancel_url: `${baseUrl}/bookings?cancelled=true&r=${booking.product_snapshot?.slug || ''}`,
       // Expire after 30 minutes
