@@ -365,23 +365,41 @@ function CancelModal({
 
   // =========================================================================
   // SMART PAYMENT DETECTION
+  // Handles: deposit-only, balance-only, full payment, and split payments
   // =========================================================================
   
-  // Find deposit payment with Stripe
-  const depositPayment = payments.find(
-    p => p.payment_type === "deposit" && p.status === "succeeded"
-  );
-  const depositStripePaymentIntentId = depositPayment?.stripe_payment_intent_id;
-  const depositPaymentMethod = depositPayment?.payment_method || "unknown";
+  // Find all successful payments
+  const succeededPayments = payments.filter(p => p.status === "succeeded");
   
-  // Find balance payment with Stripe
-  const balancePayment = payments.find(
-    p => p.payment_type === "balance" && p.status === "succeeded"
-  );
+  // Check for "full" payment first (covers both deposit + balance in one transaction)
+  const fullPayment = succeededPayments.find(p => p.payment_type === "full");
+  
+  // Find specific payment types
+  const depositOnlyPayment = succeededPayments.find(p => p.payment_type === "deposit");
+  const balanceOnlyPayment = succeededPayments.find(p => p.payment_type === "balance");
+  
+  // Determine best payment record to use for deposit info
+  // Priority: full payment > deposit payment
+  const depositPayment = fullPayment || depositOnlyPayment;
+  const depositStripePaymentIntentId = depositPayment?.stripe_payment_intent_id;
+  const depositPaymentMethod = depositPayment?.payment_method || 
+    (depositPayment?.stripe_payment_intent_id ? "card" : "unknown");
+  
+  // Determine best payment record to use for balance info
+  // Priority: balance payment > full payment (if it covered balance too)
+  const balancePayment = balanceOnlyPayment || (fullPayment && dbBalancePaid ? fullPayment : null);
   const balanceStripePaymentIntentId = balancePayment?.stripe_payment_intent_id;
+  // Use detected payment method, fall back to prop, then check for Stripe
+  const detectedBalancePaymentMethod = balancePayment?.payment_method || 
+    balancePaymentMethod ||
+    (balancePayment?.stripe_payment_intent_id ? "card" : "unknown");
   
   // Check if any payment was via Stripe (can auto-refund)
-  const hasStripePayment = !!(depositStripePaymentIntentId || balanceStripePaymentIntentId);
+  // Also check fullPayment directly in case it has Stripe info
+  const anyStripePaymentIntentId = fullPayment?.stripe_payment_intent_id || 
+    depositStripePaymentIntentId || 
+    balanceStripePaymentIntentId;
+  const hasStripePayment = !!anyStripePaymentIntentId;
   const canAutoRefundDeposit = !!depositStripePaymentIntentId && !manualOverride;
   const canAutoRefundBalance = !!balanceStripePaymentIntentId && !manualOverride;
 
@@ -634,8 +652,8 @@ function CancelModal({
                     {balancePaid ? (
                       <span className="flex items-center gap-1 rounded bg-green-500/10 px-1.5 py-0.5 text-[10px] text-green-400">
                         <CheckCircle2 className="h-3 w-3" />
-                        {manualOverride ? "Collected" : `Paid via ${getPaymentMethodDisplay(balancePaymentMethod)}`}
-                        {balanceStripePaymentIntentId && !manualOverride && (
+                        {manualOverride ? "Collected" : `Paid via ${getPaymentMethodDisplay(detectedBalancePaymentMethod)}`}
+                        {(balanceStripePaymentIntentId || (fullPayment?.stripe_payment_intent_id && dbBalancePaid)) && !manualOverride && (
                           <Zap className="ml-1 h-3 w-3" />
                         )}
                       </span>
