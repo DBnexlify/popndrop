@@ -2,6 +2,7 @@
 // ADMIN CANCELLATION REVIEW API
 // app/api/cancellations/review/route.ts
 // Admin-facing: List, approve, deny, and process refunds
+// Supports both automatic Stripe refunds and manual refund methods
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -36,6 +37,8 @@ export async function GET(request: NextRequest) {
           status,
           product_snapshot,
           stripe_payment_intent_id,
+          delivery_address,
+          delivery_city,
           customer:customers (
             id,
             first_name,
@@ -86,7 +89,7 @@ export async function GET(request: NextRequest) {
 }
 
 // =============================================================================
-// POST: Process cancellation request (approve/deny/refund)
+// POST: Process cancellation request (approve/deny/refund/mark_refunded)
 // =============================================================================
 
 export async function POST(request: NextRequest) {
@@ -94,9 +97,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { 
       requestId, 
-      action,           // 'approve' | 'deny' | 'refund'
-      refundAmount,     // Custom refund amount (optional, uses suggested if not provided)
-      adminNotes,       // Admin notes
+      action,              // 'approve' | 'deny' | 'refund' | 'mark_refunded'
+      refundAmount,        // Custom refund amount (optional, uses suggested if not provided)
+      refundMethod,        // 'stripe' | 'venmo' | 'zelle' | 'cash' | 'check'
+      overrideReason,      // 'weather' | 'emergency' | 'our_fault' | 'goodwill' | 'other'
+      adminNotes,          // Admin notes
+      processStripeRefund: shouldProcessStripeRefund, // Boolean - process Stripe refund automatically
     } = body;
 
     if (!requestId || !action) {
@@ -106,9 +112,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!['approve', 'deny', 'refund'].includes(action)) {
+    if (!['approve', 'deny', 'refund', 'mark_refunded'].includes(action)) {
       return NextResponse.json(
-        { error: 'Invalid action. Must be approve, deny, or refund' },
+        { error: 'Invalid action. Must be approve, deny, refund, or mark_refunded' },
         { status: 400 }
       );
     }
@@ -125,6 +131,7 @@ export async function POST(request: NextRequest) {
           booking_number,
           event_date,
           stripe_payment_intent_id,
+          product_snapshot,
           customer:customers (
             id,
             email,
@@ -143,8 +150,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if already processed
-    if (cancellationRequest.status !== 'pending' && action !== 'refund') {
+    // Check if already processed (except for mark_refunded action)
+    if (cancellationRequest.status !== 'pending' && action !== 'refund' && action !== 'mark_refunded') {
       return NextResponse.json(
         { error: `Request has already been ${cancellationRequest.status}` },
         { status: 400 }
@@ -154,6 +161,20 @@ export async function POST(request: NextRequest) {
     const booking = Array.isArray(cancellationRequest.booking) 
       ? cancellationRequest.booking[0] 
       : cancellationRequest.booking;
+
+    const customer = Array.isArray(booking?.customer) 
+      ? booking.customer[0] 
+      : booking?.customer;
+
+    const productSnapshot = booking?.product_snapshot as { name?: string } | undefined;
+    const productName = productSnapshot?.name || 'rental';
+    const eventDateFormatted = booking?.event_date 
+      ? new Date(booking.event_date).toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+        })
+      : 'your event';
 
     // Handle different actions
     switch (action) {
@@ -181,7 +202,7 @@ export async function POST(request: NextRequest) {
           .eq('attention_type', 'cancellation_request')
           .eq('status', 'pending');
 
-        // Restore booking status
+        // Restore booking status to confirmed
         await supabase
           .from('bookings')
           .update({
@@ -191,19 +212,13 @@ export async function POST(request: NextRequest) {
           .eq('id', booking.id);
 
         // Send denial email to customer
-        const customer = Array.isArray(booking.customer) ? booking.customer[0] : booking.customer;
         if (customer?.email) {
-          const productSnapshot = cancellationRequest.booking?.product_snapshot as { name?: string } | undefined;
           await sendCancellationDeniedEmail({
             customerEmail: customer.email,
             customerFirstName: customer.first_name || 'there',
             bookingNumber: booking.booking_number,
-            productName: productSnapshot?.name || 'rental',
-            eventDate: new Date(booking.event_date).toLocaleDateString('en-US', {
-              weekday: 'long',
-              month: 'long',
-              day: 'numeric',
-            }),
+            productName,
+            eventDate: eventDateFormatted,
             reason: adminNotes,
           });
         }
@@ -216,15 +231,31 @@ export async function POST(request: NextRequest) {
       }
 
       case 'approve': {
-        // Approve but don't process refund yet
-        const approvedAmount = refundAmount ?? cancellationRequest.suggested_refund;
+        const approvedAmount = refundAmount ?? cancellationRequest.suggested_refund ?? 0;
+        const selectedRefundMethod = refundMethod || 'stripe';
+        const isManualRefund = selectedRefundMethod !== 'stripe';
 
+        // Build admin notes with override info
+        let fullAdminNotes = adminNotes || '';
+        if (overrideReason && overrideReason !== 'none') {
+          const overrideLabels: Record<string, string> = {
+            weather: 'Weather/Safety',
+            emergency: 'Family emergency',
+            our_fault: 'Our scheduling conflict',
+            goodwill: 'Customer goodwill',
+            other: 'Other override',
+          };
+          fullAdminNotes = `[Override: ${overrideLabels[overrideReason] || overrideReason}] ${fullAdminNotes}`.trim();
+        }
+
+        // Update cancellation request
         await supabase
           .from('cancellation_requests')
           .update({
             status: 'approved',
             approved_refund: approvedAmount,
-            admin_notes: adminNotes || null,
+            refund_method: selectedRefundMethod,
+            admin_notes: fullAdminNotes || null,
             reviewed_at: new Date().toISOString(),
           })
           .eq('id', requestId);
@@ -236,24 +267,28 @@ export async function POST(request: NextRequest) {
             status: 'resolved',
             resolved_at: new Date().toISOString(),
             resolution_action: 'cancellation_approved',
-            resolution_notes: adminNotes || `Cancellation approved. Refund: ${approvedAmount?.toFixed(2) || '0.00'}`,
+            resolution_notes: fullAdminNotes || `Cancellation approved. Refund: $${approvedAmount?.toFixed(2) || '0.00'}`,
           })
           .eq('booking_id', booking.id)
           .eq('attention_type', 'cancellation_request')
           .eq('status', 'pending');
 
-        // Update booking status
+        // Update booking status to cancelled
+        const cancelledBy = overrideReason === 'weather' ? 'weather' : 'customer';
         await supabase
           .from('bookings')
           .update({
             status: 'cancelled',
             cancelled_at: new Date().toISOString(),
+            cancelled_by: cancelledBy,
             cancellation_reason: cancellationRequest.reason || 'Customer request',
+            refund_amount: approvedAmount,
+            refund_status: approvedAmount > 0 ? 'pending' : 'none',
           })
           .eq('id', booking.id);
 
-        // If there's a refund amount and payment intent, process refund automatically
-        if (approvedAmount > 0 && booking.stripe_payment_intent_id) {
+        // If Stripe refund requested and payment intent exists, process automatically
+        if (shouldProcessStripeRefund && booking.stripe_payment_intent_id && approvedAmount > 0) {
           const refundResult = await processStripeRefund(
             booking.stripe_payment_intent_id,
             approvedAmount,
@@ -270,64 +305,77 @@ export async function POST(request: NextRequest) {
               })
               .eq('id', requestId);
 
+            await supabase
+              .from('bookings')
+              .update({
+                refund_status: 'processed',
+                refund_processed_at: new Date().toISOString(),
+                stripe_refund_id: refundResult.refundId,
+              })
+              .eq('id', booking.id);
+
             // Send refund confirmation email
-            const customer = Array.isArray(booking.customer) ? booking.customer[0] : booking.customer;
             if (customer?.email) {
-              const productSnapshot = cancellationRequest.booking?.product_snapshot as { name?: string } | undefined;
               await sendCancellationRefundEmail({
                 customerEmail: customer.email,
                 customerFirstName: customer.first_name || 'there',
                 bookingNumber: booking.booking_number,
-                productName: productSnapshot?.name || 'rental',
-                eventDate: new Date(booking.event_date).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric',
-                }),
+                productName,
+                eventDate: eventDateFormatted,
                 refundAmount: approvedAmount,
               });
             }
 
             return NextResponse.json({
               success: true,
-              message: `Cancellation approved and ${approvedAmount.toFixed(2)} refunded`,
+              message: `Cancellation approved and $${approvedAmount.toFixed(2)} refunded to card`,
               status: 'refunded',
               refundId: refundResult.refundId,
             });
           } else {
-            // Refund failed but approval succeeded
+            // Stripe refund failed - mark as approved with pending manual refund
             return NextResponse.json({
               success: true,
-              message: `Cancellation approved but refund failed: ${refundResult.error}`,
+              message: `Cancellation approved. Stripe refund failed: ${refundResult.error}. Please process refund manually via ${selectedRefundMethod}.`,
               status: 'approved',
               refundError: refundResult.error,
             });
           }
         }
 
-        // Send approval email (no refund)
-        const customerForApproval = Array.isArray(booking.customer) ? booking.customer[0] : booking.customer;
-        if (customerForApproval?.email) {
-          const productSnapshot = cancellationRequest.booking?.product_snapshot as { name?: string } | undefined;
-          await sendCancellationApprovedEmail({
-            customerEmail: customerForApproval.email,
-            customerFirstName: customerForApproval.first_name || 'there',
-            bookingNumber: booking.booking_number,
-            productName: productSnapshot?.name || 'rental',
-            eventDate: new Date(booking.event_date).toLocaleDateString('en-US', {
-              weekday: 'long',
-              month: 'long',
-              day: 'numeric',
-            }),
-          });
+        // Manual refund or no refund - send appropriate email
+        if (customer?.email) {
+          if (approvedAmount > 0) {
+            // Send approval email mentioning refund is coming via manual method
+            await sendCancellationApprovedEmail({
+              customerEmail: customer.email,
+              customerFirstName: customer.first_name || 'there',
+              bookingNumber: booking.booking_number,
+              productName,
+              eventDate: eventDateFormatted,
+              refundAmount: approvedAmount,
+              refundMethod: isManualRefund ? selectedRefundMethod : undefined,
+            });
+          } else {
+            // No refund - just approved
+            await sendCancellationApprovedEmail({
+              customerEmail: customer.email,
+              customerFirstName: customer.first_name || 'there',
+              bookingNumber: booking.booking_number,
+              productName,
+              eventDate: eventDateFormatted,
+            });
+          }
         }
 
         return NextResponse.json({
           success: true,
           message: approvedAmount > 0 
-            ? `Cancellation approved. Refund of $${approvedAmount.toFixed(2)} pending.`
+            ? `Cancellation approved. $${approvedAmount.toFixed(2)} refund pending via ${selectedRefundMethod}.`
             : 'Cancellation approved. No refund applicable.',
           status: 'approved',
+          refundPending: approvedAmount > 0,
+          refundMethod: selectedRefundMethod,
         });
       }
 
@@ -351,7 +399,7 @@ export async function POST(request: NextRequest) {
 
         if (!booking.stripe_payment_intent_id) {
           return NextResponse.json(
-            { error: 'No payment found to refund' },
+            { error: 'No payment found to refund. Use mark_refunded for manual refunds.' },
             { status: 400 }
           );
         }
@@ -382,29 +430,83 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', requestId);
 
+        await supabase
+          .from('bookings')
+          .update({
+            refund_status: 'processed',
+            refund_processed_at: new Date().toISOString(),
+            stripe_refund_id: refundResult.refundId,
+          })
+          .eq('id', booking.id);
+
         // Send refund confirmation email
-        const customerForRefund = Array.isArray(booking.customer) ? booking.customer[0] : booking.customer;
-        if (customerForRefund?.email) {
-          const productSnapshot = cancellationRequest.booking?.product_snapshot as { name?: string } | undefined;
+        if (customer?.email) {
           await sendCancellationRefundEmail({
-            customerEmail: customerForRefund.email,
-            customerFirstName: customerForRefund.first_name || 'there',
+            customerEmail: customer.email,
+            customerFirstName: customer.first_name || 'there',
             bookingNumber: booking.booking_number,
-            productName: productSnapshot?.name || 'rental',
-            eventDate: new Date(booking.event_date).toLocaleDateString('en-US', {
-              weekday: 'long',
-              month: 'long',
-              day: 'numeric',
-            }),
+            productName,
+            eventDate: eventDateFormatted,
             refundAmount: amount,
           });
         }
 
         return NextResponse.json({
           success: true,
-          message: `Refund of ${amount.toFixed(2)} processed successfully`,
+          message: `Refund of $${amount.toFixed(2)} processed successfully`,
           status: 'refunded',
           refundId: refundResult.refundId,
+        });
+      }
+
+      case 'mark_refunded': {
+        // Mark manual refund as complete (for Venmo, Zelle, cash, check)
+        if (cancellationRequest.status !== 'approved') {
+          return NextResponse.json(
+            { error: 'Can only mark approved requests as refunded' },
+            { status: 400 }
+          );
+        }
+
+        const amount = cancellationRequest.approved_refund || refundAmount || 0;
+        const method = refundMethod || cancellationRequest.refund_method || 'manual';
+
+        await supabase
+          .from('cancellation_requests')
+          .update({
+            status: 'refunded',
+            refund_processed_at: new Date().toISOString(),
+            admin_notes: adminNotes 
+              ? `${cancellationRequest.admin_notes || ''}\nRefund sent via ${method}. ${adminNotes}`.trim()
+              : `${cancellationRequest.admin_notes || ''}\nRefund sent via ${method}.`.trim(),
+          })
+          .eq('id', requestId);
+
+        await supabase
+          .from('bookings')
+          .update({
+            refund_status: 'processed',
+            refund_processed_at: new Date().toISOString(),
+          })
+          .eq('id', booking.id);
+
+        // Send refund confirmation email
+        if (customer?.email) {
+          await sendCancellationRefundEmail({
+            customerEmail: customer.email,
+            customerFirstName: customer.first_name || 'there',
+            bookingNumber: booking.booking_number,
+            productName,
+            eventDate: eventDateFormatted,
+            refundAmount: amount,
+            refundMethod: method,
+          });
+        }
+
+        return NextResponse.json({
+          success: true,
+          message: `Marked as refunded via ${method}`,
+          status: 'refunded',
         });
       }
 

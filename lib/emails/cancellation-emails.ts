@@ -16,10 +16,13 @@ interface CancellationEmailData {
   bookingNumber: string;
   productName: string;
   eventDate: string;
+  refundAmount?: number;
+  refundMethod?: string;
 }
 
 interface RefundEmailData extends CancellationEmailData {
   refundAmount: number;
+  refundMethod?: string;
 }
 
 interface RescheduleEmailData extends CancellationEmailData {
@@ -61,11 +64,51 @@ function emailWrapper(content: string, footerText: string = 'Questions? We\'re h
 }
 
 // =============================================================================
-// CANCELLATION APPROVED (NO REFUND)
+// HELPER: Get refund method display text
+// =============================================================================
+
+function getRefundMethodDisplay(method?: string): string {
+  if (!method || method === 'stripe') return 'to your original payment card';
+  const methods: Record<string, string> = {
+    venmo: 'via Venmo',
+    zelle: 'via Zelle',
+    cash: 'in cash',
+    check: 'via check',
+  };
+  return methods[method] || 'via your preferred method';
+}
+
+function getRefundTimeline(method?: string): string {
+  if (!method || method === 'stripe') {
+    return 'Refunds typically appear in 5-10 business days, depending on your bank.';
+  }
+  const timelines: Record<string, string> = {
+    venmo: 'You should receive your Venmo payment within 24 hours.',
+    zelle: 'You should receive your Zelle payment within 24 hours.',
+    cash: 'Please coordinate with us to arrange pickup of your cash refund.',
+    check: 'Your check will be mailed within 3-5 business days.',
+  };
+  return timelines[method] || 'Your refund will be processed shortly.';
+}
+
+// =============================================================================
+// CANCELLATION APPROVED (with optional refund info)
 // =============================================================================
 
 export async function sendCancellationApprovedEmail(data: CancellationEmailData) {
-  const { customerEmail, customerFirstName, bookingNumber, productName, eventDate } = data;
+  const { customerEmail, customerFirstName, bookingNumber, productName, eventDate, refundAmount, refundMethod } = data;
+  
+  // If there's a refund amount, show the refund info
+  const refundSection = refundAmount && refundAmount > 0 ? `
+    <!-- Refund Info -->
+    <div style="background: linear-gradient(135deg, #14532d, #166534); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+      <p style="margin: 0 0 4px; color: rgba(255,255,255,0.6); font-size: 11px; text-transform: uppercase;">Refund Amount</p>
+      <p style="margin: 0; color: white; font-size: 28px; font-weight: 700;">$${refundAmount.toFixed(2)}</p>
+      <p style="margin: 8px 0 0; color: #86efac; font-size: 12px;">
+        Coming ${getRefundMethodDisplay(refundMethod)}
+      </p>
+    </div>
+  ` : '';
   
   const content = `
     <!-- Header -->
@@ -80,6 +123,8 @@ export async function sendCancellationApprovedEmail(data: CancellationEmailData)
     <!-- Content -->
     <div style="padding: 24px;">
       <p style="color: #ccc; margin: 0 0 20px;">Hey ${customerFirstName}! Your cancellation has been processed.</p>
+      
+      ${refundSection}
       
       <!-- Cancelled Booking -->
       <div style="background-color: #222; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
@@ -133,7 +178,11 @@ export async function sendCancellationApprovedEmail(data: CancellationEmailData)
 // =============================================================================
 
 export async function sendCancellationRefundEmail(data: RefundEmailData) {
-  const { customerEmail, customerFirstName, bookingNumber, productName, eventDate, refundAmount } = data;
+  const { customerEmail, customerFirstName, bookingNumber, productName, eventDate, refundAmount, refundMethod } = data;
+  
+  const isManualRefund = refundMethod && refundMethod !== 'stripe';
+  const refundDisplay = getRefundMethodDisplay(refundMethod);
+  const timeline = getRefundTimeline(refundMethod);
   
   const content = `
     <!-- Header -->
@@ -141,24 +190,25 @@ export async function sendCancellationRefundEmail(data: RefundEmailData) {
       <div style="width: 56px; height: 56px; margin: 0 auto 16px; background-color: #22c55e; border-radius: 50%; line-height: 56px; text-align: center;">
         <span style="color: white; font-size: 28px;">💸</span>
       </div>
-      <h1 style="margin: 0; color: white; font-size: 24px; font-weight: 600;">Refund Processed</h1>
+      <h1 style="margin: 0; color: white; font-size: 24px; font-weight: 600;">Refund ${isManualRefund ? 'on the Way' : 'Processed'}</h1>
       <p style="margin: 8px 0 0; color: #888;">Booking ${bookingNumber}</p>
     </div>
     
     <!-- Content -->
     <div style="padding: 24px;">
-      <p style="color: #ccc; margin: 0 0 20px;">Hey ${customerFirstName}! Good news — your refund has been processed.</p>
+      <p style="color: #ccc; margin: 0 0 20px;">Hey ${customerFirstName}! Good news — your refund ${isManualRefund ? 'is being sent' : 'has been processed'}.</p>
       
       <!-- Refund Amount Card -->
       <div style="background: linear-gradient(135deg, #14532d, #166534); border-radius: 12px; padding: 20px; margin-bottom: 16px; text-align: center;">
         <p style="margin: 0 0 4px; color: rgba(255,255,255,0.6); font-size: 11px; text-transform: uppercase;">Refund Amount</p>
         <p style="margin: 0; color: white; font-size: 36px; font-weight: 700;">$${refundAmount.toFixed(2)}</p>
+        <p style="margin: 8px 0 0; color: #86efac; font-size: 13px;">${refundDisplay}</p>
       </div>
       
       <!-- Timeline -->
       <div style="background-color: rgba(34, 197, 94, 0.15); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
         <p style="margin: 0 0 4px; color: #22c55e; font-weight: 600; font-size: 13px;">⏱ When will I see it?</p>
-        <p style="margin: 0; color: #86efac; font-size: 13px;">Refunds typically appear in 5-10 business days, depending on your bank.</p>
+        <p style="margin: 0; color: #86efac; font-size: 13px;">${timeline}</p>
       </div>
       
       <!-- Cancelled Booking Details -->
@@ -196,7 +246,7 @@ export async function sendCancellationRefundEmail(data: RefundEmailData) {
     await resend.emails.send({
       from: FROM_EMAIL,
       to: customerEmail,
-      subject: `Refund Processed - $${refundAmount.toFixed(2)} 💸`,
+      subject: `Refund ${isManualRefund ? 'Coming' : 'Processed'} - $${refundAmount.toFixed(2)} 💸`,
       html: emailWrapper(content, 'Questions about your refund?'),
     });
     

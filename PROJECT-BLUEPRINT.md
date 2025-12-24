@@ -100,6 +100,11 @@ popndrop/
 │   │   ├── quick-action-modal.tsx          # Mini-checklist action modal
 │   │   └── pwa-provider.tsx                # PWA service worker provider
 │   │
+│   ├── policies/                           # Centralized policy components
+│   │   ├── index.ts                        # Barrel export
+│   │   ├── policy-components.tsx           # Display components (cards, lists)
+│   │   └── policy-modal.tsx                # Modal and checkbox components
+│   │
 │   ├── site/                               # Public site components
 │   │   ├── animated-logo.tsx               # Animated logo component
 │   │   ├── booking-progress.tsx            # Booking wizard progress bar
@@ -141,6 +146,8 @@ popndrop/
 │   └── theme-provider.tsx                  # Dark/light theme provider
 │
 ├── lib/                                    # Utilities & Business Logic
+│   ├── policies/                           # CENTRALIZED POLICY SOURCE
+│   │   └── index.ts                        # Single source of truth for all policies
 │   ├── admin-actions.ts                    # Admin server actions
 │   ├── admin-queries.ts                    # Admin data queries
 │   ├── admin-sounds.ts                     # Admin notification sounds
@@ -2903,7 +2910,149 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_xxx
 
 ---
 
-*Blueprint Complete — Last Updated: December 23, 2024*
+## SECTION 26: CENTRALIZED POLICY SYSTEM
+
+> Added: December 24, 2024
+> Status: Complete
+
+### Overview
+
+A single source of truth for all business policies. Edit content in ONE place, and it automatically reflects everywhere across the website.
+
+### Why This Matters
+
+- **Consistency**: No more mismatched policy text across pages
+- **Maintainability**: Update policies in one file, not 5+ locations
+- **Legal Safety**: Terms acceptance pulls from the same source as the policies page
+- **Future-Proof**: Easy to update when business rules change
+
+### File Structure
+
+```
+lib/policies/
+└── index.ts                    # Single source of truth for all policy content
+
+components/policies/
+├── index.ts                    # Barrel export
+├── policy-components.tsx       # Display components (cards, lists, etc.)
+└── policy-modal.tsx           # Modal and checkbox components
+```
+
+### Key Files
+
+| File | Purpose |
+|------|--------|
+| `lib/policies/index.ts` | **THE SOURCE OF TRUTH** - All policy content lives here |
+| `components/policies/policy-components.tsx` | Reusable display components |
+| `components/policies/policy-modal.tsx` | Modal and terms checkbox |
+| `components/policies/index.ts` | Barrel export for convenience |
+
+### What Lives in lib/policies/index.ts
+
+- `BUSINESS_CONSTANTS` - Phone, email, deposit amount, etc.
+- `REFUND_RULES` - Cancellation timing rules (48+ hours = 100%, etc.)
+- `calculateRefund()` - Single source of truth for refund calculations
+- `POLICIES` - Full text of all policies
+- `POLICY_SUMMARIES` - Short versions for space-constrained areas
+- `QUICK_FACTS` - Quick reference card data
+- `KEY_TERMS` - Bullet point terms list
+
+### Cancellation Policy Rules
+
+| Timing | Refund |
+|--------|--------|
+| 48+ hours before delivery | 100% refund minus $50 deposit |
+| 24-48 hours before delivery | 50% refund minus $50 deposit |
+| Less than 24 hours | No refund |
+| Weather cancellation | 100% refund INCLUDING deposit |
+
+### Consumption Points
+
+| Location | Component Used |
+|----------|---------------|
+| `/policies` page | `PolicyQuickReference`, `CancellationPolicy`, `SafetyRequirements`, etc. |
+| Booking checkout | `TermsCheckbox`, `FullTermsDialog` |
+| Cancellation modal | Uses `calculateRefund()` from centralized source |
+| Admin cancellation review | Uses `calculateRefund()` from centralized source |
+| Footer | Links to `/policies` |
+
+### Available Components
+
+#### Full Display Components
+- `CancellationPolicy` - Full cancellation policy card
+- `SafetyRequirements` - Safety rules card
+- `LiabilityWaiver` - Liability terms card
+- `WeatherPolicy` - Weather policy card
+- `DeliveryPolicy` - Delivery/pickup card
+- `SetupRequirements` - Setup requirements card
+- `RentalAgreement` - Full rental agreement card
+- `PolicyQuickReference` - Quick facts grid
+- `AllPolicies` - All policies combined
+
+#### Compact/Modal Components
+- `CancellationPolicySummary` - Compact refund table
+- `TermsCheckbox` - Checkbox with expandable terms
+- `FullTermsDialog` - Modal with all terms sections
+- `TermsSummary` - Key terms bullet list
+- `PolicyModal` - Single policy in modal
+- `KeyTermsList` - Bullet point terms
+
+### How to Update Policies
+
+**Step 1**: Open `lib/policies/index.ts`
+
+**Step 2**: Find the policy section you want to update:
+```typescript
+export const POLICIES = {
+  cancellation: {
+    title: 'Cancellation & Refund Policy',
+    // ... edit content here
+  },
+  // ... other policies
+};
+```
+
+**Step 3**: Save the file. Changes reflect everywhere automatically.
+
+### How to Change Refund Rules
+
+**Step 1**: Open `lib/policies/index.ts`
+
+**Step 2**: Update the `REFUND_RULES` array:
+```typescript
+export const REFUND_RULES: RefundRule[] = [
+  {
+    minHours: 48,
+    maxHours: null,
+    refundPercent: 100,
+    label: '48+ hours before delivery',
+    shortLabel: '48+ hours',
+  },
+  // ... other rules
+];
+```
+
+**Step 3**: Save. Both display and calculation logic update automatically.
+
+### Backward Compatibility
+
+- `components/site/terms-acceptance.tsx` re-exports from centralized source
+- `lib/cancellations.ts` uses `calculateRefund()` from centralized source
+- Existing imports continue to work
+
+### Testing Checklist
+
+- [ ] `/policies` page displays all policies correctly
+- [ ] Booking checkout shows terms checkbox
+- [ ] Terms modal opens and displays all sections
+- [ ] Cancellation modal calculates refunds correctly
+- [ ] Admin cancellation review uses same calculations
+- [ ] Quick reference card displays on policies page
+- [ ] Mobile scrolling works in modals
+
+---
+
+*Blueprint Complete — Last Updated: December 24, 2024*
 
 ---
 
@@ -3158,5 +3307,147 @@ Run in Supabase SQL Editor:
 
 ---
 
-*Blueprint Complete — Last Updated: December 23, 2024*
+## SECTION 27: FINANCIAL ACCOUNTING SYSTEM
+
+> Added: December 24, 2024
+> Status: Complete
+
+### Overview
+
+Comprehensive financial tracking system for accounting, tax reporting, and profitability analysis. Tracks Stripe fees, expenses by IRS category, refunds with lost fee tracking, and provides real-time financial dashboards.
+
+### Database Schema
+
+#### Enhanced `payments` Table
+
+New columns added:
+
+| Column | Type | Purpose |
+|--------|------|--------|
+| `stripe_fee` | DECIMAL(10,2) | Actual Stripe processing fee |
+| `stripe_fee_rate` | DECIMAL(6,4) | Rate used (default 0.029) |
+| `stripe_fixed_fee` | DECIMAL(6,2) | Fixed fee (default 0.30) |
+| `net_amount` | DECIMAL(12,2) | Auto-calculated: amount - stripe_fee |
+| `is_manual_entry` | BOOLEAN | True for cash/Zelle/Venmo payments |
+| `recorded_by` | UUID | Admin who recorded manual payment |
+| `notes` | TEXT | Payment notes |
+
+#### Table: `expense_categories`
+
+| Column | Type | Purpose |
+|--------|------|--------|
+| `id` | uuid | Primary key |
+| `name` | varchar(100) | Category name |
+| `irs_category` | varchar(100) | Maps to Schedule C line |
+| `description` | text | Help text |
+| `is_tax_deductible` | boolean | Deductible expense |
+| `deduction_percent` | integer | Percent deductible (meals = 50%) |
+| `display_order` | integer | Sort order |
+| `is_active` | boolean | Active category |
+
+**Pre-seeded Categories**:
+- Fuel/Gas, Vehicle Maintenance, Equipment Repairs
+- Equipment Purchases, Cleaning Supplies, Insurance
+- Storage/Warehouse, Marketing, Website/Software
+- Contract Labor, Meals (50% deductible), Licenses/Permits
+- Professional Services, Office Supplies, Bank/Processing Fees, Other
+
+#### Table: `expenses`
+
+| Column | Type | Purpose |
+|--------|------|--------|
+| `id` | uuid | Primary key |
+| `booking_id` | uuid | Optional link to booking |
+| `category_id` | uuid | FK to expense_categories |
+| `amount` | DECIMAL(10,2) | Expense amount |
+| `vendor_name` | varchar(255) | Where purchased |
+| `description` | text | What was purchased |
+| `expense_date` | date | When expense occurred |
+| `is_tax_deductible` | boolean | Override category default |
+| `tax_year` | integer | Auto-calculated from date |
+| `is_recurring` | boolean | Monthly expense flag |
+| `recurrence_interval` | varchar(20) | weekly/monthly/quarterly/yearly |
+| `receipt_url` | text | Supabase Storage path |
+| `notes` | text | Additional notes |
+| `prompt_source` | varchar(30) | How expense was logged |
+
+#### Table: `refunds`
+
+| Column | Type | Purpose |
+|--------|------|--------|
+| `id` | uuid | Primary key |
+| `payment_id` | uuid | Original payment |
+| `booking_id` | uuid | Related booking |
+| `amount` | DECIMAL(12,2) | Refund amount |
+| `refund_type` | varchar(30) | full/partial/deposit/damage/weather |
+| `reason` | text | Why refunded |
+| `stripe_refund_id` | varchar(255) | Stripe refund ID |
+| `original_stripe_fee_lost` | DECIMAL(10,2) | Fee not recovered |
+| `status` | varchar(20) | pending/processing/completed/failed |
+| `processed_at` | timestamptz | When completed |
+
+### Database Functions
+
+| Function | Purpose |
+|----------|--------|
+| `calculate_stripe_fee(amount, is_international, is_manual)` | Calculate Stripe fee |
+| `get_financial_metrics(period, start_date, end_date)` | Dashboard metrics |
+| `get_booking_financials(booking_id)` | Per-booking P&L |
+
+### Database Views
+
+| View | Purpose |
+|------|--------|
+| `financial_daily_summary` | Daily revenue/expense/profit |
+| `expense_summary_by_category` | Category totals for tax reporting |
+
+### File Locations
+
+| File | Purpose |
+|------|--------|
+| `lib/financial-types.ts` | TypeScript types and helpers |
+| `lib/financial-queries.ts` | Database query functions |
+| `app/api/admin/expenses/route.ts` | Expense CRUD API |
+| `app/api/admin/financials/route.ts` | Financial metrics API |
+| `app/admin/(dashboard)/expenses/page.tsx` | Expense management page |
+| `app/admin/(dashboard)/expenses/expenses-client.tsx` | Expense list/form client |
+| `app/admin/(dashboard)/financials/page.tsx` | Financial dashboard page |
+| `app/admin/(dashboard)/financials/financials-client.tsx` | Dashboard widgets client |
+| `supabase/migrations/20241224_financial_accounting_system.sql` | Database migration |
+
+### Admin Features
+
+- **Financial Dashboard**: Revenue, fees, expenses, profit by time period
+- **Expense Tracking**: Add/edit/delete expenses with categories
+- **Category Breakdown**: See spending by IRS category
+- **Per-Booking P&L**: View profit for each rental
+- **Time Period Filters**: Today, this week, this month, this year, all time
+
+### Stripe Fee Tracking
+
+- Standard rate: 2.9% + $0.30
+- International: +1.5%
+- Manual entry: +0.5%
+- Net amount auto-calculated as generated column
+
+### Navigation
+
+- **Admin Sidebar**: "Financials" (DollarSign icon) and "Expenses" (Receipt icon)
+- **Routes**: `/admin/financials` and `/admin/expenses`
+
+### Migration Required
+
+Run in Supabase SQL Editor:
+```sql
+-- File: supabase/migrations/20241224_financial_accounting_system.sql
+-- This migration:
+-- 1. Clears test data and resets booking sequence to PD-10001
+-- 2. Adds financial tracking columns to payments
+-- 3. Creates expense_categories, expenses, and refunds tables
+-- 4. Creates financial helper functions and views
+```
+
+---
+
+*Blueprint Complete — Last Updated: December 24, 2024*
 

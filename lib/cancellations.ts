@@ -2,12 +2,20 @@
 // CANCELLATION & REFUND SYSTEM
 // lib/cancellations.ts
 // Handles cancellation policy, refund calculations, and Stripe refunds
+// NOW USES CENTRALIZED POLICY FROM lib/policies
 // =============================================================================
 
 import { getStripe } from './stripe';
+import { 
+  calculateRefund as centralCalculateRefund,
+  REFUND_RULES,
+  BUSINESS_CONSTANTS,
+  type RefundCalculation as CentralRefundCalculation,
+  type RefundRule,
+} from './policies';
 
 // =============================================================================
-// TYPES
+// TYPES (Backward compatible)
 // =============================================================================
 
 export interface CancellationPolicyRule {
@@ -53,7 +61,6 @@ export interface CancellationRequest {
   stripe_refund_id: string | null;
   refund_processed_at: string | null;
   created_at: string;
-  // Joined data
   booking?: {
     booking_number: string;
     event_date: string;
@@ -68,17 +75,22 @@ export interface CancellationRequest {
 }
 
 // =============================================================================
-// DEFAULT POLICY (fallback if database policy not found)
+// DEFAULT POLICY - Now derived from centralized source
 // =============================================================================
 
+// Convert REFUND_RULES (hours-based) to days-based for backward compatibility
+// This maintains compatibility with existing database schema
 export const DEFAULT_POLICY: CancellationPolicy = {
   id: 'default',
   name: 'Standard Policy',
   is_active: true,
   rules: [
-    { min_days: 7, max_days: null, refund_percent: 100, label: '7+ days before event' },
-    { min_days: 3, max_days: 6, refund_percent: 50, label: '3-6 days before event' },
-    { min_days: 0, max_days: 2, refund_percent: 0, label: '0-2 days before event' },
+    // 48+ hours = 2+ days
+    { min_days: 2, max_days: null, refund_percent: 100, label: '48+ hours before delivery' },
+    // 24-48 hours = 1 day
+    { min_days: 1, max_days: 1, refund_percent: 50, label: '24-48 hours before delivery' },
+    // <24 hours = 0 days
+    { min_days: 0, max_days: 0, refund_percent: 0, label: 'Less than 24 hours before delivery' },
   ],
   weather_full_refund: true,
   allow_reschedule: true,
@@ -86,11 +98,12 @@ export const DEFAULT_POLICY: CancellationPolicy = {
 };
 
 // =============================================================================
-// REFUND CALCULATION
+// REFUND CALCULATION - Uses centralized logic
 // =============================================================================
 
 /**
  * Calculate refund amount based on cancellation policy
+ * UPDATED: Now uses hours-based calculation from centralized policy
  */
 export function calculateRefund(
   eventDate: Date | string,
@@ -98,72 +111,51 @@ export function calculateRefund(
   policy: CancellationPolicy = DEFAULT_POLICY,
   cancellationType: 'customer_request' | 'weather' | 'emergency' | 'admin_initiated' = 'customer_request'
 ): RefundCalculation {
-  const eventDateObj = typeof eventDate === 'string' ? new Date(eventDate + 'T12:00:00') : eventDate;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Convert event date to delivery date (same day for now)
+  const deliveryDateTime = typeof eventDate === 'string' 
+    ? new Date(eventDate + 'T08:00:00') // Assume 8 AM delivery
+    : eventDate;
   
-  const timeDiff = eventDateObj.getTime() - today.getTime();
-  const daysUntilEvent = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+  const cancelDateTime = new Date();
   
-  // Weather/emergency cancellations get full refund if policy allows
-  if (cancellationType === 'weather' && policy.weather_full_refund) {
-    return {
-      daysUntilEvent,
-      refundPercent: 100,
-      refundAmount: amountPaid,
-      processingFee: 0,
-      policyLabel: 'Weather cancellation - full refund',
-      isEligible: true,
-    };
-  }
-  
-  if (cancellationType === 'emergency') {
-    return {
-      daysUntilEvent,
-      refundPercent: 100,
-      refundAmount: amountPaid,
-      processingFee: 0,
-      policyLabel: 'Emergency cancellation - full refund',
-      isEligible: true,
-    };
-  }
-  
-  // Find matching rule
-  let matchedRule: CancellationPolicyRule | null = null;
-  
-  for (const rule of policy.rules) {
-    const meetsMinDays = daysUntilEvent >= rule.min_days;
-    const meetsMaxDays = rule.max_days === null || daysUntilEvent <= rule.max_days;
+  // Use centralized calculation for weather/emergency
+  if (cancellationType === 'weather' || cancellationType === 'emergency') {
+    const result = centralCalculateRefund(
+      amountPaid,
+      deliveryDateTime,
+      cancelDateTime,
+      cancellationType === 'weather'
+    );
     
-    if (meetsMinDays && meetsMaxDays) {
-      matchedRule = rule;
-      break;
-    }
-  }
-  
-  // No matching rule = no refund
-  if (!matchedRule) {
+    const daysUntil = Math.ceil(result.hoursUntilDelivery / 24);
+    
     return {
-      daysUntilEvent,
-      refundPercent: 0,
-      refundAmount: 0,
+      daysUntilEvent: daysUntil,
+      refundPercent: result.refundPercentage,
+      refundAmount: result.refundAmount,
       processingFee: 0,
-      policyLabel: 'Outside cancellation window',
-      isEligible: false,
+      policyLabel: result.policyApplied,
+      isEligible: true,
     };
   }
   
-  // Calculate refund
-  const grossRefund = (amountPaid * matchedRule.refund_percent) / 100;
-  const netRefund = Math.max(0, grossRefund - policy.processing_fee);
+  // Use centralized calculation for standard cancellations
+  const result = centralCalculateRefund(
+    amountPaid,
+    deliveryDateTime,
+    cancelDateTime,
+    false
+  );
+  
+  const daysUntil = Math.ceil(result.hoursUntilDelivery / 24);
   
   return {
-    daysUntilEvent,
-    refundPercent: matchedRule.refund_percent,
-    refundAmount: Math.round(netRefund * 100) / 100, // Round to 2 decimals
-    processingFee: matchedRule.refund_percent > 0 ? policy.processing_fee : 0,
-    policyLabel: matchedRule.label,
-    isEligible: matchedRule.refund_percent > 0,
+    daysUntilEvent: daysUntil,
+    refundPercent: result.refundPercentage,
+    refundAmount: result.refundAmount,
+    processingFee: 0,
+    policyLabel: result.policyApplied,
+    isEligible: result.refundPercentage > 0,
   };
 }
 
@@ -284,21 +276,24 @@ export function getCancellationStatusColor(status: CancellationRequest['status']
 
 /**
  * Format refund policy for display
+ * NOW USES CENTRALIZED REFUND_RULES
  */
 export function formatPolicyRules(policy: CancellationPolicy): string[] {
-  return policy.rules.map(rule => {
-    const timeFrame = rule.max_days === null 
-      ? `${rule.min_days}+ days before`
-      : rule.min_days === rule.max_days
-      ? `${rule.min_days} days before`
-      : `${rule.min_days}-${rule.max_days} days before`;
-    
-    const refundText = rule.refund_percent === 100
-      ? 'Full refund'
-      : rule.refund_percent === 0
+  // Use centralized rules for consistency
+  return REFUND_RULES.map(rule => {
+    const refundText = rule.refundPercent === 100
+      ? 'Full refund minus deposit'
+      : rule.refundPercent === 0
       ? 'No refund'
-      : `${rule.refund_percent}% refund`;
+      : `${rule.refundPercent}% refund minus deposit`;
     
-    return `${timeFrame}: ${refundText}`;
+    return `${rule.label}: ${refundText}`;
   });
 }
+
+// =============================================================================
+// CONVENIENCE EXPORTS FROM CENTRALIZED POLICY
+// =============================================================================
+
+export { BUSINESS_CONSTANTS, REFUND_RULES } from './policies';
+export type { RefundRule };

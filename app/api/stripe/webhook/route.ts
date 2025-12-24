@@ -96,6 +96,20 @@ export async function POST(request: NextRequest) {
         break;
       }
 
+      case 'charge.refunded': {
+        const charge = event.data.object as Stripe.Charge;
+        console.log(`💸 [WEBHOOK] charge.refunded | Charge: ${charge.id} | Amount Refunded: ${(charge.amount_refunded || 0) / 100}`);
+        await handleChargeRefunded(charge);
+        break;
+      }
+
+      case 'charge.dispute.created': {
+        const dispute = event.data.object as Stripe.Dispute;
+        console.log(`⚠️ [WEBHOOK] charge.dispute.created | Dispute: ${dispute.id} | Amount: ${dispute.amount / 100}`);
+        await handleDisputeCreated(dispute);
+        break;
+      }
+
       default:
         console.log(`ℹ️ [WEBHOOK] Unhandled event: ${event.type}`);
     }
@@ -164,16 +178,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId
   }
 
   // ==========================================================================
-  // FETCH STRIPE PAYMENT DETAILS (for receipt URL, card info)
+  // FETCH STRIPE PAYMENT DETAILS (for receipt URL, card info, ACTUAL FEE)
   // ==========================================================================
   let stripeReceiptUrl: string | null = null;
   let cardLast4: string | null = null;
   let cardBrand: string | null = null;
+  let actualStripeFee: number | null = null;
   
   if (session.payment_intent && typeof session.payment_intent === 'string') {
     try {
       const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent, {
-        expand: ['latest_charge'],
+        expand: ['latest_charge.balance_transaction'],
       });
       
       const charge = paymentIntent.latest_charge as Stripe.Charge | null;
@@ -182,6 +197,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId
         if (charge.payment_method_details?.card) {
           cardLast4 = charge.payment_method_details.card.last4 || null;
           cardBrand = charge.payment_method_details.card.brand || null;
+        }
+        
+        // Get ACTUAL Stripe fee from balance_transaction
+        const balanceTx = charge.balance_transaction as Stripe.BalanceTransaction | null;
+        if (balanceTx && typeof balanceTx === 'object') {
+          actualStripeFee = balanceTx.fee / 100; // Convert cents to dollars
+          console.log(`💰 [WEBHOOK] Actual Stripe fee: ${actualStripeFee.toFixed(2)}`);
         }
       }
       console.log(`✅ [WEBHOOK] Fetched payment details | Card: ${cardBrand} ****${cardLast4}`);
@@ -251,7 +273,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId
   }
 
   // ==========================================================================
-  // 3. CREATE PAYMENT RECORD
+  // 3. CREATE PAYMENT RECORD (with actual Stripe fee)
   // ==========================================================================
   const { error: paymentError } = await supabase
     .from('payments')
@@ -265,6 +287,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId
       stripe_checkout_session_id: session.id,
       card_brand: cardBrand,
       card_last_four: cardLast4,
+      stripe_fee: actualStripeFee, // Actual fee from Stripe, not estimated!
     });
 
   if (paymentError) {
@@ -463,4 +486,312 @@ function formatDate(dateStr: string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+// =============================================================================
+// CHARGE REFUNDED - Track refunds and lost fees
+// =============================================================================
+
+async function handleChargeRefunded(charge: Stripe.Charge) {
+  const supabase = createServerClient();
+  const paymentIntentId = typeof charge.payment_intent === 'string' 
+    ? charge.payment_intent 
+    : charge.payment_intent?.id;
+
+  if (!paymentIntentId) {
+    console.log('ℹ️ [WEBHOOK] Refund charge has no payment_intent');
+    return;
+  }
+
+  // Find the original payment by payment_intent_id
+  const { data: paymentData, error: paymentError } = await supabase
+    .from('payments')
+    .select(`
+      id,
+      booking_id,
+      amount,
+      stripe_fee,
+      booking:bookings(booking_number, customer_id)
+    `)
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .single();
+
+  if (paymentError || !paymentData) {
+    console.error('❌ [WEBHOOK] Could not find original payment for refund:', paymentIntentId);
+    return;
+  }
+
+  // Extract booking from array (Supabase returns joins as arrays)
+  const booking = Array.isArray(paymentData.booking) ? paymentData.booking[0] : paymentData.booking;
+  const payment = { ...paymentData, booking };
+
+  // Calculate refund details
+  const refundAmount = (charge.amount_refunded || 0) / 100;
+  const isFullRefund = refundAmount >= payment.amount;
+  
+  // IMPORTANT: Stripe does NOT return processing fees on refunds!
+  // We lose the original fee when we refund
+  const originalFee = payment.stripe_fee || (payment.amount * 0.029 + 0.30);
+  const feeLost = isFullRefund ? originalFee : (originalFee * (refundAmount / payment.amount));
+
+  console.log(`💸 [WEBHOOK] Processing refund: ${refundAmount} | Fee lost: ${feeLost.toFixed(2)} | Full refund: ${isFullRefund}`);
+
+  // Check if we already recorded this refund (idempotency)
+  const { data: existingRefund } = await supabase
+    .from('refunds')
+    .select('id')
+    .eq('payment_id', payment.id)
+    .eq('amount', refundAmount)
+    .single();
+
+  if (existingRefund) {
+    console.log('ℹ️ [WEBHOOK] Refund already recorded - skipping (idempotent)');
+    return;
+  }
+
+  // Get the latest Stripe refund ID
+  let stripeRefundId: string | null = null;
+  if (charge.refunds?.data && charge.refunds.data.length > 0) {
+    stripeRefundId = charge.refunds.data[0].id;
+  }
+
+  // Create refund record
+  const { error: refundError } = await supabase
+    .from('refunds')
+    .insert({
+      booking_id: payment.booking_id,
+      payment_id: payment.id,
+      amount: refundAmount,
+      refund_type: isFullRefund ? 'full_refund' : 'partial_refund',
+      reason: 'Processed via Stripe',
+      status: 'completed',
+      stripe_refund_id: stripeRefundId,
+      original_stripe_fee_lost: feeLost,
+      processed_at: new Date().toISOString(),
+      is_full_refund: isFullRefund,
+    });
+
+  if (refundError) {
+    console.error('❌ [WEBHOOK] Error creating refund record:', refundError);
+    return;
+  }
+
+  const bookingNumber = booking?.booking_number || 'Unknown';
+  console.log(`✅ [WEBHOOK] Refund recorded: ${refundAmount} for booking ${bookingNumber}`);
+
+  // Update booking status if full refund
+  if (isFullRefund) {
+    const { error: bookingError } = await supabase
+      .from('bookings')
+      .update({
+        status: 'cancelled',
+        cancelled_at: new Date().toISOString(),
+        cancellation_reason: 'Refunded via Stripe',
+      })
+      .eq('id', payment.booking_id);
+
+    if (bookingError) {
+      console.error('❌ [WEBHOOK] Error updating booking status:', bookingError);
+    } else {
+      console.log(`✅ [WEBHOOK] Booking ${bookingNumber} marked as cancelled`);
+    }
+  }
+
+  // Send notification email to business
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: NOTIFY_EMAIL,
+      subject: `⚠️ Refund Processed: ${bookingNumber} - ${refundAmount.toFixed(2)}`,
+      html: `
+        <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #ef4444;">⚠️ Refund Processed</h2>
+          <p><strong>Booking:</strong> ${bookingNumber}</p>
+          <p><strong>Refund Amount:</strong> ${refundAmount.toFixed(2)}</p>
+          <p><strong>Original Payment:</strong> ${payment.amount.toFixed(2)}</p>
+          <p><strong>Stripe Fee Lost:</strong> ${feeLost.toFixed(2)}</p>
+          <p><strong>Full Refund:</strong> ${isFullRefund ? 'Yes' : 'No (Partial)'}</p>
+          <p><strong>Stripe Refund ID:</strong> ${stripeRefundId || 'N/A'}</p>
+          <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 20px 0;">
+          <p style="color: #666; font-size: 14px;">
+            💡 <strong>Note:</strong> Stripe does not return processing fees on refunds. 
+            This refund cost you ${feeLost.toFixed(2)} in lost fees.
+          </p>
+        </div>
+      `,
+    });
+    console.log('✅ [WEBHOOK] Refund notification email sent');
+  } catch (emailError) {
+    console.error('❌ [WEBHOOK] Failed to send refund notification:', emailError);
+  }
+}
+
+// =============================================================================
+// DISPUTE CREATED - Track chargebacks
+// =============================================================================
+
+async function handleDisputeCreated(dispute: Stripe.Dispute) {
+  const supabase = createServerClient();
+  
+  // Get the charge to find the payment
+  const chargeId = typeof dispute.charge === 'string' 
+    ? dispute.charge 
+    : dispute.charge?.id;
+
+  if (!chargeId) {
+    console.log('ℹ️ [WEBHOOK] Dispute has no charge ID');
+    return;
+  }
+
+  // Fetch the charge to get payment_intent
+  let paymentIntentId: string | null = null;
+  try {
+    const charge = await stripe.charges.retrieve(chargeId);
+    paymentIntentId = typeof charge.payment_intent === 'string' 
+      ? charge.payment_intent 
+      : charge.payment_intent?.id || null;
+  } catch (err) {
+    console.error('❌ [WEBHOOK] Could not fetch charge for dispute:', err);
+  }
+
+  // Find the original payment
+  let payment = null;
+  let booking: { booking_number?: string; customer_id?: string } | null = null;
+  
+  if (paymentIntentId) {
+    const { data } = await supabase
+      .from('payments')
+      .select(`
+        id,
+        booking_id,
+        amount,
+        stripe_fee,
+        booking:bookings(booking_number, customer_id)
+      `)
+      .eq('stripe_payment_intent_id', paymentIntentId)
+      .single();
+    
+    payment = data;
+    // Extract booking from array (Supabase returns joins as arrays)
+    const bookingData = Array.isArray(data?.booking) ? data?.booking[0] : data?.booking;
+    booking = bookingData || null;
+  }
+
+  const bookingNumber = booking?.booking_number || 'Unknown';
+
+  const disputeAmount = dispute.amount / 100;
+  const disputeFee = 15.00; // Stripe charges $15 dispute fee
+
+  console.log(`⚠️ [WEBHOOK] Dispute created: ${disputeAmount} | Reason: ${dispute.reason}`);
+
+  // Record dispute as an expense (it's a real cost to the business)
+  // First, get or create a "Chargebacks" expense category
+  let categoryId: string | null = null;
+  const { data: category } = await supabase
+    .from('expense_categories')
+    .select('id')
+    .eq('name', 'Bank/Processing Fees')
+    .single();
+  
+  categoryId = category?.id || null;
+
+  if (categoryId) {
+    // Record the dispute fee as an expense
+    const { error: expenseError } = await supabase
+      .from('expenses')
+      .insert({
+        category_id: categoryId,
+        booking_id: payment?.booking_id || null,
+        amount: disputeFee,
+        description: `Stripe dispute fee - ${dispute.reason} - ${bookingNumber}`,
+        vendor_name: 'Stripe',
+        expense_date: new Date().toISOString().split('T')[0],
+        is_recurring: false,
+        notes: `Dispute ID: ${dispute.id}. Status: ${dispute.status}. Evidence due: ${dispute.evidence_details?.due_by ? new Date(dispute.evidence_details.due_by * 1000).toISOString() : 'N/A'}`,
+      });
+
+    if (expenseError) {
+      console.error('❌ [WEBHOOK] Error recording dispute expense:', expenseError);
+    } else {
+      console.log('✅ [WEBHOOK] Dispute fee recorded as expense');
+    }
+  }
+
+  // Send URGENT notification email to business
+  const evidenceDueDate = dispute.evidence_details?.due_by 
+    ? new Date(dispute.evidence_details.due_by * 1000).toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : 'Unknown';
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: NOTIFY_EMAIL,
+      subject: `🚨 URGENT: Chargeback Dispute - ${bookingNumber} - ${disputeAmount.toFixed(2)}`,
+      html: `
+        <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #fef2f2; border: 2px solid #ef4444; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+            <h2 style="color: #dc2626; margin: 0;">🚨 CHARGEBACK DISPUTE FILED</h2>
+            <p style="color: #991b1b; margin: 10px 0 0 0;">Action required within deadline!</p>
+          </div>
+          
+          <h3>Dispute Details</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;"><strong>Booking:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;">${bookingNumber}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;"><strong>Disputed Amount:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;">${disputeAmount.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;"><strong>Dispute Fee:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;">${disputeFee.toFixed(2)} (charged regardless of outcome)</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;"><strong>Reason:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;">${dispute.reason?.replace(/_/g, ' ')}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;"><strong>Status:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;">${dispute.status}</td>
+            </tr>
+            <tr style="background: #fef9c3;">
+              <td style="padding: 8px 0;"><strong>⏰ Evidence Due:</strong></td>
+              <td style="padding: 8px 0;"><strong>${evidenceDueDate}</strong></td>
+            </tr>
+          </table>
+          
+          <div style="background: #f3f4f6; border-radius: 8px; padding: 15px; margin-top: 20px;">
+            <h4 style="margin: 0 0 10px 0;">📝 What to do:</h4>
+            <ol style="margin: 0; padding-left: 20px;">
+              <li>Log into Stripe Dashboard immediately</li>
+              <li>Go to Payments → Disputes</li>
+              <li>Submit evidence (signed waiver, delivery photos, communication)</li>
+              <li>Submit before ${evidenceDueDate}</li>
+            </ol>
+          </div>
+          
+          <p style="margin-top: 20px;">
+            <a href="https://dashboard.stripe.com/disputes/${dispute.id}" 
+               style="background: #6366f1; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; display: inline-block;">
+              View Dispute in Stripe →
+            </a>
+          </p>
+          
+          <p style="color: #666; font-size: 12px; margin-top: 20px;">
+            Dispute ID: ${dispute.id}
+          </p>
+        </div>
+      `,
+    });
+    console.log('✅ [WEBHOOK] Dispute notification email sent');
+  } catch (emailError) {
+    console.error('❌ [WEBHOOK] Failed to send dispute notification:', emailError);
+  }
 }

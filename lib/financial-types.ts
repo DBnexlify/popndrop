@@ -1,324 +1,419 @@
 // =============================================================================
-// FINANCIAL TYPES
-// lib/financial-types.ts
-// Types for the comprehensive financial tracking system
+// FINANCIAL ACCOUNTING TYPES - Pop and Drop Party Rentals
+// Single source of truth for all financial tracking
 // =============================================================================
 
 // =============================================================================
-// TIME PERIOD OPTIONS
+// EXPENSE CATEGORIES
 // =============================================================================
 
-export type TimePeriod = 
-  | 'all_time'
-  | 'this_year'
-  | 'this_quarter'
-  | 'this_month'
-  | 'last_month'
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  irs_category: string | null;
+  description: string | null;
+  is_tax_deductible: boolean;
+  deduction_percent: number;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+  schedule_c_line: string | null;
+}
+
+// =============================================================================
+// EXPENSES
+// =============================================================================
+
+export type ExpensePromptSource = 
+  | 'delivery_prompt' 
+  | 'pickup_prompt' 
+  | 'manual' 
+  | 'recurring_auto';
+
+export type RecurrenceInterval = 
+  | 'weekly' 
+  | 'monthly' 
+  | 'quarterly' 
+  | 'yearly';
+
+export interface Expense {
+  id: string;
+  booking_id: string | null;
+  category_id: string;
+  amount: number;
+  vendor_name: string | null;
+  description: string;
+  expense_date: string;
+  is_tax_deductible: boolean;
+  tax_year: number;
+  is_recurring: boolean;
+  recurrence_interval: RecurrenceInterval | null;
+  parent_recurring_id: string | null;
+  receipt_url: string | null;
+  notes: string | null;
+  prompt_source: ExpensePromptSource;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface ExpenseInsert {
+  booking_id?: string | null;
+  category_id: string;
+  amount: number;
+  vendor_name?: string | null;
+  description: string;
+  expense_date?: string;
+  is_tax_deductible?: boolean;
+  is_recurring?: boolean;
+  recurrence_interval?: RecurrenceInterval | null;
+  parent_recurring_id?: string | null;
+  receipt_url?: string | null;
+  notes?: string | null;
+  prompt_source?: ExpensePromptSource;
+}
+
+export interface ExpenseUpdate extends Partial<ExpenseInsert> {}
+
+export interface ExpenseWithCategory extends Expense {
+  category: ExpenseCategory;
+}
+
+export interface ExpenseWithBooking extends ExpenseWithCategory {
+  booking?: {
+    booking_number: string;
+    event_date: string;
+    delivery_address: string;
+    delivery_city: string;
+  } | null;
+}
+
+// =============================================================================
+// REFUNDS
+// =============================================================================
+
+export type RefundType = 
+  | 'full_refund' 
+  | 'partial_refund' 
+  | 'deposit_return' 
+  | 'damage_adjustment'
+  | 'weather_cancellation';
+
+export type RefundStatus = 
+  | 'pending' 
+  | 'processing' 
+  | 'completed' 
+  | 'failed';
+
+export interface Refund {
+  id: string;
+  payment_id: string;
+  booking_id: string;
+  amount: number;
+  refund_type: RefundType;
+  reason: string;
+  stripe_refund_id: string | null;
+  original_stripe_fee_lost: number;
+  status: RefundStatus;
+  processed_at: string | null;
+  processed_by: string | null;
+  created_at: string;
+  notes: string | null;
+}
+
+export interface RefundInsert {
+  payment_id: string;
+  booking_id: string;
+  amount: number;
+  refund_type: RefundType;
+  reason: string;
+  stripe_refund_id?: string | null;
+  original_stripe_fee_lost?: number;
+  status?: RefundStatus;
+  notes?: string | null;
+}
+
+export interface RefundWithRelations extends Refund {
+  booking: {
+    booking_number: string;
+    customer_id: string;
+  };
+  payment: {
+    amount: number;
+    stripe_fee: number | null;
+  };
+}
+
+// =============================================================================
+// FINANCIAL METRICS
+// =============================================================================
+
+export type FinancialPeriod = 
+  | 'today'
   | 'this_week'
   | 'last_7_days'
+  | 'this_month'
+  | 'last_month'
   | 'last_30_days'
+  | 'this_quarter'
+  | 'this_year'
+  | 'all_time'
   | 'custom';
 
+// Alias for backward compatibility
+export type TimePeriod = FinancialPeriod;
+
 export interface DateRange {
-  start: string; // ISO date string
-  end: string;   // ISO date string
+  start: string;
+  end: string;
 }
 
-// =============================================================================
-// FINANCIAL SUMMARY
-// =============================================================================
-
-export interface FinancialSummary {
-  // Core revenue metrics
-  grossRevenue: number;        // All successful payments received
-  refundsIssued: number;       // Total refunds processed
-  netRevenue: number;          // Gross - Refunds
-  
-  // Breakdown by payment type
-  depositRevenue: number;      // Deposit payments only
-  balanceRevenue: number;      // Balance payments only
-  
-  // Outstanding
-  outstandingDeposits: number; // Bookings without deposit paid
-  outstandingBalances: number; // Confirmed+ bookings with balance due
-  
-  // Booking metrics
-  totalBookings: number;       // All bookings in period
-  completedBookings: number;   // Completed bookings
-  cancelledBookings: number;   // Cancelled bookings
-  
-  // Calculated
-  averageBookingValue: number; // Net / Completed bookings
-  cancellationRate: number;    // Cancelled / Total (percentage)
-  collectionRate: number;      // Net / Expected (percentage)
-  
-  // Period info
-  periodStart: string;
-  periodEnd: string;
-  periodLabel: string;
+export interface FinancialMetrics {
+  gross_revenue: number;
+  stripe_fees: number;
+  net_revenue: number;
+  total_expenses: number;
+  total_refunds: number;
+  net_profit: number;
+  booking_count: number;
+  avg_booking_value: number;
 }
 
-// =============================================================================
-// PAYMENT METHOD BREAKDOWN
-// =============================================================================
-
-export interface PaymentMethodBreakdown {
-  method: string;              // 'card', 'cash', 'venmo', 'zelle', 'other'
-  methodLabel: string;         // Display label
-  transactionCount: number;
-  totalAmount: number;
-  percentage: number;          // Of total revenue
-}
-
-// =============================================================================
-// PRODUCT REVENUE BREAKDOWN
-// =============================================================================
-
-export interface ProductRevenueBreakdown {
-  productId: string;
-  productName: string;
-  productSlug: string;
-  bookingCount: number;
-  grossRevenue: number;
+export interface DailyFinancialSummary {
+  date: string;
+  bookings: number;
+  gross_revenue: number;
+  stripe_fees: number;
+  net_revenue: number;
+  expenses: number;
   refunds: number;
-  netRevenue: number;
-  percentage: number;          // Of total revenue
+  net_profit: number;
+}
+
+export interface ExpenseSummaryByCategory {
+  category_id: string;
+  category_name: string;
+  irs_category: string | null;
+  schedule_c_line: string | null;
+  deduction_percent: number;
+  transaction_count: number;
+  total_amount: number;
+  deductible_amount: number;
+  first_expense: string | null;
+  last_expense: string | null;
 }
 
 // =============================================================================
-// MONTHLY SUMMARY
+// DASHBOARD STATS
 // =============================================================================
 
-export interface MonthlySummary {
-  month: string;               // 'YYYY-MM' format
-  monthLabel: string;          // 'Jan 2024' format
-  bookingCount: number;
-  grossRevenue: number;
-  refunds: number;
-  netRevenue: number;
-  cancelledCount: number;
+export interface FinancialDashboardStats {
+  today: FinancialMetrics;
+  thisWeek: FinancialMetrics;
+  thisMonth: FinancialMetrics;
+  thisYear: FinancialMetrics;
+  recentExpenses: ExpenseWithCategory[];
+  topExpenseCategories: ExpenseSummaryByCategory[];
 }
 
 // =============================================================================
-// BOOKING FINANCIAL RECORD
+// BOOKING FINANCIALS
 // =============================================================================
 
-export interface BookingFinancialRecord {
-  // Booking info
-  bookingId: string;
-  bookingNumber: string;
+export interface BookingFinancials {
+  booking_number: string;
+  total_amount: number;
+  amount_paid: number;
+  stripe_fees_paid: number;
+  net_received: number;
+  amount_refunded: number;
+  fees_lost_to_refunds: number;
+  related_expenses: number;
+  net_profit: number;
+  payment_methods: string[];
+}
+
+// =============================================================================
+// ENHANCED PAYMENT (with Stripe fee tracking)
+// =============================================================================
+
+export interface EnhancedPayment {
+  id: string;
+  booking_id: string;
+  payment_type: string;
+  amount: number;
+  stripe_fee: number | null;
+  stripe_fee_rate: number;
+  stripe_fixed_fee: number;
+  net_amount: number | null;
+  is_manual_entry: boolean;
+  recorded_by: string | null;
+  notes: string | null;
   status: string;
-  bookingType: string;
-  
-  // Dates
-  eventDate: string;
-  createdAt: string;
-  completedAt: string | null;
-  cancelledAt: string | null;
-  
-  // Customer info
-  customerName: string;
-  customerEmail: string;
-  customerId: string;
-  
-  // Product info
-  productName: string;
-  productId: string;
-  
-  // Financial - Quoted
-  subtotal: number;            // Original quoted price
-  depositAmount: number;       // Deposit portion
-  balanceDue: number;          // Balance portion
-  
-  // Financial - Actual
-  depositPaid: boolean;
-  depositPaidAt: string | null;
-  balancePaid: boolean;
-  balancePaidAt: string | null;
-  balancePaymentMethod: string | null;
-  
-  // Payments received
-  totalPaid: number;           // Sum of all successful payments
-  
-  // Refunds
-  refundAmount: number | null;
-  refundProcessedAt: string | null;
-  
-  // Calculated
-  netRevenue: number;          // Total paid - refunds
-  outstandingBalance: number;  // What's still owed
-  paymentStatus: 'unpaid' | 'deposit_only' | 'paid_in_full' | 'refunded' | 'partial_refund';
-}
-
-// =============================================================================
-// FULL FINANCIAL DASHBOARD DATA
-// =============================================================================
-
-export interface FinancialDashboardData {
-  summary: FinancialSummary;
-  byPaymentMethod: PaymentMethodBreakdown[];
-  byProduct: ProductRevenueBreakdown[];
-  monthlyTrend: MonthlySummary[];
-  recentTransactions: BookingFinancialRecord[];
-}
-
-// =============================================================================
-// COMPARISON DATA (for showing change vs previous period)
-// =============================================================================
-
-export interface PeriodComparison {
-  current: number;
-  previous: number;
-  change: number;              // Absolute change
-  changePercent: number;       // Percentage change
-  trend: 'up' | 'down' | 'flat';
-}
-
-export interface FinancialComparison {
-  grossRevenue: PeriodComparison;
-  netRevenue: PeriodComparison;
-  bookingCount: PeriodComparison;
-  averageBookingValue: PeriodComparison;
-}
-
-// =============================================================================
-// EXPORT OPTIONS
-// =============================================================================
-
-export interface ExportOptions {
-  format: 'csv' | 'json';
-  includeCustomerDetails: boolean;
-  includePaymentDetails: boolean;
-  dateRange: DateRange;
+  payment_method: string | null;
+  created_at: string;
 }
 
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
 
-export function getTimePeriodLabel(period: TimePeriod): string {
-  const labels: Record<TimePeriod, string> = {
-    all_time: 'All Time',
-    this_year: 'This Year',
-    this_quarter: 'This Quarter',
-    this_month: 'This Month',
-    last_month: 'Last Month',
+/**
+ * Calculate Stripe fee for a given amount
+ * Standard rate: 2.9% + $0.30
+ */
+export function calculateStripeFee(
+  amount: number,
+  isInternational = false,
+  isManualEntry = false
+): number {
+  let rate = 0.029;
+  if (isInternational) rate += 0.015;
+  if (isManualEntry) rate += 0.005;
+  return Math.round((amount * rate + 0.30) * 100) / 100;
+}
+
+/**
+ * Calculate net amount after Stripe fees
+ */
+export function calculateNetAmount(amount: number, stripeFee?: number): number {
+  const fee = stripeFee ?? calculateStripeFee(amount);
+  return Math.round((amount - fee) * 100) / 100;
+}
+
+/**
+ * Format currency for display
+ */
+export function formatMoney(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+  }).format(amount);
+}
+
+/**
+ * Format percentage for display
+ */
+export function formatPercent(value: number, decimals = 1): string {
+  return `${value.toFixed(decimals)}%`;
+}
+
+/**
+ * Get period label for display
+ */
+export function getPeriodLabel(period: FinancialPeriod): string {
+  const labels: Record<FinancialPeriod, string> = {
+    today: 'Today',
     this_week: 'This Week',
     last_7_days: 'Last 7 Days',
+    this_month: 'This Month',
+    last_month: 'Last Month',
     last_30_days: 'Last 30 Days',
+    this_quarter: 'This Quarter',
+    this_year: 'This Year',
+    all_time: 'All Time',
     custom: 'Custom Range',
   };
   return labels[period];
 }
 
-export function getTimePeriodDates(period: TimePeriod): DateRange {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  
+/**
+ * Get expense category icon name (for Lucide icons)
+ */
+export function getCategoryIcon(categoryName: string): string {
+  const icons: Record<string, string> = {
+    'Fuel/Gas': 'Fuel',
+    'Vehicle Maintenance': 'Wrench',
+    'Equipment Repairs': 'Hammer',
+    'Equipment Purchases': 'Package',
+    'Cleaning Supplies': 'Sparkles',
+    'Insurance': 'Shield',
+    'Storage/Warehouse': 'Warehouse',
+    'Marketing': 'Megaphone',
+    'Website/Software': 'Globe',
+    'Contract Labor': 'Users',
+    'Meals': 'Utensils',
+    'Licenses/Permits': 'FileText',
+    'Professional Services': 'Briefcase',
+    'Office Supplies': 'Paperclip',
+    'Bank/Processing Fees': 'CreditCard',
+    'Other': 'MoreHorizontal',
+  };
+  return icons[categoryName] || 'Receipt';
+}
+
+/**
+ * Get color for profit/loss display
+ */
+export function getProfitColor(amount: number): string {
+  if (amount > 0) return 'text-green-400';
+  if (amount < 0) return 'text-red-400';
+  return 'text-foreground/70';
+}
+
+/**
+ * Calculate profit margin percentage
+ */
+export function calculateProfitMargin(netProfit: number, grossRevenue: number): number {
+  if (grossRevenue === 0) return 0;
+  return (netProfit / grossRevenue) * 100;
+}
+
+/**
+ * Get date range for a time period
+ */
+export function getTimePeriodDates(period: FinancialPeriod): DateRange {
+  const today = new Date();
+  const end = today.toISOString().split('T')[0];
+  let start: string;
+
   switch (period) {
-    case 'all_time':
-      return {
-        start: '2020-01-01',
-        end: today.toISOString().split('T')[0],
-      };
-    
-    case 'this_year':
-      return {
-        start: `${now.getFullYear()}-01-01`,
-        end: today.toISOString().split('T')[0],
-      };
-    
-    case 'this_quarter': {
-      const quarter = Math.floor(now.getMonth() / 3);
-      const quarterStart = new Date(now.getFullYear(), quarter * 3, 1);
-      return {
-        start: quarterStart.toISOString().split('T')[0],
-        end: today.toISOString().split('T')[0],
-      };
-    }
-    
-    case 'this_month':
-      return {
-        start: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
-        end: today.toISOString().split('T')[0],
-      };
-    
-    case 'last_month': {
-      const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-      return {
-        start: lastMonth.toISOString().split('T')[0],
-        end: lastMonthEnd.toISOString().split('T')[0],
-      };
-    }
-    
+    case 'today':
+      start = end;
+      break;
     case 'this_week': {
-      const dayOfWeek = now.getDay();
       const weekStart = new Date(today);
-      weekStart.setDate(today.getDate() - dayOfWeek);
-      return {
-        start: weekStart.toISOString().split('T')[0],
-        end: today.toISOString().split('T')[0],
-      };
+      weekStart.setDate(today.getDate() - today.getDay());
+      start = weekStart.toISOString().split('T')[0];
+      break;
     }
-    
     case 'last_7_days': {
-      const weekAgo = new Date(today);
-      weekAgo.setDate(today.getDate() - 7);
-      return {
-        start: weekAgo.toISOString().split('T')[0],
-        end: today.toISOString().split('T')[0],
-      };
+      const last7 = new Date(today);
+      last7.setDate(today.getDate() - 7);
+      start = last7.toISOString().split('T')[0];
+      break;
     }
-    
+    case 'this_month': {
+      start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+      break;
+    }
+    case 'last_month': {
+      const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      start = lastMonth.toISOString().split('T')[0];
+      const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+      return { start, end: lastMonthEnd.toISOString().split('T')[0] };
+    }
     case 'last_30_days': {
-      const monthAgo = new Date(today);
-      monthAgo.setDate(today.getDate() - 30);
-      return {
-        start: monthAgo.toISOString().split('T')[0],
-        end: today.toISOString().split('T')[0],
-      };
+      const last30 = new Date(today);
+      last30.setDate(today.getDate() - 30);
+      start = last30.toISOString().split('T')[0];
+      break;
     }
-    
+    case 'this_quarter': {
+      const quarter = Math.floor(today.getMonth() / 3);
+      start = `${today.getFullYear()}-${String(quarter * 3 + 1).padStart(2, '0')}-01`;
+      break;
+    }
+    case 'this_year': {
+      start = `${today.getFullYear()}-01-01`;
+      break;
+    }
+    case 'all_time':
     default:
-      return {
-        start: today.toISOString().split('T')[0],
-        end: today.toISOString().split('T')[0],
-      };
+      start = '2020-01-01';
+      break;
   }
-}
 
-export function formatPaymentMethod(method: string | null): string {
-  if (!method) return 'Unknown';
-  const labels: Record<string, string> = {
-    card: 'Credit Card',
-    cash: 'Cash',
-    venmo: 'Venmo',
-    zelle: 'Zelle',
-    stripe: 'Stripe',
-    other: 'Other',
-  };
-  return labels[method.toLowerCase()] || method;
-}
-
-export function getPaymentStatusLabel(status: BookingFinancialRecord['paymentStatus']): string {
-  const labels: Record<typeof status, string> = {
-    unpaid: 'Unpaid',
-    deposit_only: 'Deposit Only',
-    paid_in_full: 'Paid in Full',
-    refunded: 'Refunded',
-    partial_refund: 'Partial Refund',
-  };
-  return labels[status];
-}
-
-export function getPaymentStatusColor(status: BookingFinancialRecord['paymentStatus']): string {
-  const colors: Record<typeof status, string> = {
-    unpaid: 'bg-red-500/10 text-red-400 border-red-500/30',
-    deposit_only: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-    paid_in_full: 'bg-green-500/10 text-green-400 border-green-500/30',
-    refunded: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
-    partial_refund: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
-  };
-  return colors[status];
+  return { start, end };
 }

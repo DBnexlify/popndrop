@@ -1,53 +1,80 @@
 // =============================================================================
-// FINANCIAL DATA API
-// app/api/admin/financials/route.ts
-// Fetch financial dashboard data with period filtering
+// FINANCIALS API - Dashboard metrics and reporting
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminUser } from '@/lib/supabase';
-import { 
-  getFinancialDashboardData,
-  getFinancialComparison,
+import {
+  getFinancialMetrics,
+  getFinancialDashboardStats,
+  getDailyFinancialSummary,
+  getExpenseSummaryByCategory,
+  getBookingFinancials,
 } from '@/lib/financial-queries';
-import type { TimePeriod, DateRange } from '@/lib/financial-types';
+import type { FinancialPeriod } from '@/lib/financial-types';
 
 // =============================================================================
-// GET - Fetch financial dashboard data
+// GET - Fetch financial metrics
 // =============================================================================
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify admin
-    const admin = await getAdminUser();
-    if (!admin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
-    const period = (searchParams.get('period') || 'all_time') as TimePeriod;
-    const startDate = searchParams.get('start');
-    const endDate = searchParams.get('end');
-
-    // Build custom range if provided
-    let customRange: DateRange | undefined;
-    if (period === 'custom' && startDate && endDate) {
-      customRange = { start: startDate, end: endDate };
+    const action = searchParams.get('action') || 'metrics';
+    
+    switch (action) {
+      // Get full dashboard stats
+      case 'dashboard': {
+        const stats = await getFinancialDashboardStats();
+        return NextResponse.json(stats);
+      }
+      
+      // Get metrics for a specific period
+      case 'metrics': {
+        const period = (searchParams.get('period') || 'this_month') as FinancialPeriod;
+        const startDate = searchParams.get('startDate') || undefined;
+        const endDate = searchParams.get('endDate') || undefined;
+        
+        const metrics = await getFinancialMetrics(period, startDate, endDate);
+        return NextResponse.json({ metrics });
+      }
+      
+      // Get daily summary for charts
+      case 'daily': {
+        const days = parseInt(searchParams.get('days') || '30', 10);
+        const summary = await getDailyFinancialSummary(days);
+        return NextResponse.json({ summary });
+      }
+      
+      // Get expense breakdown by category
+      case 'categories': {
+        const year = searchParams.get('year') 
+          ? parseInt(searchParams.get('year')!, 10) 
+          : undefined;
+        const categories = await getExpenseSummaryByCategory(year);
+        return NextResponse.json({ categories });
+      }
+      
+      // Get financials for a specific booking
+      case 'booking': {
+        const bookingId = searchParams.get('bookingId');
+        if (!bookingId) {
+          return NextResponse.json(
+            { error: 'bookingId required' },
+            { status: 400 }
+          );
+        }
+        const financials = await getBookingFinancials(bookingId);
+        return NextResponse.json({ financials });
+      }
+      
+      default:
+        return NextResponse.json(
+          { error: 'Invalid action' },
+          { status: 400 }
+        );
     }
-
-    // Fetch data
-    const [dashboardData, comparison] = await Promise.all([
-      getFinancialDashboardData(period, customRange),
-      getFinancialComparison(period),
-    ]);
-
-    return NextResponse.json({
-      ...dashboardData,
-      comparison,
-    });
-
   } catch (error) {
-    console.error('Financial API error:', error);
+    console.error('[API] Error in GET /api/admin/financials:', error);
     return NextResponse.json(
       { error: 'Failed to fetch financial data' },
       { status: 500 }

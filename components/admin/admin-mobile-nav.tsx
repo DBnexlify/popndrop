@@ -26,6 +26,7 @@ import {
   Gift,
   Tag,
   DollarSign,
+  Receipt,
 } from 'lucide-react';
 import { NotificationToggle, SoundToggle } from './pwa-provider';
 
@@ -38,6 +39,7 @@ const navItems = [
 
 const menuItems = [
   { href: '/admin/financials', label: 'Financials', icon: DollarSign },
+  { href: '/admin/expenses', label: 'Expenses', icon: Receipt },
   { href: '/admin/blackout-dates', label: 'Blackout Dates', icon: CalendarOff },
   { href: '/admin/cancellations', label: 'Cancellations', icon: Ban },
   { href: '/admin/inventory', label: 'Inventory', icon: Package },

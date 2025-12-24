@@ -1,7 +1,7 @@
 // =============================================================================
 // NOTIFICATION BELL WITH DROPDOWN
 // components/admin/notification-bell.tsx
-// Bell icon with badge count and dropdown panel for nudge notifications
+// Bell icon with badge count, Apple-like ring animation, and dropdown panel
 // =============================================================================
 
 'use client';
@@ -39,6 +39,7 @@ import type {
 // =============================================================================
 
 const POLL_INTERVAL = 30000; // 30 seconds
+const RING_ANIMATION_INTERVAL = 4000; // Ring animation every 4 seconds
 
 function getNotificationIcon(type: AttentionType) {
   switch (type) {
@@ -110,6 +111,17 @@ function getActionLabel(type: AttentionType): string {
   }
 }
 
+/**
+ * Get the appropriate link destination for a notification
+ * Cancellation requests link to cancellations page, others to booking
+ */
+function getNotificationLink(notification: NotificationItem): string {
+  if (notification.attention_type === 'cancellation_request') {
+    return `/admin/cancellations`;
+  }
+  return `/admin/bookings/${notification.booking_id}`;
+}
+
 // =============================================================================
 // NOTIFICATION CARD COMPONENT
 // =============================================================================
@@ -129,6 +141,7 @@ function NotificationCard({
   const Icon = getNotificationIcon(notification.attention_type);
   const styles = getPriorityStyles(notification.priority);
   const isUnread = !notification.viewed_at;
+  const isCancellation = notification.attention_type === 'cancellation_request';
 
   return (
     <div 
@@ -136,21 +149,27 @@ function NotificationCard({
         "relative rounded-xl border bg-white/[0.03] p-3 transition-all",
         isUnread 
           ? "border-white/10 bg-white/[0.05]" 
-          : "border-white/5"
+          : "border-white/5",
+        isCancellation && isUnread && "border-red-500/30 bg-red-500/5"
       )}
     >
       {/* Unread indicator */}
       {isUnread && (
-        <div className="absolute left-0 top-0 h-full w-1 rounded-l-xl bg-gradient-to-b from-fuchsia-500 to-purple-500" />
+        <div className={cn(
+          "absolute left-0 top-0 h-full w-1 rounded-l-xl",
+          isCancellation 
+            ? "bg-gradient-to-b from-red-500 to-red-600" 
+            : "bg-gradient-to-b from-fuchsia-500 to-purple-500"
+        )} />
       )}
 
       <div className="flex items-start gap-3">
         {/* Icon */}
         <div className={cn(
           "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-          styles.badge
+          isCancellation ? "bg-red-500/20" : styles.badge
         )}>
-          <Icon className={cn("h-4 w-4", styles.icon)} />
+          <Icon className={cn("h-4 w-4", isCancellation ? "text-red-400" : styles.icon)} />
         </div>
 
         {/* Content */}
@@ -158,7 +177,10 @@ function NotificationCard({
           {/* Header row */}
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground/90">
+              <p className={cn(
+                "truncate text-sm font-medium",
+                isCancellation ? "text-red-300" : "text-foreground/90"
+              )}>
                 {notification.booking_number}
               </p>
               <p className="truncate text-xs text-foreground/50">
@@ -183,20 +205,32 @@ function NotificationCard({
           </p>
 
           {/* Balance due indicator */}
-          {notification.balance_due > 0 && (
+          {notification.balance_due > 0 && !isCancellation && (
             <p className="mt-1 text-xs font-medium text-amber-400">
               💰 ${notification.balance_due.toFixed(2)} balance due
+            </p>
+          )}
+
+          {/* Cancellation-specific indicator */}
+          {isCancellation && (
+            <p className="mt-1 text-xs font-medium text-red-400">
+              🚨 Customer wants to cancel — action required
             </p>
           )}
 
           {/* Actions row */}
           <div className="mt-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              {/* View booking link */}
+              {/* View booking link - now uses correct destination */}
               <Link
-                href={`/admin/bookings/${notification.booking_id}`}
+                href={getNotificationLink(notification)}
                 onClick={onClose}
-                className="inline-flex items-center gap-1 rounded-lg bg-gradient-to-r from-fuchsia-500/20 to-purple-500/20 px-2.5 py-1.5 text-xs font-medium text-fuchsia-300 transition-all hover:from-fuchsia-500/30 hover:to-purple-500/30"
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all",
+                  isCancellation
+                    ? "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-300 hover:from-red-500/30 hover:to-red-600/30"
+                    : "bg-gradient-to-r from-fuchsia-500/20 to-purple-500/20 text-fuchsia-300 hover:from-fuchsia-500/30 hover:to-purple-500/30"
+                )}
               >
                 {getActionLabel(notification.attention_type)}
                 <ChevronRight className="h-3 w-3" />
@@ -284,6 +318,18 @@ function DropdownContent({
   onDismiss: (id: string) => void;
   onClose: () => void;
 }) {
+  // Sort notifications with cancellations first
+  const sortedNotifications = [...notifications].sort((a, b) => {
+    // Cancellations first
+    if (a.attention_type === 'cancellation_request' && b.attention_type !== 'cancellation_request') return -1;
+    if (a.attention_type !== 'cancellation_request' && b.attention_type === 'cancellation_request') return 1;
+    // Then by priority
+    const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+    return (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3);
+  });
+
+  const cancellationCount = notifications.filter(n => n.attention_type === 'cancellation_request').length;
+
   return (
     <>
       {/* Header */}
@@ -293,6 +339,11 @@ function DropdownContent({
           {counts.total > 0 && (
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-foreground/60">
               {counts.total}
+            </span>
+          )}
+          {cancellationCount > 0 && (
+            <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-xs text-red-400">
+              {cancellationCount} cancel
             </span>
           )}
         </div>
@@ -343,7 +394,7 @@ function DropdownContent({
           </div>
         ) : (
           <div className="space-y-2">
-            {notifications.map((notification) => (
+            {sortedNotifications.map((notification) => (
               <NotificationCard
                 key={notification.id}
                 notification={notification}
@@ -374,7 +425,7 @@ function DropdownContent({
 }
 
 // =============================================================================
-// MAIN NOTIFICATION BELL COMPONENT
+// MAIN NOTIFICATION BELL COMPONENT - WITH APPLE-LIKE RING ANIMATION
 // =============================================================================
 
 export function NotificationBell() {
@@ -391,7 +442,9 @@ export function NotificationBell() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isRinging, setIsRinging] = useState(false);
   const bellRef = useRef<HTMLButtonElement>(null);
+  const ringIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -437,6 +490,36 @@ export function NotificationBell() {
     const interval = setInterval(fetchCounts, POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [fetchCounts]);
+
+  // Ring animation when there are notifications
+  useEffect(() => {
+    if (counts.total > 0 && !isOpen) {
+      // Start ring animation interval
+      const triggerRing = () => {
+        setIsRinging(true);
+        setTimeout(() => setIsRinging(false), 800); // Animation duration
+      };
+
+      // Initial ring
+      triggerRing();
+
+      // Repeat every RING_ANIMATION_INTERVAL
+      ringIntervalRef.current = setInterval(triggerRing, RING_ANIMATION_INTERVAL);
+
+      return () => {
+        if (ringIntervalRef.current) {
+          clearInterval(ringIntervalRef.current);
+        }
+      };
+    } else {
+      // Clear interval when no notifications or dropdown is open
+      if (ringIntervalRef.current) {
+        clearInterval(ringIntervalRef.current);
+        ringIntervalRef.current = null;
+      }
+      setIsRinging(false);
+    }
+  }, [counts.total, isOpen]);
 
   // Fetch full notifications when dropdown opens
   useEffect(() => {
@@ -494,6 +577,7 @@ export function NotificationBell() {
   // Badge count
   const badgeCount = counts.urgent > 0 ? counts.urgent : counts.total;
   const hasUrgent = counts.urgent > 0;
+  const hasCancellation = notifications.some(n => n.attention_type === 'cancellation_request');
 
   // Show placeholder until mounted
   if (!mounted) {
@@ -506,40 +590,82 @@ export function NotificationBell() {
 
   return (
     <>
-      {/* Bell Button */}
-      <button
-        ref={bellRef}
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          "relative flex h-10 w-10 items-center justify-center rounded-full transition-all",
-          isOpen 
-            ? "bg-white/10" 
-            : "hover:bg-white/5",
-          hasUrgent && "animate-pulse"
-        )}
-        aria-label={`Notifications${badgeCount > 0 ? ` (${badgeCount})` : ''}`}
-      >
-        {hasUrgent ? (
-          <BellRing className="h-5 w-5 text-amber-400" />
-        ) : (
-          <Bell className={cn(
-            "h-5 w-5",
-            counts.total > 0 ? "text-foreground/80" : "text-foreground/50"
-          )} />
-        )}
+      {/* Bell Button Container - position:relative for badge positioning */}
+      <div className="relative">
+        {/* Bell Button */}
+        <button
+          ref={bellRef}
+          onClick={() => setIsOpen(!isOpen)}
+          className={cn(
+            "relative flex h-10 w-10 items-center justify-center rounded-full transition-all",
+            isOpen 
+              ? "bg-white/10" 
+              : "hover:bg-white/5"
+          )}
+          aria-label={`Notifications${badgeCount > 0 ? ` (${badgeCount})` : ''}`}
+        >
+          {/* Bell Icon with animation */}
+          <div 
+            className={cn(
+              "origin-top transition-transform",
+              isRinging && "animate-bell-ring"
+            )}
+          >
+            {hasUrgent || hasCancellation ? (
+              <BellRing className={cn(
+                "h-5 w-5",
+                hasCancellation ? "text-red-400" : "text-amber-400"
+              )} />
+            ) : (
+              <Bell className={cn(
+                "h-5 w-5",
+                counts.total > 0 ? "text-foreground/80" : "text-foreground/50"
+              )} />
+            )}
+          </div>
 
-        {/* Badge */}
+          {/* Pulsate glow effect when ringing */}
+          {isRinging && counts.total > 0 && (
+            <div className={cn(
+              "absolute inset-0 rounded-full animate-ping opacity-30",
+              hasCancellation ? "bg-red-400" : hasUrgent ? "bg-amber-400" : "bg-fuchsia-400"
+            )} />
+          )}
+        </button>
+
+        {/* Badge - positioned outside bell animation, won't move */}
         {badgeCount > 0 && (
           <span className={cn(
-            "absolute -right-0.5 -top-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] font-semibold",
-            hasUrgent 
-              ? "bg-red-500 text-white" 
-              : "bg-fuchsia-500 text-white"
+            "absolute -right-0.5 -top-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] font-semibold pointer-events-none",
+            hasCancellation
+              ? "bg-red-500 text-white"
+              : hasUrgent 
+                ? "bg-red-500 text-white" 
+                : "bg-fuchsia-500 text-white"
           )}>
             {badgeCount > 99 ? '99+' : badgeCount}
           </span>
         )}
-      </button>
+      </div>
+
+      {/* CSS Keyframes for bell ring animation */}
+      <style jsx global>{`
+        @keyframes bell-ring {
+          0% { transform: rotate(0deg); }
+          10% { transform: rotate(14deg); }
+          20% { transform: rotate(-12deg); }
+          30% { transform: rotate(10deg); }
+          40% { transform: rotate(-8deg); }
+          50% { transform: rotate(6deg); }
+          60% { transform: rotate(-4deg); }
+          70% { transform: rotate(2deg); }
+          80% { transform: rotate(-1deg); }
+          100% { transform: rotate(0deg); }
+        }
+        .animate-bell-ring {
+          animation: bell-ring 0.8s ease-in-out;
+        }
+      `}</style>
 
       {/* Portal-based dropdown - renders at document body level to escape any overflow:hidden containers */}
       {isOpen && mounted && createPortal(

@@ -35,6 +35,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { BookingActions, type PaymentRecord } from "./booking-actions-client";
 import { AdminCalendarButtons } from "@/components/admin/admin-calendar-buttons";
+import { CancellationRequestBanner } from "@/components/admin/cancellation-request-banner";
 import type { OwnerCalendarData } from "@/lib/calendar";
 
 // =============================================================================
@@ -382,6 +383,18 @@ export default async function BookingDetailPage({ params }: PageProps) {
           payments={payments}
         />
       </div>
+
+      {/* ================================================================
+          CANCELLATION REQUEST BANNER (if pending request exists)
+      ================================================================ */}
+      {!isCancelled && (
+        <div className="mb-6 sm:mb-8">
+          <CancellationRequestBanner
+            bookingId={booking.id}
+            bookingNumber={booking.booking_number}
+          />
+        </div>
+      )}
 
       {/* ================================================================
           MAIN GRID

@@ -22,6 +22,7 @@ import {
   Tag,
   Gift,
   DollarSign,
+  Receipt,
 } from 'lucide-react';
 import type { AdminUser } from '@/lib/database-types';
 import { NotificationToggle, SoundToggle } from './pwa-provider';
@@ -37,6 +38,7 @@ const navItems = [
   { href: '/admin/bookings', label: 'Bookings', icon: CalendarCheck },
   { href: '/admin/cancellations', label: 'Cancellations', icon: Ban },
   { href: '/admin/financials', label: 'Financials', icon: DollarSign },
+  { href: '/admin/expenses', label: 'Expenses', icon: Receipt },
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/inventory', label: 'Inventory', icon: Package },
   { href: '/admin/promo-codes', label: 'Promo Codes', icon: Tag },
