@@ -17,7 +17,7 @@ SELECT 'Bookings to delete:' as type, COUNT(*) as count
 FROM bookings WHERE customer_notes LIKE '%TEST_DATA%' OR booking_number LIKE 'TEST-%';
 
 SELECT 'Customers to delete:' as type, COUNT(*) as count
-FROM customers WHERE notes = 'TEST_DATA';
+FROM customers WHERE email = 'testdata@fake-test-example.com';
 
 -- =============================================================================
 -- DELETE TEST DATA (in correct order due to foreign keys)
@@ -32,8 +32,8 @@ DELETE FROM expenses WHERE notes = 'TEST_DATA';
 -- 3. Delete test bookings (references customers)
 DELETE FROM bookings WHERE customer_notes LIKE '%TEST_DATA%' OR booking_number LIKE 'TEST-%';
 
--- 4. Delete test customers last
-DELETE FROM customers WHERE notes = 'TEST_DATA';
+-- 4. Delete test customers last (identified by special email)
+DELETE FROM customers WHERE email = 'testdata@fake-test-example.com';
 
 -- =============================================================================
 -- VERIFY DELETION
@@ -50,6 +50,6 @@ SELECT 'Remaining test bookings:' as check_type, COUNT(*) as count
 FROM bookings WHERE customer_notes LIKE '%TEST_DATA%' OR booking_number LIKE 'TEST-%';
 
 SELECT 'Remaining test customers:' as check_type, COUNT(*) as count
-FROM customers WHERE notes = 'TEST_DATA';
+FROM customers WHERE email = 'testdata@fake-test-example.com';
 
 SELECT '🧹 All TEST_DATA records have been removed!' as result;

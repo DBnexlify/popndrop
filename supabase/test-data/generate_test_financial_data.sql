@@ -33,10 +33,10 @@ BEGIN
   SELECT id INTO v_category_other FROM expense_categories WHERE name = 'Other' LIMIT 1;
 
   -- ==========================================================================
-  -- CREATE TEST CUSTOMER
+  -- CREATE TEST CUSTOMER (use special email to identify)
   -- ==========================================================================
-  INSERT INTO customers (first_name, last_name, email, phone, notes)
-  VALUES ('Test', 'Customer', 'test@example.com', '555-000-0000', 'TEST_DATA')
+  INSERT INTO customers (first_name, last_name, email, phone)
+  VALUES ('Test', 'DataCustomer', 'testdata@fake-test-example.com', '555-000-0000')
   RETURNING id INTO v_customer_id;
 
   -- Get a unit to use
