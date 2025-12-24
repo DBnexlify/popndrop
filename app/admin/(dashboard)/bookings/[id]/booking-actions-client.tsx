@@ -518,7 +518,7 @@ function CancelModal({
                 <SelectTrigger className={styles.input}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="border-white/10 bg-neutral-900">
+                <SelectContent className="z-[80] border-white/10 bg-neutral-900">
                   <SelectItem value="customer">Customer requested</SelectItem>
                   <SelectItem value="business">Business decision</SelectItem>
                   <SelectItem value="weather">Weather / Safety concern</SelectItem>
@@ -843,7 +843,7 @@ function CancelModal({
                           <SelectTrigger className={`${styles.input} h-9`}>
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent className="border-white/10 bg-neutral-900">
+                          <SelectContent className="z-[80] border-white/10 bg-neutral-900">
                             <SelectItem value="venmo">Venmo</SelectItem>
                             <SelectItem value="zelle">Zelle</SelectItem>
                             <SelectItem value="cash">Cash</SelectItem>
@@ -1019,7 +1019,7 @@ function PaymentModal({
                 <SelectTrigger className={styles.input}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="border-white/10 bg-neutral-900">
+                <SelectContent className="z-[80] border-white/10 bg-neutral-900">
                   {!depositPaid && (
                     <SelectItem value="deposit">Deposit (${depositAmount})</SelectItem>
                   )}
@@ -1062,7 +1062,7 @@ function PaymentModal({
                 <SelectTrigger className={styles.input}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="border-white/10 bg-neutral-900">
+                <SelectContent className="z-[80] border-white/10 bg-neutral-900">
                   <SelectItem value="cash">Cash</SelectItem>
                   <SelectItem value="card">Card (in person)</SelectItem>
                   <SelectItem value="venmo">Venmo</SelectItem>
