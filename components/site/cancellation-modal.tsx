@@ -8,6 +8,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -173,6 +174,12 @@ export function CancellationModal({
     };
   }, [isOpen]);
 
+  // Track if component is mounted (for portal SSR safety)
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const fetchPreview = async () => {
     setStep("loading");
     setError(null);
@@ -300,9 +307,11 @@ export function CancellationModal({
   // Check if footer should be shown
   const showFooter = ["reschedule", "cancel-preview", "confirm"].includes(step);
 
-  if (!isOpen) return null;
+  // Don't render until mounted (SSR safety) or if not open
+  if (!mounted || !isOpen) return null;
 
-  return (
+  // Use portal to render at document body level (escapes parent containers)
+  return createPortal(
     <div className={styles.modalOverlay} onClick={onClose}>
       {/* Modal Card - flex-col with header/content/footer */}
       <div 
@@ -750,6 +759,7 @@ export function CancellationModal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
