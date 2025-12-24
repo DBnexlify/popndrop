@@ -168,6 +168,19 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', requestId);
 
+        // Resolve the attention item
+        await supabase
+          .from('attention_items')
+          .update({
+            status: 'resolved',
+            resolved_at: new Date().toISOString(),
+            resolution_action: 'cancellation_denied',
+            resolution_notes: adminNotes || 'Cancellation request denied',
+          })
+          .eq('booking_id', booking.id)
+          .eq('attention_type', 'cancellation_request')
+          .eq('status', 'pending');
+
         // Restore booking status
         await supabase
           .from('bookings')
@@ -215,6 +228,19 @@ export async function POST(request: NextRequest) {
             reviewed_at: new Date().toISOString(),
           })
           .eq('id', requestId);
+
+        // Resolve the attention item
+        await supabase
+          .from('attention_items')
+          .update({
+            status: 'resolved',
+            resolved_at: new Date().toISOString(),
+            resolution_action: 'cancellation_approved',
+            resolution_notes: adminNotes || `Cancellation approved. Refund: ${approvedAmount?.toFixed(2) || '0.00'}`,
+          })
+          .eq('booking_id', booking.id)
+          .eq('attention_type', 'cancellation_request')
+          .eq('status', 'pending');
 
         // Update booking status
         await supabase

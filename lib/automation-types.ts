@@ -14,7 +14,8 @@ export type AttentionType =
   | 'payment_collection'       // How was payment collected?
   | 'booking_closure'          // Ready to close booking?
   | 'issue_reported'           // Customer reported an issue
-  | 'manual_review';           // Admin flagged for review
+  | 'manual_review'            // Admin flagged for review
+  | 'cancellation_request';    // Customer requested cancellation
 
 export type AttentionPriority = 'low' | 'medium' | 'high' | 'urgent';
 
@@ -228,6 +229,7 @@ export function getAttentionTypeLabel(type: AttentionType): string {
     booking_closure: 'Close Booking',
     issue_reported: 'Issue Reported',
     manual_review: 'Manual Review',
+    cancellation_request: 'Cancellation Request',
   };
   return labels[type];
 }
@@ -240,6 +242,7 @@ export function getAttentionTypeIcon(type: AttentionType): string {
     booking_closure: '✅',
     issue_reported: '⚠️',
     manual_review: '👁️',
+    cancellation_request: '❌',
   };
   return icons[type];
 }
@@ -403,6 +406,23 @@ export function generateSuggestedActions(
           label: 'Dismiss',
           action: 'dismiss',
           variant: 'outline',
+        },
+      ];
+
+    case 'cancellation_request':
+      return [
+        {
+          id: 'review_cancellation',
+          label: 'Review Request',
+          action: 'navigate',
+          variant: 'primary',
+          data: { destination: 'cancellations' },
+        },
+        {
+          id: 'contact_customer',
+          label: 'Contact Customer',
+          action: 'contact',
+          variant: 'secondary',
         },
       ];
 

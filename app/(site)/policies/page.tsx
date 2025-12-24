@@ -1,5 +1,4 @@
 import React from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Shield,
@@ -16,6 +15,8 @@ import {
   DollarSign,
   CalendarX,
   MapPin,
+  Calendar,
+  Heart,
 } from "lucide-react";
 
 export const metadata = {
@@ -33,7 +34,7 @@ interface PolicyItem {
 interface PolicySection {
   id: string;
   icon: React.ComponentType<{ className?: string }>;
-  iconColor: "fuchsia" | "cyan" | "purple";
+  iconColor: "fuchsia" | "cyan" | "purple" | "amber" | "green";
   title: string;
   intro?: string;
   items: PolicyItem[];
@@ -64,7 +65,7 @@ const quickFacts: {
   {
     icon: DollarSign,
     label: "Deposit",
-    value: "$50 non-refundable",
+    value: "$50 secures your date",
     color: "fuchsia",
   },
   {
@@ -87,25 +88,32 @@ const quickFacts: {
   },
 ];
 
+// Refund schedule for the special card
+const refundSchedule = [
+  { timing: "7+ days before", refund: "100%", description: "Full refund (minus $50 deposit)" },
+  { timing: "3-6 days before", refund: "50%", description: "Half refund (minus $50 deposit)" },
+  { timing: "0-2 days before", refund: "0%", description: "No refund available" },
+];
+
 // Policy sections data
 const policySections: PolicySection[] = [
   {
-    id: "booking",
+    id: "deposit",
     icon: CreditCard,
     iconColor: "fuchsia",
-    title: "Booking and Payment",
+    title: "Booking Deposit",
     items: [
       {
-        emphasis: "$50 non-refundable deposit",
-        text: "is required to reserve your date. This deposit secures your booking and is applied toward your total rental cost.",
+        emphasis: "Your $50 deposit secures your rental date",
+        text: "and is applied toward your total rental cost. This deposit confirms your booking and takes the date off our calendar.",
+      },
+      {
+        emphasis: "The deposit is non-refundable under standard cancellations.",
+        text: "We understand that unexpected situations happen—if you have qualifying circumstances such as severe weather or emergencies, please reach out to us. We review these situations on a case-by-case basis and are always happy to work with you.",
       },
       {
         emphasis: "Balance due on delivery.",
-        text: "The remaining balance is due when we arrive to set up. We accept cash, credit, and debit cards.",
-      },
-      {
-        emphasis: "Cancellations:",
-        text: "If you need to cancel, please let us know as soon as possible. Deposits are non-refundable but may be applied to a future booking at our discretion and subject to availability.",
+        text: "The remaining balance is due when we arrive to set up. We accept cash, credit card, Venmo, and Zelle.",
       },
     ],
   },
@@ -113,11 +121,11 @@ const policySections: PolicySection[] = [
     id: "delivery",
     icon: Truck,
     iconColor: "cyan",
-    title: "Delivery and Pickup",
+    title: "Delivery & Pickup",
     items: [
       {
         emphasis: "Delivery hours:",
-        text: "Monday through Saturday, between 7:00 AM and 2:00 PM. We will confirm a delivery window with you before your event.",
+        text: "Monday through Saturday, between 7:00 AM and 2:00 PM. We will confirm a specific delivery window with you before your event.",
       },
       {
         emphasis: "Pickup hours:",
@@ -125,11 +133,11 @@ const policySections: PolicySection[] = [
       },
       {
         emphasis: "No Sunday service:",
-        text: "We do not deliver or pick up on Sundays. If you book a Saturday rental, you may choose same-day evening pickup or upgrade to our weekend package (pickup Monday). In cases of severe weather, we may make exceptions for safety reasons.",
+        text: "We do not deliver or pick up on Sundays. If your event is on Sunday, we'll deliver Saturday and pick up Monday—your bounce house will be ready and waiting for your party!",
       },
       {
         emphasis: "Service area:",
-        text: "We serve Ocala, Marion County, and surrounding areas. Delivery is included in your rental price for most locations. Please contact us if you are unsure whether your location is within our service area.",
+        text: "We proudly serve Ocala, Marion County, and surrounding areas. Delivery is included in your rental price for most locations. Not sure if you're in our area? Just ask!",
       },
     ],
   },
@@ -148,8 +156,12 @@ const policySections: PolicySection[] = [
         text: "If weather conditions make setup or operation unsafe, we will work with you to reschedule your rental to another available date at no additional charge.",
       },
       {
+        emphasis: "Full refund for weather cancellations we initiate:",
+        text: "If we determine conditions are unsafe and need to cancel, you'll receive a full refund including your deposit—no questions asked.",
+      },
+      {
         emphasis: "Customer cancellation due to weather:",
-        text: "If you choose to cancel due to weather and we determine conditions are safe for operation, standard cancellation terms apply.",
+        text: "If you'd like to cancel due to weather concerns but we determine conditions are safe for operation, standard cancellation terms apply. When in doubt, give us a call and we'll figure it out together.",
       },
     ],
   },
@@ -180,8 +192,8 @@ const policySections: PolicySection[] = [
   {
     id: "safety",
     icon: Users,
-    iconColor: "fuchsia",
-    title: "Safety Rules for Use",
+    iconColor: "green",
+    title: "Safety Rules",
     intro:
       "The following rules must be followed at all times while the rental is in use:",
     items: [
@@ -214,8 +226,8 @@ const policySections: PolicySection[] = [
   {
     id: "damage",
     icon: AlertTriangle,
-    iconColor: "purple",
-    title: "Damage, Cleaning, and Liability",
+    iconColor: "amber",
+    title: "Damage & Cleaning",
     items: [
       {
         emphasis: "You are responsible for the equipment",
@@ -223,7 +235,7 @@ const policySections: PolicySection[] = [
       },
       {
         emphasis: "Damage charges:",
-        text: "You may be charged for repairs or replacement if the equipment is returned with damage beyond normal wear and tear, including but not limited to tears, punctures, stains, or damage caused by misuse, pets, or failure to follow safety rules.",
+        text: "You may be charged for repairs or replacement if the equipment is returned with damage beyond normal wear and tear, including tears, punctures, stains, or damage caused by misuse, pets, or failure to follow safety rules.",
       },
       {
         emphasis: "Excessive cleaning:",
@@ -272,13 +284,23 @@ const iconColors = {
     icon: "text-purple-400",
     dot: "bg-purple-400",
   },
+  amber: {
+    container: "bg-amber-500/10",
+    icon: "text-amber-400",
+    dot: "bg-amber-400",
+  },
+  green: {
+    container: "bg-green-500/10",
+    icon: "text-green-400",
+    dot: "bg-green-400",
+  },
 } as const;
 
 // Policy item bullet component
 function PolicyBullet({
   color,
 }: {
-  color: "fuchsia" | "cyan" | "purple";
+  color: "fuchsia" | "cyan" | "purple" | "amber" | "green";
 }) {
   return (
     <div
@@ -336,6 +358,81 @@ export default function PoliciesPage() {
         </div>
       </section>
 
+      {/* CANCELLATION & REFUND POLICY - Highlighted Card */}
+      <section className="mt-8 sm:mt-12" id="cancellation">
+        <div className="relative overflow-hidden rounded-2xl border border-fuchsia-500/20 bg-gradient-to-br from-fuchsia-950/20 via-purple-950/10 to-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-3xl">
+          <div className="p-5 sm:p-6 lg:p-8">
+            {/* Header */}
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-fuchsia-500/10">
+                <Calendar className="h-6 w-6 text-fuchsia-400" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold sm:text-xl">
+                  Cancellation & Refund Policy
+                </h2>
+                <p className="mt-1 text-sm leading-relaxed text-foreground/70">
+                  We want to be fair to both our customers and our small family business. 
+                  Here&apos;s what to expect if you need to cancel:
+                </p>
+              </div>
+            </div>
+
+            {/* Refund Schedule Table */}
+            <div className="mt-6">
+              <div className={styles.nestedCard}>
+                <div className="divide-y divide-white/5">
+                  {/* Header row */}
+                  <div className="grid grid-cols-3 gap-4 px-4 py-3 text-[10px] font-medium uppercase tracking-wide text-foreground/50 sm:text-[11px]">
+                    <span>Cancellation Timing</span>
+                    <span className="text-center">Refund</span>
+                    <span className="text-right">Details</span>
+                  </div>
+                  {/* Data rows */}
+                  {refundSchedule.map((row, index) => (
+                    <div
+                      key={row.timing}
+                      className="grid grid-cols-3 items-center gap-4 px-4 py-3"
+                    >
+                      <span className="text-sm font-medium text-foreground/90">
+                        {row.timing}
+                      </span>
+                      <span className={`text-center text-lg font-semibold ${
+                        index === 0 ? "text-green-400" : 
+                        index === 1 ? "text-amber-400" : 
+                        "text-red-400"
+                      }`}>
+                        {row.refund}
+                      </span>
+                      <span className="text-right text-xs text-foreground/60">
+                        {row.description}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className={styles.nestedCardInner} />
+              </div>
+            </div>
+
+            {/* Flexibility note */}
+            <div className="mt-5 flex items-start gap-3 rounded-xl border border-purple-500/20 bg-purple-500/5 p-4">
+              <Heart className="mt-0.5 h-5 w-5 shrink-0 text-purple-400" />
+              <div>
+                <p className="text-sm font-medium text-foreground/90">
+                  We&apos;re a family business—we understand life happens!
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-foreground/60">
+                  If you have qualifying circumstances like severe weather or a family emergency, 
+                  please reach out. We review these situations case-by-case and genuinely want to help. 
+                  Call, text, or email us—we&apos;re real people.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_70px_rgba(0,0,0,0.2)]" />
+        </div>
+      </section>
+
       {/* Safety & Compliance Card */}
       <section className="mt-8 sm:mt-12">
         <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/20 to-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-3xl">
@@ -347,7 +444,7 @@ export default function PoliciesPage() {
               <div className="space-y-3">
                 <div>
                   <h2 className="text-lg font-semibold sm:text-xl">
-                    Safety and Compliance
+                    Safety & Compliance
                   </h2>
                   <p className="mt-1 text-sm leading-relaxed text-foreground/70">
                     Your safety is our priority. All of our equipment meets or
@@ -451,8 +548,9 @@ export default function PoliciesPage() {
                 We&apos;re here to help
               </h2>
               <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-foreground/70">
-                If you have any questions about our policies or need
-                clarification, don&apos;t hesitate to reach out.
+                If you have any questions about our policies or need to discuss your 
+                specific situation, don&apos;t hesitate to reach out. We&apos;re real people 
+                running a small family business—we genuinely want to help!
               </p>
 
               {/* Contact Cards */}

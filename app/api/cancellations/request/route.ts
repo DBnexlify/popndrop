@@ -471,6 +471,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Create attention item for admin dashboard notification
+    const customerName = `${customer?.first_name || ''} ${customer?.last_name || ''}`.trim() || 'Customer';
+    const productName = (booking.product_snapshot as { name?: string })?.name || 'Bounce House Rental';
+    
+    await supabase
+      .from('attention_items')
+      .insert({
+        booking_id: bookingId,
+        attention_type: 'cancellation_request',
+        priority: refundCalc.daysUntilEvent <= 2 ? 'urgent' : refundCalc.daysUntilEvent <= 6 ? 'high' : 'medium',
+        status: 'pending',
+        title: `Cancellation Request - ${customerName}`,
+        description: `${customerName} requested to cancel their ${productName} rental for ${formatDate(booking.event_date)}. Suggested refund: ${refundCalc.refundAmount.toFixed(2)}`,
+        suggested_actions: [
+          {
+            id: 'review_cancellation',
+            label: 'Review Request',
+            action: 'navigate',
+            variant: 'primary',
+            data: { destination: '/admin/cancellations' },
+          },
+          {
+            id: 'contact_customer',
+            label: 'Contact Customer',
+            action: 'contact',
+            variant: 'secondary',
+          },
+        ],
+        is_automated: true,
+      });
+
     // Update booking status to indicate pending cancellation
     const noteText = declinedReschedule 
       ? `Cancellation requested on ${new Date().toLocaleDateString()} (declined reschedule). Reason: ${reason || 'Not provided'}`

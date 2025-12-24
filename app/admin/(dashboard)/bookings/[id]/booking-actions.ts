@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase";
+import { getStripe, dollarsToCents } from "@/lib/stripe";
 
 // =============================================================================
 // MARK DELIVERED ACTION
@@ -112,18 +113,31 @@ export async function cancelBooking(data: CancelBookingData) {
 
   // If Stripe auto-refund requested, process it first
   let stripeRefundId: string | null = null;
+  let refundError: string | null = null;
+  
   if (data.processStripeRefund && data.stripePaymentIntentId && data.refundAmount > 0) {
-    // TODO: Call Stripe API to process refund
-    // const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-    // const refund = await stripe.refunds.create({
-    //   payment_intent: data.stripePaymentIntentId,
-    //   amount: Math.round(data.refundAmount * 100), // Stripe uses cents
-    // });
-    // stripeRefundId = refund.id;
-    
-    // For now, we'll mark it as processed and store a placeholder
-    // When Stripe is integrated, uncomment the above
-    console.log("Would process Stripe refund for:", data.stripePaymentIntentId, data.refundAmount);
+    try {
+      const stripe = getStripe();
+      const refundAmountCents = dollarsToCents(data.refundAmount);
+      
+      console.log(`💳 [REFUND] Processing Stripe refund: ${data.refundAmount} (${refundAmountCents} cents) for PI: ${data.stripePaymentIntentId}`);
+      
+      const refund = await stripe.refunds.create({
+        payment_intent: data.stripePaymentIntentId,
+        amount: refundAmountCents,
+        reason: 'requested_by_customer',
+      });
+      
+      stripeRefundId = refund.id;
+      console.log(`✅ [REFUND] Stripe refund successful! Refund ID: ${refund.id} | Status: ${refund.status}`);
+      
+    } catch (err) {
+      console.error('❌ [REFUND] Stripe refund failed:', err);
+      refundError = err instanceof Error ? err.message : 'Unknown Stripe error';
+      
+      // Don't fail the cancellation - just mark refund as pending for manual processing
+      // The booking will still be cancelled, but refund needs manual attention
+    }
   }
 
   const updateData: Record<string, unknown> = {
@@ -134,18 +148,29 @@ export async function cancelBooking(data: CancelBookingData) {
     updated_at: new Date().toISOString(),
     // Refund tracking
     refund_amount: data.refundAmount,
-    refund_status: data.refundAmount > 0 ? data.refundStatus : "none",
   };
 
-  // If refund processed (either via Stripe or manually marked as done)
-  if (data.refundStatus === "processed" || data.processStripeRefund) {
-    updateData.refund_processed_at = new Date().toISOString();
+  // Determine refund status based on what happened
+  if (data.refundAmount <= 0) {
+    // No refund requested
+    updateData.refund_status = "none";
+  } else if (stripeRefundId) {
+    // Stripe refund succeeded
     updateData.refund_status = "processed";
-  }
-
-  // Store Stripe refund ID if we have one
-  if (stripeRefundId) {
+    updateData.refund_processed_at = new Date().toISOString();
     updateData.stripe_refund_id = stripeRefundId;
+  } else if (data.processStripeRefund && refundError) {
+    // Stripe refund was attempted but failed - mark as pending for manual processing
+    updateData.refund_status = "pending";
+    // Store the error in cancellation reason for visibility
+    updateData.cancellation_reason = `${data.reason}\n\n[Auto-refund failed: ${refundError}]`;
+  } else if (data.refundStatus === "processed") {
+    // Manual refund marked as already processed
+    updateData.refund_status = "processed";
+    updateData.refund_processed_at = new Date().toISOString();
+  } else {
+    // Manual refund pending
+    updateData.refund_status = "pending";
   }
 
   const { error } = await supabase
@@ -163,7 +188,13 @@ export async function cancelBooking(data: CancelBookingData) {
   revalidatePath("/admin/bookings");
   revalidatePath("/admin");
 
-  return { success: true };
+  // Return success with refund details
+  return { 
+    success: true,
+    refundProcessed: !!stripeRefundId,
+    stripeRefundId: stripeRefundId || undefined,
+    refundError: refundError || undefined,
+  };
 }
 
 // =============================================================================

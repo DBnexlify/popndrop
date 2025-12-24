@@ -16,6 +16,7 @@ import {
   Phone,
   Truck,
   CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,8 @@ function getTypeIcon(type: AttentionType) {
       return AlertTriangle;
     case 'booking_closure':
       return CheckCircle2;
+    case 'cancellation_request':
+      return XCircle;
     default:
       return Bell;
   }
@@ -67,6 +70,8 @@ function getTypeLabel(type: AttentionType): string {
       return 'Issue Reported';
     case 'manual_review':
       return 'Review Needed';
+    case 'cancellation_request':
+      return 'Cancellation Request';
     default:
       return 'Action Needed';
   }

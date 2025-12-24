@@ -22,7 +22,6 @@ import {
   DollarSign,
   Calendar,
   CalendarDays,
-  ArrowRight,
   Info,
   Sparkles,
   RefreshCw,
@@ -724,7 +723,7 @@ export function CancellationModal({
                   className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700"
                 >
                   Request Cancellation
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  <ChevronRight className="ml-1 h-4 w-4" />
                 </Button>
               </div>
             )}

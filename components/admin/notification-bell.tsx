@@ -23,6 +23,7 @@ import {
   Loader2,
   BellOff,
   RefreshCw,
+  XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatRelativeTimeShort } from '@/lib/timezone';
@@ -51,6 +52,8 @@ function getNotificationIcon(type: AttentionType) {
       return AlertTriangle;
     case 'booking_closure':
       return CheckCircle2;
+    case 'cancellation_request':
+      return XCircle;
     default:
       return Bell;
   }
@@ -100,6 +103,8 @@ function getActionLabel(type: AttentionType): string {
       return 'Resolve issue';
     case 'manual_review':
       return 'Review needed';
+    case 'cancellation_request':
+      return 'Review cancellation';
     default:
       return 'Take action';
   }
