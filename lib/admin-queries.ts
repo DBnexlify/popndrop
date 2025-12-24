@@ -106,13 +106,24 @@ async function getWeekRevenue(): Promise<number> {
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
   
-  const { data } = await supabase
-    .from('bookings')
-    .select('subtotal')
+  // Get actual payments received (not just quoted subtotals)
+  const { data: payments } = await supabase
+    .from('payments')
+    .select('amount, status, refund_amount')
     .gte('created_at', weekAgo.toISOString())
-    .in('status', ['confirmed', 'delivered', 'picked_up', 'completed']);
+    .in('status', ['succeeded', 'partial_refund']);
   
-  return data?.reduce((sum, b) => sum + Number(b.subtotal), 0) || 0;
+  let gross = 0;
+  let refunds = 0;
+  
+  (payments || []).forEach(p => {
+    gross += Number(p.amount) || 0;
+    if (p.refund_amount) {
+      refunds += Number(p.refund_amount) || 0;
+    }
+  });
+  
+  return gross - refunds;
 }
 
 async function getMonthRevenue(): Promise<number> {
@@ -120,13 +131,24 @@ async function getMonthRevenue(): Promise<number> {
   const monthAgo = new Date();
   monthAgo.setDate(monthAgo.getDate() - 30);
   
-  const { data } = await supabase
-    .from('bookings')
-    .select('subtotal')
+  // Get actual payments received (not just quoted subtotals)
+  const { data: payments } = await supabase
+    .from('payments')
+    .select('amount, status, refund_amount')
     .gte('created_at', monthAgo.toISOString())
-    .in('status', ['confirmed', 'delivered', 'picked_up', 'completed']);
+    .in('status', ['succeeded', 'partial_refund']);
   
-  return data?.reduce((sum, b) => sum + Number(b.subtotal), 0) || 0;
+  let gross = 0;
+  let refunds = 0;
+  
+  (payments || []).forEach(p => {
+    gross += Number(p.amount) || 0;
+    if (p.refund_amount) {
+      refunds += Number(p.refund_amount) || 0;
+    }
+  });
+  
+  return gross - refunds;
 }
 
 // -----------------------------------------------------------------------------
