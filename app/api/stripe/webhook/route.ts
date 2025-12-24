@@ -228,13 +228,14 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId
     stripe_payment_intent_id: session.payment_intent as string || null,
   };
 
-  // If full payment, mark balance as paid too AND set balance_due to 0
+  // If full payment, mark balance as paid too
+  // NOTE: balance_due stays at calculated value due to valid_balance constraint
+  // We use balance_paid = true to indicate full payment was received
   if (isFullPayment) {
     bookingUpdate.balance_paid = true;
     bookingUpdate.balance_paid_at = now;
     bookingUpdate.balance_payment_method = 'stripe';
-    bookingUpdate.balance_due = 0; // Critical: Clear balance when paid in full
-    console.log(`💰 [WEBHOOK] Full payment - setting balance_due to 0`);
+    console.log(`💰 [WEBHOOK] Full payment recorded - balance_paid = true`);
   }
 
   const { error: bookingError } = await supabase
@@ -262,7 +263,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId
       payment_method: 'card',
       stripe_payment_intent_id: session.payment_intent as string || null,
       stripe_checkout_session_id: session.id,
-      stripe_event_id: eventId, // Track which webhook event created this
+      card_brand: cardBrand,
+      card_last_four: cardLast4,
     });
 
   if (paymentError) {
