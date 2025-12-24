@@ -538,8 +538,8 @@ export function createCustomerEmail(data: {
   customerName: string;
   productName: string;
   bookingNumber: string;
-  eventDate: string;
-  pickupDate: string;
+  eventDate: string; // Raw ISO date: "2024-12-28"
+  pickupDate: string; // Raw ISO date: "2024-12-30"
   deliveryWindow: string;
   pickupWindow: string;
   address: string;
@@ -550,8 +550,21 @@ export function createCustomerEmail(data: {
   notes?: string;
   bookingType: BookingType;
   paidInFull?: boolean;
-  deliveryDate?: string; // Added for calendar
+  deliveryDate?: string; // Raw ISO date for calendar
 }): string {
+  // Format dates for display
+  const formatDateDisplay = (dateStr: string): string => {
+    return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+  
+  const eventDateDisplay = formatDateDisplay(data.eventDate);
+  const pickupDateDisplay = formatDateDisplay(data.pickupDate);
+  
   const bookingTypeLabel = data.bookingType === 'weekend' 
     ? 'Weekend Package' 
     : data.bookingType === 'sunday' 
@@ -627,7 +640,7 @@ export function createCustomerEmail(data: {
             <tr>
               <td style="padding: 8px 0; vertical-align: top; width: 50%;">
                 <p style="margin: 0; color: #666; font-size: 11px;">📅 Event Date</p>
-                <p style="margin: 4px 0 0; color: white; font-weight: 500;">${data.eventDate}</p>
+                <p style="margin: 4px 0 0; color: white; font-weight: 500;">${eventDateDisplay}</p>
               </td>
               <td style="padding: 8px 0; vertical-align: top; width: 50%;">
                 <p style="margin: 0; color: #666; font-size: 11px;">📦 Package</p>
@@ -677,7 +690,7 @@ export function createCustomerEmail(data: {
           
           const formatGoogleDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
           
-          const calDescription = `🎈 ${data.productName} Rental\n\n📋 Booking: ${data.bookingNumber}\n📅 Event: ${data.eventDate}\n🚚 Delivery: ${data.deliveryWindow}\n📦 Pickup: ${data.pickupDate} at ${data.pickupWindow}\n\n${data.paidInFull ? '✓ PAID IN FULL' : `Balance due: ${data.balanceDue}`}\n\n📞 Questions? Call (352) 445-3723`;
+          const calDescription = `🎈 ${data.productName} Rental\n\n📋 Booking: ${data.bookingNumber}\n📅 Event: ${eventDateDisplay}\n🚚 Delivery: ${data.deliveryWindow}\n📦 Pickup: ${pickupDateDisplay} at ${data.pickupWindow}\n\n${data.paidInFull ? '✓ PAID IN FULL' : `Balance due: ${data.balanceDue}`}\n\n📞 Questions? Call (352) 445-3723`;
           
           const googleParams = new URLSearchParams({
             action: 'TEMPLATE',

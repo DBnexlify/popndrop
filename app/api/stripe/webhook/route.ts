@@ -342,55 +342,39 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId
   // ==========================================================================
   const customerName = `${booking.customer?.first_name || ''} ${booking.customer?.last_name || ''}`.trim();
   const productName = booking.product_snapshot?.name || 'Bounce House';
+  const customerEmailAddr = booking.customer?.email || session.customer_email || '';
 
-  // Get customer email - try multiple sources
-  let customerEmail = booking.customer?.email || session.customer_email || '';
-  
-  // If still no email, try direct lookup from customer_id
-  if (!customerEmail && customerId) {
-    console.log(`⚠️ [WEBHOOK] No customer email found in booking.customer, trying direct lookup...`);
-    const { data: customerData } = await supabase
-      .from('customers')
-      .select('email')
-      .eq('id', customerId)
-      .single();
-    customerEmail = customerData?.email || '';
-  }
-  
-  console.log(`📧 [WEBHOOK] Customer email resolution: booking.customer?.email="${booking.customer?.email}", session.customer_email="${session.customer_email}", final="${customerEmail}"`);
+  console.log(`📧 [WEBHOOK] Preparing to send customer email to: ${customerEmailAddr}`);
 
-  // Customer email
-  if (!customerEmail) {
-    console.error('❌ [WEBHOOK] No customer email found - skipping customer confirmation email');
-  } else {
-    try {
-      await resend.emails.send({
-        from: FROM_EMAIL,
-        to: customerEmail,
-        subject: `🎉 Booking Confirmed: ${productName} on ${formatDate(booking.event_date)}`,
-        html: createCustomerEmail({
-          customerName: booking.customer?.first_name || 'there',
-          productName,
-          bookingNumber: booking.booking_number,
-          eventDate: formatDate(booking.event_date),
-          pickupDate: formatDate(booking.pickup_date),
-          deliveryWindow: booking.delivery_window,
-          pickupWindow: booking.pickup_window,
-          address: booking.delivery_address,
-          city: booking.delivery_city,
-          totalPrice: Number(booking.subtotal),
-          depositAmount: Number(booking.deposit_amount),
-          balanceDue: isFullPayment ? 0 : Number(booking.balance_due),
-          notes: booking.customer_notes || undefined,
-          bookingType: booking.booking_type as 'daily' | 'weekend' | 'sunday',
-          paidInFull: isFullPayment,
-          deliveryDate: booking.delivery_date,
-        }),
-      });
-      console.log('✅ [WEBHOOK] Customer confirmation email sent');
-    } catch (emailError) {
-      console.error('❌ [WEBHOOK] Failed to send customer email:', emailError);
-    }
+  // Customer email - send FIRST, before business email
+  try {
+    console.log(`📧 [WEBHOOK] Calling resend.emails.send for customer...`);
+    const customerResult = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: customerEmailAddr,
+      subject: `🎉 Booking Confirmed: ${productName} on ${formatDate(booking.event_date)}`,
+      html: createCustomerEmail({
+        customerName: booking.customer?.first_name || 'there',
+        productName,
+        bookingNumber: booking.booking_number,
+        eventDate: booking.event_date,
+        pickupDate: booking.pickup_date,
+        deliveryWindow: booking.delivery_window,
+        pickupWindow: booking.pickup_window,
+        address: booking.delivery_address,
+        city: booking.delivery_city,
+        totalPrice: Number(booking.subtotal),
+        depositAmount: Number(booking.deposit_amount),
+        balanceDue: isFullPayment ? 0 : Number(booking.balance_due),
+        notes: booking.customer_notes || undefined,
+        bookingType: booking.booking_type as 'daily' | 'weekend' | 'sunday',
+        paidInFull: isFullPayment,
+        deliveryDate: booking.delivery_date,
+      }),
+    });
+    console.log(`✅ [WEBHOOK] Customer email sent! ID: ${customerResult?.data?.id}`);
+  } catch (emailError) {
+    console.error('❌ [WEBHOOK] Failed to send customer email:', emailError);
   }
 
   // Business notification email
