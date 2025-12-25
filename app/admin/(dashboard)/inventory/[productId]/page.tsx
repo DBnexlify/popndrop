@@ -137,16 +137,27 @@ export default async function InventoryProductPage({ params }: PageProps) {
             )}
             
             <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-foreground/70">
-              <span className="flex items-center gap-1">
-                <DollarSign className="h-4 w-4 text-foreground/40" />
-                {formatCurrency(product.price_daily)}/day
-              </span>
-              <span>
-                {formatCurrency(product.price_weekend)}/weekend
-              </span>
-              <span>
-                {formatCurrency(product.price_sunday)}/Sunday
-              </span>
+              {product.same_day_pickup_only ? (
+                /* Event-based rental: single event price */
+                <span className="flex items-center gap-1">
+                  <DollarSign className="h-4 w-4 text-foreground/40" />
+                  {formatCurrency(product.price_daily)}/event
+                </span>
+              ) : (
+                /* Standard rental: day + weekend + Sunday */
+                <>
+                  <span className="flex items-center gap-1">
+                    <DollarSign className="h-4 w-4 text-foreground/40" />
+                    {formatCurrency(product.price_daily)}/day
+                  </span>
+                  <span>
+                    {formatCurrency(product.price_weekend)}/weekend
+                  </span>
+                  <span>
+                    {formatCurrency(product.price_sunday)}/Sunday
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>

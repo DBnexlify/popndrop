@@ -161,12 +161,22 @@ export default async function AdminInventoryPage() {
                     )}
                     
                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-foreground/50">
-                      <span>
-                        {formatCurrency(product.price_daily)}/day
-                      </span>
-                      <span>
-                        {formatCurrency(product.price_weekend)}/weekend
-                      </span>
+                      {product.same_day_pickup_only ? (
+                        /* Event-based rental: single event price */
+                        <span>
+                          {formatCurrency(product.price_daily)}/event
+                        </span>
+                      ) : (
+                        /* Standard rental: day + weekend */
+                        <>
+                          <span>
+                            {formatCurrency(product.price_daily)}/day
+                          </span>
+                          <span>
+                            {formatCurrency(product.price_weekend)}/weekend
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                   

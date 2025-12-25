@@ -123,18 +123,31 @@ function RentalCard({
           {/* Price badges */}
           {!isComingSoon && (
             <div className="absolute left-2 top-2 flex flex-col gap-1.5 sm:left-3 sm:top-3">
-              <Badge
-                variant="secondary"
-                className="border border-white/20 bg-black/60 text-[11px] backdrop-blur-md sm:text-xs"
-              >
-                ${product.pricing.daily}/day
-              </Badge>
-              <Badge
-                variant="secondary"
-                className="border border-white/20 bg-black/60 text-[11px] backdrop-blur-md sm:text-xs"
-              >
-                ${product.pricing.weekend} weekend
-              </Badge>
+              {product.sameDayPickupOnly ? (
+                /* Event-based rental: single price badge */
+                <Badge
+                  variant="secondary"
+                  className="border border-white/20 bg-black/60 text-[11px] backdrop-blur-md sm:text-xs"
+                >
+                  ${product.pricing.daily}/event
+                </Badge>
+              ) : (
+                /* Standard rental: day + weekend badges */
+                <>
+                  <Badge
+                    variant="secondary"
+                    className="border border-white/20 bg-black/60 text-[11px] backdrop-blur-md sm:text-xs"
+                  >
+                    ${product.pricing.daily}/day
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className="border border-white/20 bg-black/60 text-[11px] backdrop-blur-md sm:text-xs"
+                  >
+                    ${product.pricing.weekend} weekend
+                  </Badge>
+                </>
+              )}
             </div>
           )}
 
