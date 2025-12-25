@@ -658,43 +658,51 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
       />
 
       {/* ===================================================================== */}
-      {/* STICKY PROGRESS BAR - Premium sticky bar with smooth transitions */}
-      {/* Sticks directly below site header on desktop, matches header styling */}
+      {/* STICKY PROGRESS BAR - Glassmorphism card matching design system */}
       {/* ===================================================================== */}
       <div 
-        className="sticky top-14 z-40 -mx-4 border-b border-white/5 bg-background/80 backdrop-blur-xl sm:-mx-6 sm:top-16"
+        className="sticky top-14 z-40 mt-6 sm:mt-8 sm:top-16"
         style={{ transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
       >
-        {/* Inner feather overlay for premium depth */}
-        <div className="pointer-events-none absolute inset-0 [box-shadow:inset_0_-1px_0_0_rgba(255,255,255,0.03)]" />
-        
-        {/* Desktop version */}
-        <div className="hidden px-4 py-4 sm:block sm:px-6">
-          <div className="mx-auto max-w-2xl">
-            <BookingProgress currentStep={currentStep} steps={BOOKING_STEPS} />
-          </div>
-        </div>
-        
-        {/* Mobile version with price */}
-        <div className="flex items-center gap-3 px-4 py-3 sm:hidden">
-          <div className="flex-1">
-            <BookingProgressCompact
-              currentStep={currentStep}
-              totalSteps={4}
-              stepLabel={BOOKING_STEPS[currentStep - 1]?.shortLabel || BOOKING_STEPS[currentStep - 1]?.label}
-            />
+        <div className={cn(styles.card, "py-4 px-4 sm:px-6")}>
+          {/* Desktop version - progress + price */}
+          <div className="hidden sm:flex sm:items-center sm:gap-6">
+            <div className="flex-1">
+              <BookingProgress currentStep={currentStep} steps={BOOKING_STEPS} />
+            </div>
+            
+            {/* Price pill on desktop */}
+            {selectedOption && (
+              <div className="shrink-0 rounded-full bg-gradient-to-r from-fuchsia-500/20 to-purple-600/20 border border-fuchsia-500/30 px-4 py-2 text-base font-semibold text-fuchsia-300">
+                ${selectedOption.price}
+              </div>
+            )}
           </div>
           
-          {/* Price pill on mobile - premium styling matching wizard */}
-          {selectedOption && (
-            <div className="shrink-0 rounded-full bg-gradient-to-r from-fuchsia-500/20 to-purple-600/20 border border-fuchsia-500/30 px-3 py-1.5 text-sm font-semibold text-fuchsia-300 transition-all duration-200">
-              ${selectedOption.price}
+          {/* Mobile version with price */}
+          <div className="flex items-center gap-3 sm:hidden">
+            <div className="flex-1">
+              <BookingProgressCompact
+                currentStep={currentStep}
+                totalSteps={4}
+                stepLabel={BOOKING_STEPS[currentStep - 1]?.shortLabel || BOOKING_STEPS[currentStep - 1]?.label}
+              />
             </div>
-          )}
+            
+            {/* Price pill on mobile */}
+            {selectedOption && (
+              <div className="shrink-0 rounded-full bg-gradient-to-r from-fuchsia-500/20 to-purple-600/20 border border-fuchsia-500/30 px-3 py-1.5 text-sm font-semibold text-fuchsia-300">
+                ${selectedOption.price}
+              </div>
+            )}
+          </div>
+          
+          {/* Inner feather overlay - REQUIRED */}
+          <div className={styles.cardInner} />
         </div>
       </div>
 
-      <div className="mt-6 space-y-6">
+      <div className="mt-4 space-y-4 sm:mt-6 sm:space-y-6">
 
         {/* Cancelled Payment Alert */}
         {cancelled && (
