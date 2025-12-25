@@ -30,6 +30,9 @@ export interface PricingOption {
   pickupWindows: readonly TimeWindow[];
   recommended?: boolean;
   badge?: string;
+  // Event-based rentals use a single selection for both delivery and pickup
+  isEventBased?: boolean;
+  eventWindows?: readonly { label: string; value: string; deliveryTime: string; pickupTime: string }[];
 }
 
 export interface PricingResult {
@@ -75,6 +78,15 @@ export const SCHEDULE = {
   mondayPickupWindows: [
     { label: "By 10 AM (Monday)", value: "monday-morning" },
     { label: "2–5 PM (Monday)", value: "monday-afternoon" },
+  ],
+  
+  // Event-based rentals (4-hour blocks with setup/teardown buffer)
+  // Format: Event runs X-Y, we deliver ~1.5hrs before, pickup ~30min after
+  eventWindows: [
+    { label: "4–8 PM (we arrive ~2:30 PM)", value: "event-4pm-8pm", deliveryTime: "2:30 PM", pickupTime: "8:30 PM" },
+    { label: "5–9 PM (we arrive ~3:30 PM)", value: "event-5pm-9pm", deliveryTime: "3:30 PM", pickupTime: "9:30 PM" },
+    { label: "6–10 PM (we arrive ~4:30 PM)", value: "event-6pm-10pm", deliveryTime: "4:30 PM", pickupTime: "10:30 PM" },
+    { label: "7–11 PM (we arrive ~5:30 PM)", value: "event-7pm-11pm", deliveryTime: "5:30 PM", pickupTime: "11:30 PM" },
   ],
 } as const;
 
@@ -215,20 +227,36 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
     
     // Only add daily option if available for this product
     if (isTypeAvailable('daily')) {
-      options.push({
-        type: "daily",
-        price: product.pricing.daily,
-        label: "Saturday only",
-        description: "Single day rental, pickup Saturday evening",
-        deliveryDay: "Saturday",
-        deliveryWindows: SCHEDULE.deliveryWindows,
-        pickupDay: "Saturday",
-        pickupWindows: SCHEDULE.sameDayPickupWindows, // Saturday daily is always same-day
-      });
+      // Event-based products use event time windows
+      if (sameDayOnly) {
+        options.push({
+          type: "daily",
+          price: product.pricing.daily,
+          label: "Saturday event",
+          description: "4-hour event rental with setup & teardown",
+          deliveryDay: "Saturday",
+          deliveryWindows: [], // Not used for event-based
+          pickupDay: "Saturday",
+          pickupWindows: [], // Not used for event-based
+          isEventBased: true,
+          eventWindows: SCHEDULE.eventWindows,
+        });
+      } else {
+        options.push({
+          type: "daily",
+          price: product.pricing.daily,
+          label: "Saturday only",
+          description: "Single day rental, pickup Saturday evening",
+          deliveryDay: "Saturday",
+          deliveryWindows: SCHEDULE.deliveryWindows,
+          pickupDay: "Saturday",
+          pickupWindows: SCHEDULE.sameDayPickupWindows, // Saturday daily is always same-day
+        });
+      }
     }
     
-    // Only add weekend option if available for this product
-    if (isTypeAvailable('weekend')) {
+    // Only add weekend option if available for this product (not for event-based)
+    if (isTypeAvailable('weekend') && !sameDayOnly) {
       options.push({
         type: "weekend",
         price: product.pricing.weekend,
@@ -267,6 +295,27 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
       };
     }
     
+    // Event-based products use event time windows
+    if (sameDayOnly) {
+      return {
+        available: true,
+        options: [
+          {
+            type: "daily",
+            price: product.pricing.daily,
+            label: `${dayName} event`,
+            description: "4-hour event rental with setup & teardown",
+            deliveryDay: dayName,
+            deliveryWindows: [], // Not used for event-based
+            pickupDay: dayName,
+            pickupWindows: [], // Not used for event-based
+            isEventBased: true,
+            eventWindows: SCHEDULE.eventWindows,
+          },
+        ],
+      };
+    }
+    
     return {
       available: true,
       options: [
@@ -274,7 +323,7 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
           type: "daily",
           price: product.pricing.daily,
           label: `${dayName} rental`,
-          description: sameDayOnly ? "Single day rental, same-day pickup" : "Single day rental",
+          description: "Single day rental",
           deliveryDay: dayName,
           deliveryWindows: SCHEDULE.deliveryWindows,
           pickupDay: dayName,
@@ -295,6 +344,27 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
     };
   }
   
+  // Event-based products use event time windows
+  if (sameDayOnly) {
+    return {
+      available: true,
+      options: [
+        {
+          type: "daily",
+          price: product.pricing.daily,
+          label: `${dayName} event`,
+          description: "4-hour event rental with setup & teardown",
+          deliveryDay: dayName,
+          deliveryWindows: [], // Not used for event-based
+          pickupDay: dayName,
+          pickupWindows: [], // Not used for event-based
+          isEventBased: true,
+          eventWindows: SCHEDULE.eventWindows,
+        },
+      ],
+    };
+  }
+  
   return {
     available: true,
     options: [
@@ -302,7 +372,7 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
         type: "daily",
         price: product.pricing.daily,
         label: `${dayName} rental`,
-        description: sameDayOnly ? "Single day rental, same-day pickup" : "Single day rental",
+        description: "Single day rental",
         deliveryDay: dayName,
         deliveryWindows: SCHEDULE.deliveryWindows,
         pickupDay: dayName,

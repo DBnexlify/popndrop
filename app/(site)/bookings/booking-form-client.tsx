@@ -523,8 +523,15 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     if (!formData.email.trim()) missingFields.push("email");
     if (!formData.phone.trim()) missingFields.push("phone");
     if (!formData.address.trim()) missingFields.push("address");
-    if (!formData.deliveryTime) missingFields.push("delivery time");
-    if (!formData.pickupTime) missingFields.push("pickup time");
+    
+    // For event-based rentals, only check deliveryTime (pickupTime is auto-set)
+    if (selectedOption?.isEventBased) {
+      if (!formData.deliveryTime) missingFields.push("event time");
+    } else {
+      if (!formData.deliveryTime) missingFields.push("delivery time");
+      if (!formData.pickupTime) missingFields.push("pickup time");
+    }
+    
     if (!termsAccepted) missingFields.push("terms acceptance");
 
     return {
@@ -1102,26 +1109,24 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                     </Callout>
                   )}
 
-                  {/* Time Selection */}
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  {/* Time Selection - Different for event-based vs standard rentals */}
+                  {selectedOption?.isEventBased ? (
+                    /* EVENT-BASED: Single event time dropdown */
                     <div className="space-y-2">
-                      <Label>
-                        {selectedOption?.deliveryDay
-                          ? `${selectedOption.deliveryDay} delivery *`
-                          : "Delivery time *"}
-                      </Label>
+                      <Label>Event time *</Label>
                       <Select
                         value={formData.deliveryTime}
-                        onValueChange={(value) =>
-                          setFormData((prev) => ({ ...prev, deliveryTime: value }))
-                        }
+                        onValueChange={(value) => {
+                          // For event-based, set both delivery and pickup to the same value
+                          setFormData((prev) => ({ ...prev, deliveryTime: value, pickupTime: value }));
+                        }}
                         disabled={!selectedOption}
                       >
                         <SelectTrigger className={styles.selectTrigger}>
-                          <SelectValue placeholder="Select window..." />
+                          <SelectValue placeholder="Select your event time..." />
                         </SelectTrigger>
                         <SelectContent className={styles.selectContent}>
-                          {selectedOption?.deliveryWindows.map((window) => (
+                          {selectedOption.eventWindows?.map((window) => (
                             <SelectItem
                               key={window.value}
                               value={window.value}
@@ -1132,38 +1137,74 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                           ))}
                         </SelectContent>
                       </Select>
+                      <p className={cn(styles.helperText, "mt-1")}>
+                        We&apos;ll arrive ~1.5 hours before to set up, and pick up ~30 minutes after your event ends.
+                      </p>
                     </div>
+                  ) : (
+                    /* STANDARD: Separate delivery and pickup dropdowns */
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>
+                          {selectedOption?.deliveryDay
+                            ? `${selectedOption.deliveryDay} delivery *`
+                            : "Delivery time *"}
+                        </Label>
+                        <Select
+                          value={formData.deliveryTime}
+                          onValueChange={(value) =>
+                            setFormData((prev) => ({ ...prev, deliveryTime: value }))
+                          }
+                          disabled={!selectedOption}
+                        >
+                          <SelectTrigger className={styles.selectTrigger}>
+                            <SelectValue placeholder="Select window..." />
+                          </SelectTrigger>
+                          <SelectContent className={styles.selectContent}>
+                            {selectedOption?.deliveryWindows.map((window) => (
+                              <SelectItem
+                                key={window.value}
+                                value={window.value}
+                                className={styles.selectItem}
+                              >
+                                {window.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label>
-                        {selectedOption?.pickupDay
-                          ? `${selectedOption.pickupDay} pickup *`
-                          : "Pickup time *"}
-                      </Label>
-                      <Select
-                        value={formData.pickupTime}
-                        onValueChange={(value) =>
-                          setFormData((prev) => ({ ...prev, pickupTime: value }))
-                        }
-                        disabled={!selectedOption}
-                      >
-                        <SelectTrigger className={styles.selectTrigger}>
-                          <SelectValue placeholder="Select window..." />
-                        </SelectTrigger>
-                        <SelectContent className={styles.selectContent}>
-                          {selectedOption?.pickupWindows.map((window) => (
-                            <SelectItem
-                              key={window.value}
-                              value={window.value}
-                              className={styles.selectItem}
-                            >
-                              {window.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="space-y-2">
+                        <Label>
+                          {selectedOption?.pickupDay
+                            ? `${selectedOption.pickupDay} pickup *`
+                            : "Pickup time *"}
+                        </Label>
+                        <Select
+                          value={formData.pickupTime}
+                          onValueChange={(value) =>
+                            setFormData((prev) => ({ ...prev, pickupTime: value }))
+                          }
+                          disabled={!selectedOption}
+                        >
+                          <SelectTrigger className={styles.selectTrigger}>
+                            <SelectValue placeholder="Select window..." />
+                          </SelectTrigger>
+                          <SelectContent className={styles.selectContent}>
+                            {selectedOption?.pickupWindows.map((window) => (
+                              <SelectItem
+                                key={window.value}
+                                value={window.value}
+                                className={styles.selectItem}
+                              >
+                                {window.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
               {/* Inner feather overlay - REQUIRED */}
@@ -1515,22 +1556,39 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
 
                     {selectedOption && (
                       <>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-foreground/70">Delivery</span>
-                          <span className="font-semibold">
-                            {selectedOption.deliveryDay}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-foreground/70">Pickup</span>
-                          <span className="font-semibold">
-                            {selectedOption.pickupDay}
-                          </span>
-                        </div>
+                        {selectedOption.isEventBased ? (
+                          /* Event-based: show event time */
+                          formData.deliveryTime && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-foreground/70">Event time</span>
+                              <span className="font-semibold">
+                                {selectedOption.eventWindows?.find(
+                                  (w) => w.value === formData.deliveryTime
+                                )?.label.split(' (')[0] || formData.deliveryTime}
+                              </span>
+                            </div>
+                          )
+                        ) : (
+                          /* Standard: show delivery and pickup days */
+                          <>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-foreground/70">Delivery</span>
+                              <span className="font-semibold">
+                                {selectedOption.deliveryDay}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-foreground/70">Pickup</span>
+                              <span className="font-semibold">
+                                {selectedOption.pickupDay}
+                              </span>
+                            </div>
+                          </>
+                        )}
                       </>
                     )}
 
-                    {formData.deliveryTime && selectedOption && (
+                    {formData.deliveryTime && selectedOption && !selectedOption.isEventBased && (
                       <div className="flex justify-between text-sm">
                         <span className="text-foreground/70">Delivery window</span>
                         <span className="font-semibold">

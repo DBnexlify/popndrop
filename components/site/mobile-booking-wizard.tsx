@@ -643,7 +643,8 @@ function Step2DateTime({
   // Check if we should show cutoff warning
   const showCutoffWarning = isPastCutoffTime();
 
-  const canContinue = eventDate && selectedOption && formData.deliveryTime && formData.pickupTime;
+  const canContinue = eventDate && selectedOption && formData.deliveryTime && 
+    (selectedOption.isEventBased || formData.pickupTime);
 
   return (
     <div className="px-4 pt-4 pb-6">
@@ -851,52 +852,84 @@ function Step2DateTime({
             </div>
           )}
 
-          {/* Time selection */}
+          {/* Time selection - Different for event-based vs standard rentals */}
           {selectedOption && (
             <div className="mt-5 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="space-y-2">
-                <Label>{selectedOption.deliveryDay} delivery time</Label>
-                <Select
-                  value={formData.deliveryTime}
-                  onValueChange={(value) => {
-                    hapticSelect();
-                    setFormData(prev => ({ ...prev, deliveryTime: value }));
-                  }}
-                >
-                  <SelectTrigger className={styles.selectTrigger}>
-                    <SelectValue placeholder="Select time..." />
-                  </SelectTrigger>
-                  <SelectContent className={styles.selectContent} position="popper" sideOffset={8}>
-                    {selectedOption.deliveryWindows.map((window) => (
-                      <SelectItem key={window.value} value={window.value} className={styles.selectItem}>
-                        {window.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {selectedOption.isEventBased ? (
+                /* EVENT-BASED: Single event time dropdown */
+                <div className="space-y-2">
+                  <Label>Event time</Label>
+                  <Select
+                    value={formData.deliveryTime}
+                    onValueChange={(value) => {
+                      hapticSelect();
+                      // For event-based, set both delivery and pickup to the same value
+                      setFormData(prev => ({ ...prev, deliveryTime: value, pickupTime: value }));
+                    }}
+                  >
+                    <SelectTrigger className={styles.selectTrigger}>
+                      <SelectValue placeholder="Select your event time..." />
+                    </SelectTrigger>
+                    <SelectContent className={styles.selectContent} position="popper" sideOffset={8}>
+                      {selectedOption.eventWindows?.map((window) => (
+                        <SelectItem key={window.value} value={window.value} className={styles.selectItem}>
+                          {window.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className={cn(styles.helperText, "mt-1")}>
+                    We&apos;ll arrive ~1.5 hours before to set up, and pick up ~30 minutes after your event ends.
+                  </p>
+                </div>
+              ) : (
+                /* STANDARD: Separate delivery and pickup dropdowns */
+                <>
+                  <div className="space-y-2">
+                    <Label>{selectedOption.deliveryDay} delivery time</Label>
+                    <Select
+                      value={formData.deliveryTime}
+                      onValueChange={(value) => {
+                        hapticSelect();
+                        setFormData(prev => ({ ...prev, deliveryTime: value }));
+                      }}
+                    >
+                      <SelectTrigger className={styles.selectTrigger}>
+                        <SelectValue placeholder="Select time..." />
+                      </SelectTrigger>
+                      <SelectContent className={styles.selectContent} position="popper" sideOffset={8}>
+                        {selectedOption.deliveryWindows.map((window) => (
+                          <SelectItem key={window.value} value={window.value} className={styles.selectItem}>
+                            {window.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <div className="space-y-2">
-                <Label>{selectedOption.pickupDay} pickup time</Label>
-                <Select
-                  value={formData.pickupTime}
-                  onValueChange={(value) => {
-                    hapticSelect();
-                    setFormData(prev => ({ ...prev, pickupTime: value }));
-                  }}
-                >
-                  <SelectTrigger className={styles.selectTrigger}>
-                    <SelectValue placeholder="Select time..." />
-                  </SelectTrigger>
-                  <SelectContent className={styles.selectContent} position="popper" sideOffset={8}>
-                    {selectedOption.pickupWindows.map((window) => (
-                      <SelectItem key={window.value} value={window.value} className={styles.selectItem}>
-                        {window.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  <div className="space-y-2">
+                    <Label>{selectedOption.pickupDay} pickup time</Label>
+                    <Select
+                      value={formData.pickupTime}
+                      onValueChange={(value) => {
+                        hapticSelect();
+                        setFormData(prev => ({ ...prev, pickupTime: value }));
+                      }}
+                    >
+                      <SelectTrigger className={styles.selectTrigger}>
+                        <SelectValue placeholder="Select time..." />
+                      </SelectTrigger>
+                      <SelectContent className={styles.selectContent} position="popper" sideOffset={8}>
+                        {selectedOption.pickupWindows.map((window) => (
+                          <SelectItem key={window.value} value={window.value} className={styles.selectItem}>
+                            {window.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -1195,8 +1228,20 @@ function Step4Review({
                 </div>
                 <div className="mt-2 space-y-1 text-sm text-foreground/70">
                   <p>{format(eventDate, "EEEE, MMMM d, yyyy")}</p>
-                  <p>Delivery: {selectedOption.deliveryDay} {formData.deliveryTime}</p>
-                  <p>Pickup: {selectedOption.pickupDay} {formData.pickupTime}</p>
+                  {selectedOption.isEventBased ? (
+                    /* Event-based: show event time */
+                    <p>
+                      Event: {selectedOption.eventWindows?.find(
+                        (w) => w.value === formData.deliveryTime
+                      )?.label.split(' (')[0] || formData.deliveryTime}
+                    </p>
+                  ) : (
+                    /* Standard: show delivery and pickup */
+                    <>
+                      <p>Delivery: {selectedOption.deliveryDay} {formData.deliveryTime}</p>
+                      <p>Pickup: {selectedOption.pickupDay} {formData.pickupTime}</p>
+                    </>
+                  )}
                 </div>
               </div>
 
