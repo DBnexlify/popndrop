@@ -111,7 +111,34 @@ export interface CancelBookingData {
 export async function cancelBooking(data: CancelBookingData) {
   const supabase = createServerClient();
 
-  // If Stripe auto-refund requested, process it first
+  // =========================================================================
+  // STEP 1: Verify booking exists and can be cancelled
+  // =========================================================================
+  const { data: existingBooking, error: fetchError } = await supabase
+    .from("bookings")
+    .select("status, booking_number")
+    .eq("id", data.bookingId)
+    .single();
+
+  if (fetchError || !existingBooking) {
+    console.error("Error fetching booking for cancellation:", fetchError);
+    return { success: false, error: "Booking not found" };
+  }
+
+  // Check if booking is already in a terminal state
+  if (existingBooking.status === "cancelled") {
+    return { success: false, error: "This booking is already cancelled" };
+  }
+
+  if (existingBooking.status === "completed") {
+    return { success: false, error: "Cannot cancel a completed booking" };
+  }
+
+  console.log(`📋 [CANCEL] Starting cancellation for ${existingBooking.booking_number}`);
+
+  // =========================================================================
+  // STEP 2: Process Stripe refund if requested (with timeout protection)
+  // =========================================================================
   let stripeRefundId: string | null = null;
   let refundError: string | null = null;
   
@@ -122,11 +149,19 @@ export async function cancelBooking(data: CancelBookingData) {
       
       console.log(`💳 [REFUND] Processing Stripe refund: ${data.refundAmount} (${refundAmountCents} cents) for PI: ${data.stripePaymentIntentId}`);
       
-      const refund = await stripe.refunds.create({
+      // Add timeout to prevent hanging on Stripe API calls
+      const refundPromise = stripe.refunds.create({
         payment_intent: data.stripePaymentIntentId,
         amount: refundAmountCents,
         reason: 'requested_by_customer',
       });
+
+      // 30 second timeout for Stripe API
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Stripe refund timed out after 30 seconds')), 30000);
+      });
+
+      const refund = await Promise.race([refundPromise, timeoutPromise]);
       
       stripeRefundId = refund.id;
       console.log(`✅ [REFUND] Stripe refund successful! Refund ID: ${refund.id} | Status: ${refund.status}`);
@@ -140,6 +175,9 @@ export async function cancelBooking(data: CancelBookingData) {
     }
   }
 
+  // =========================================================================
+  // STEP 3: Update booking status
+  // =========================================================================
   const updateData: Record<string, unknown> = {
     status: "cancelled",
     cancelled_at: new Date().toISOString(),
@@ -173,16 +211,24 @@ export async function cancelBooking(data: CancelBookingData) {
     updateData.refund_status = "pending";
   }
 
-  const { error } = await supabase
+  const { data: updateResult, error: updateError } = await supabase
     .from("bookings")
     .update(updateData)
     .eq("id", data.bookingId)
-    .not("status", "in", '("cancelled","completed")');
+    .select('id');
 
-  if (error) {
-    console.error("Error cancelling booking:", error);
-    return { success: false, error: error.message };
+  if (updateError) {
+    console.error("Error cancelling booking:", updateError);
+    return { success: false, error: updateError.message };
   }
+
+  // Check if any rows were actually updated
+  if (!updateResult || updateResult.length === 0) {
+    console.error("No booking updated - possible state conflict");
+    return { success: false, error: "Booking could not be cancelled. It may have already been modified." };
+  }
+
+  console.log(`✅ [CANCEL] Booking ${existingBooking.booking_number} cancelled successfully`);
 
   revalidatePath(`/admin/bookings/${data.bookingId}`);
   revalidatePath("/admin/bookings");

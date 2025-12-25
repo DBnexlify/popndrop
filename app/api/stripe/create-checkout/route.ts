@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
       .select(`
         id,
         booking_number,
+        status,
         product_snapshot,
         event_date,
         subtotal,
@@ -75,6 +76,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Booking not found' },
         { status: 404 }
+      );
+    }
+
+    // =========================================================================
+    // CRITICAL: Prevent creating checkout for cancelled/invalid bookings
+    // This is defense-in-depth - the webhook also checks, but we catch it early
+    // =========================================================================
+    if (booking.status === 'cancelled') {
+      console.log(`[CREATE-CHECKOUT] Blocked: Booking ${booking.booking_number} is cancelled`);
+      return NextResponse.json(
+        { error: 'This booking has been cancelled and cannot be paid' },
+        { status: 400 }
+      );
+    }
+
+    if (booking.status === 'confirmed') {
+      console.log(`[CREATE-CHECKOUT] Blocked: Booking ${booking.booking_number} is already confirmed`);
+      return NextResponse.json(
+        { error: 'This booking is already confirmed' },
+        { status: 400 }
       );
     }
 

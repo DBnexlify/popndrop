@@ -31,6 +31,8 @@ const nextConfig: NextConfig = {
       'date-fns',
       '@radix-ui/react-icons',
     ],
+    // Turbopack file system caching for faster builds
+    turbopackFileSystemCacheForBuild: true,
   },
   
   // Compress responses

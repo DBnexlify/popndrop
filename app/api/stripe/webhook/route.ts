@@ -246,6 +246,71 @@ async function processSuccessfulPayment(
   const originalPrice = parseFloat(session.metadata?.original_price || '0');
   const finalPrice = parseFloat(session.metadata?.final_price || '0');
 
+  // ===========================================================================
+  // CRITICAL FIX: Check if booking was cancelled before processing payment
+  // This prevents the race condition where:
+  // 1. Customer has pending booking
+  // 2. Customer clicks cancel → booking status changes to 'cancelled'
+  // 3. Customer still completes payment in another tab
+  // 4. Payment confirms a cancelled booking (data corruption!)
+  // ===========================================================================
+  const { data: bookingStatus, error: statusError } = await supabase
+    .from('bookings')
+    .select('status, booking_number')
+    .eq('id', bookingId)
+    .single();
+
+  if (statusError || !bookingStatus) {
+    console.error('❌ [WEBHOOK] Could not verify booking status:', statusError);
+    // Continue processing - better to potentially confirm than to lose the payment
+  } else if (bookingStatus.status === 'cancelled') {
+    console.log(`🚫 [WEBHOOK] REJECTED: Payment attempted on CANCELLED booking ${bookingStatus.booking_number}`);
+    console.log(`🚫 [WEBHOOK] Session: ${session.id} | Amount: ${(session.amount_total || 0) / 100}`);
+    
+    // Record the rejected payment for audit trail
+    await supabase.from('payments').insert({
+      booking_id: bookingId,
+      payment_type: paymentType === 'full' ? 'full' : 'deposit',
+      amount: (session.amount_total || 0) / 100,
+      status: 'rejected',
+      payment_method: 'card',
+      stripe_payment_intent_id: session.payment_intent as string || null,
+      stripe_checkout_session_id: session.id,
+    });
+
+    // Alert the business owner to handle manually (may need refund)
+    try {
+      await resend.emails.send({
+        from: FROM_EMAIL,
+        to: NOTIFY_EMAIL,
+        subject: `⚠️ ALERT: Payment on Cancelled Booking - ${bookingStatus.booking_number}`,
+        html: `
+          <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: #fef2f2; border: 2px solid #ef4444; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+              <h2 style="color: #dc2626; margin: 0;">⚠️ Payment Received on Cancelled Booking</h2>
+              <p style="color: #991b1b; margin: 10px 0 0 0;">Manual review required!</p>
+            </div>
+            <p>A customer completed payment for a booking that was already cancelled. This payment was NOT applied to the booking.</p>
+            <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+              <tr><td style="padding: 8px 0;"><strong>Booking:</strong></td><td>${bookingStatus.booking_number}</td></tr>
+              <tr><td style="padding: 8px 0;"><strong>Amount:</strong></td><td>${((session.amount_total || 0) / 100).toFixed(2)}</td></tr>
+              <tr><td style="padding: 8px 0;"><strong>Stripe Session:</strong></td><td>${session.id}</td></tr>
+              <tr><td style="padding: 8px 0;"><strong>Payment Intent:</strong></td><td>${session.payment_intent || 'N/A'}</td></tr>
+            </table>
+            <p style="margin-top: 20px; padding: 15px; background: #fef9c3; border-radius: 8px;">
+              <strong>Action Required:</strong> Please review in Stripe Dashboard and issue a refund if appropriate.
+            </p>
+          </div>
+        `,
+      });
+    } catch (emailError) {
+      console.error('❌ [WEBHOOK] Failed to send cancelled payment alert:', emailError);
+    }
+
+    return; // Stop processing - don't confirm the cancelled booking
+  }
+  // ===========================================================================
+
   // Idempotency check
   const { data: existingPayment } = await supabase
     .from('payments')
