@@ -87,7 +87,7 @@ export function MobileBottomNav() {
         ref={navRef}
         data-collapsed="false"
         aria-label="Mobile navigation"
-        className="group/nav fixed z-50 sm:hidden"
+        className="group/nav fixed z-50 flex justify-center sm:hidden"
         style={{
           // Full width positioning
           left: 0,
@@ -95,9 +95,6 @@ export function MobileBottomNav() {
           // ANDROID FIX: Position from safe area, not from bottom: 0
           // This ensures the nav is always visible above gesture bar
           bottom: 'env(safe-area-inset-bottom, 0px)',
-          // Use flexbox for centering (more reliable than mx-auto on Android)
-          display: 'flex',
-          justifyContent: 'center',
           // Add padding so pill doesn't touch edges
           paddingLeft: '12px',
           paddingRight: '12px',

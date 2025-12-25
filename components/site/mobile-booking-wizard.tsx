@@ -408,13 +408,22 @@ function Step1SelectRental({
                       <p className={cn(styles.bodyText, "mt-0.5 line-clamp-2")}>
                         {product.subtitle}
                       </p>
+                      {/* Price badges - show /event for event-based, /day + weekend for standard */}
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <Badge variant="secondary" className="text-xs">
-                          ${product.pricing.daily}/day
-                        </Badge>
-                        <Badge variant="secondary" className="text-xs">
-                          ${product.pricing.weekend} weekend
-                        </Badge>
+                        {product.sameDayPickupOnly ? (
+                          <Badge variant="secondary" className="text-xs">
+                            ${product.pricing.daily}/event
+                          </Badge>
+                        ) : (
+                          <>
+                            <Badge variant="secondary" className="text-xs">
+                              ${product.pricing.daily}/day
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs">
+                              ${product.pricing.weekend} weekend
+                            </Badge>
+                          </>
+                        )}
                       </div>
                     </div>
 

@@ -51,21 +51,34 @@ export function RentalCard({ rental, priority = false }: RentalCardProps) {
               </div>
             )}
 
-            {/* Price badges */}
+            {/* Price badges - show /event for event-based rentals, /day + weekend for standard */}
             {!isComingSoon && (
               <div className="absolute left-2 top-2 flex flex-col gap-1.5 sm:left-3 sm:top-3">
-                <Badge
-                  variant="secondary"
-                  className="border border-white/20 bg-black/60 text-[11px] backdrop-blur-md sm:text-xs"
-                >
-                  ${rental.pricing.daily}/day
-                </Badge>
-                <Badge
-                  variant="secondary"
-                  className="border border-white/20 bg-black/60 text-[11px] backdrop-blur-md sm:text-xs"
-                >
-                  ${rental.pricing.weekend} weekend
-                </Badge>
+                {rental.sameDayPickupOnly ? (
+                  /* Event-based rental: single price badge */
+                  <Badge
+                    variant="secondary"
+                    className="border border-white/20 bg-black/60 text-[11px] backdrop-blur-md sm:text-xs"
+                  >
+                    ${rental.pricing.daily}/event
+                  </Badge>
+                ) : (
+                  /* Standard rental: day + weekend badges */
+                  <>
+                    <Badge
+                      variant="secondary"
+                      className="border border-white/20 bg-black/60 text-[11px] backdrop-blur-md sm:text-xs"
+                    >
+                      ${rental.pricing.daily}/day
+                    </Badge>
+                    <Badge
+                      variant="secondary"
+                      className="border border-white/20 bg-black/60 text-[11px] backdrop-blur-md sm:text-xs"
+                    >
+                      ${rental.pricing.weekend} weekend
+                    </Badge>
+                  </>
+                )}
               </div>
             )}
 

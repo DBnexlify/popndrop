@@ -762,16 +762,25 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                         <p className={cn(styles.bodyText, "mt-0.5")}>
                           {selectedProduct.subtitle}
                         </p>
+                        {/* Price badges - show /event for event-based, /day + weekend for standard */}
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {selectedProduct.availableBookingTypes.includes('daily') && (
+                          {selectedProduct.sameDayPickupOnly ? (
                             <Badge variant="secondary" className="text-xs">
-                              ${selectedProduct.pricing.daily}/day
+                              ${selectedProduct.pricing.daily}/event
                             </Badge>
-                          )}
-                          {selectedProduct.availableBookingTypes.includes('weekend') && (
-                            <Badge variant="secondary" className="text-xs">
-                              ${selectedProduct.pricing.weekend} weekend
-                            </Badge>
+                          ) : (
+                            <>
+                              {selectedProduct.availableBookingTypes.includes('daily') && (
+                                <Badge variant="secondary" className="text-xs">
+                                  ${selectedProduct.pricing.daily}/day
+                                </Badge>
+                              )}
+                              {selectedProduct.availableBookingTypes.includes('weekend') && (
+                                <Badge variant="secondary" className="text-xs">
+                                  ${selectedProduct.pricing.weekend} weekend
+                                </Badge>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
@@ -1524,29 +1533,42 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                     {/* Nested card for rates - Tier 3 */}
                     <div className={styles.nestedCard}>
                       <div className="space-y-2 p-3">
-                        {selectedProduct.availableBookingTypes.includes('daily') && (
+                        {selectedProduct.sameDayPickupOnly ? (
+                          /* Event-based rental: single event rate */
                           <div className="flex justify-between text-sm">
-                            <span className="text-foreground/50">Daily rate</span>
+                            <span className="text-foreground/50">Event rate</span>
                             <span className="text-foreground/70">
                               ${selectedProduct.pricing.daily}
                             </span>
                           </div>
-                        )}
-                        {selectedProduct.availableBookingTypes.includes('weekend') && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-foreground/50">Weekend rate</span>
-                            <span className="text-foreground/70">
-                              ${selectedProduct.pricing.weekend}
-                            </span>
-                          </div>
-                        )}
-                        {selectedProduct.availableBookingTypes.includes('sunday') && !selectedProduct.availableBookingTypes.includes('weekend') && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-foreground/50">Sunday rate</span>
-                            <span className="text-foreground/70">
-                              ${selectedProduct.pricing.sunday}
-                            </span>
-                          </div>
+                        ) : (
+                          /* Standard rental: day/weekend/sunday rates */
+                          <>
+                            {selectedProduct.availableBookingTypes.includes('daily') && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-foreground/50">Daily rate</span>
+                                <span className="text-foreground/70">
+                                  ${selectedProduct.pricing.daily}
+                                </span>
+                              </div>
+                            )}
+                            {selectedProduct.availableBookingTypes.includes('weekend') && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-foreground/50">Weekend rate</span>
+                                <span className="text-foreground/70">
+                                  ${selectedProduct.pricing.weekend}
+                                </span>
+                              </div>
+                            )}
+                            {selectedProduct.availableBookingTypes.includes('sunday') && !selectedProduct.availableBookingTypes.includes('weekend') && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-foreground/50">Sunday rate</span>
+                                <span className="text-foreground/70">
+                                  ${selectedProduct.pricing.sunday}
+                                </span>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                       <div className={styles.nestedCardInner} />
