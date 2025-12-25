@@ -24,11 +24,20 @@ export const metadata: Metadata = {
   title: "Pop and Drop Party Rentals | Bounce House Rentals in Ocala, FL",
   description: "Bounce house and inflatable party rentals in Ocala, Florida, Marion County, and surrounding areas. Water slides, themed bounce houses, and party inflatables delivered and set up. Book online in minutes!",
   keywords: "bounce house rental Ocala, inflatable rental Ocala FL, water slide rental Marion County, party rentals Ocala Florida, bounce house Ocala, inflatable party rentals, kids party rentals Ocala",
+  icons: {
+    icon: [
+      { url: '/brand/logo.png', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/brand/logo.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
   openGraph: {
     title: "Pop and Drop Party Rentals | Ocala, FL",
     description: "Bounce house and inflatable rentals delivered and set up in Ocala, FL, Marion County, and surrounding areas. Book your party rental online!",
     type: "website",
     locale: "en_US",
+    images: ['/brand/logo.png'],
   },
 };
 
