@@ -816,7 +816,7 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                             value={p.slug}
                             className={styles.selectItem}
                           >
-                            {p.name} — ${p.pricing.daily}/day
+                            {p.name} — ${p.pricing.daily}/{p.sameDayPickupOnly ? 'event' : 'day'}
                           </SelectItem>
                         ))}
                       </SelectContent>
