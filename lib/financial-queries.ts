@@ -1,6 +1,10 @@
 // =============================================================================
 // FINANCIAL QUERIES - Pop and Drop Party Rentals
 // Server-side database operations for financial tracking
+// 
+// IMPORTANT: This file properly handles ACH/async payments:
+// - Pending ACH payments are NOT counted in revenue
+// - Only payments with status='succeeded' count toward financials
 // =============================================================================
 
 import { createServerClient } from './supabase';
@@ -348,9 +352,6 @@ export async function getExpenseSummaryByCategory(
     .from('expense_summary_by_category')
     .select('*');
   
-  // Note: This view doesn't filter by year by default
-  // You may want to create a function for year filtering
-  
   const { data, error } = await query;
   
   if (error) {
@@ -392,6 +393,109 @@ export async function getBookingFinancials(bookingId: string): Promise<BookingFi
     net_profit: Number(row.net_profit) || 0,
     payment_methods: row.payment_methods || [],
   };
+}
+
+// =============================================================================
+// ACH/ASYNC PAYMENT TRACKING
+// =============================================================================
+
+export interface PendingACHPayment {
+  booking_id: string;
+  booking_number: string;
+  customer_name: string;
+  customer_email: string;
+  customer_phone: string;
+  product_name: string;
+  event_date: string;
+  delivery_date: string;
+  subtotal: number;
+  deposit_amount: number;
+  payment_amount: number;
+  bank_name: string | null;
+  bank_last_four: string | null;
+  async_payment_status: string;
+  initiated_at: string;
+  days_pending: number;
+}
+
+/**
+ * Get all pending ACH payments
+ * These are payments that have been initiated but not yet cleared
+ */
+export async function getPendingACHPayments(): Promise<PendingACHPayment[]> {
+  const supabase = createServerClient();
+  
+  const { data, error } = await supabase
+    .from('pending_ach_payments')
+    .select('*')
+    .order('async_payment_initiated_at', { ascending: true });
+  
+  if (error) {
+    console.error('[FINANCIAL] Error fetching pending ACH payments:', error);
+    // Return empty array - view might not exist yet
+    return [];
+  }
+  
+  return (data || []).map(row => ({
+    booking_id: row.booking_id,
+    booking_number: row.booking_number,
+    customer_name: row.customer_name,
+    customer_email: row.customer_email,
+    customer_phone: row.customer_phone,
+    product_name: row.product_name,
+    event_date: row.event_date,
+    delivery_date: row.delivery_date,
+    subtotal: Number(row.subtotal) || 0,
+    deposit_amount: Number(row.deposit_amount) || 0,
+    payment_amount: Number(row.payment_amount) || 0,
+    bank_name: row.bank_name,
+    bank_last_four: row.bank_last_four,
+    async_payment_status: row.async_payment_status || 'pending',
+    initiated_at: row.payment_created_at,
+    days_pending: Number(row.days_pending) || 0,
+  }));
+}
+
+/**
+ * Get count of pending ACH payments
+ */
+export async function getPendingACHPaymentCount(): Promise<number> {
+  const supabase = createServerClient();
+  
+  const { count, error } = await supabase
+    .from('bookings')
+    .select('*', { count: 'exact', head: true })
+    .eq('is_async_payment', true)
+    .in('async_payment_status', ['pending', 'processing'])
+    .neq('status', 'cancelled');
+  
+  if (error) {
+    console.error('[FINANCIAL] Error counting pending ACH:', error);
+    return 0;
+  }
+  
+  return count || 0;
+}
+
+/**
+ * Get total amount of pending ACH payments
+ * Useful for showing "revenue in transit"
+ */
+export async function getPendingACHAmount(): Promise<number> {
+  const supabase = createServerClient();
+  
+  const { data, error } = await supabase
+    .from('payments')
+    .select('amount')
+    .eq('is_async', true)
+    .eq('async_status', 'pending');
+  
+  if (error) {
+    console.error('[FINANCIAL] Error summing pending ACH:', error);
+    return 0;
+  }
+  
+  return (data || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 }
 
 // =============================================================================
@@ -498,8 +602,10 @@ export async function recordManualPayment(params: {
       amount,
       payment_type: paymentType,
       payment_method: paymentMethod,
+      payment_method_type: 'manual',
       status: 'succeeded',
       stripe_fee: 0, // No fee for manual payments
+      is_async: false,
       is_manual_entry: true,
       notes,
       completed_at: new Date().toISOString(),
@@ -511,11 +617,16 @@ export async function recordManualPayment(params: {
   }
   
   // Update booking payment status
-  const updateData: Record<string, unknown> = {};
+  const updateData: Record<string, unknown> = {
+    payment_method_type: 'manual',
+    is_async_payment: false,
+  };
   
   if (paymentType === 'deposit') {
     updateData.deposit_paid = true;
     updateData.deposit_paid_at = new Date().toISOString();
+    updateData.status = 'confirmed';
+    updateData.confirmed_at = new Date().toISOString();
   } else if (paymentType === 'balance' || paymentType === 'full') {
     updateData.balance_paid = true;
     updateData.balance_paid_at = new Date().toISOString();
@@ -525,6 +636,8 @@ export async function recordManualPayment(params: {
     if (paymentType === 'full') {
       updateData.deposit_paid = true;
       updateData.deposit_paid_at = new Date().toISOString();
+      updateData.status = 'confirmed';
+      updateData.confirmed_at = new Date().toISOString();
     }
   }
   
@@ -550,6 +663,9 @@ export interface FinancialDashboardStats {
   thisYear: FinancialMetrics;
   recentExpenses: ExpenseWithCategory[];
   topExpenseCategories: ExpenseSummaryByCategory[];
+  // ACH tracking
+  pendingACHCount: number;
+  pendingACHAmount: number;
 }
 
 export async function getFinancialDashboardStats(): Promise<FinancialDashboardStats> {
@@ -560,6 +676,8 @@ export async function getFinancialDashboardStats(): Promise<FinancialDashboardSt
     thisYear,
     recentExpensesResult,
     topExpenseCategories,
+    pendingACHCount,
+    pendingACHAmount,
   ] = await Promise.all([
     getFinancialMetrics('today'),
     getFinancialMetrics('this_week'),
@@ -567,6 +685,8 @@ export async function getFinancialDashboardStats(): Promise<FinancialDashboardSt
     getFinancialMetrics('this_year'),
     getExpenses({ limit: 5 }),
     getExpenseSummaryByCategory(),
+    getPendingACHPaymentCount(),
+    getPendingACHAmount(),
   ]);
   
   return {
@@ -576,6 +696,8 @@ export async function getFinancialDashboardStats(): Promise<FinancialDashboardSt
     thisYear,
     recentExpenses: recentExpensesResult.expenses,
     topExpenseCategories: topExpenseCategories.slice(0, 5),
+    pendingACHCount,
+    pendingACHAmount,
   };
 }
 
@@ -586,7 +708,7 @@ export async function getFinancialDashboardStats(): Promise<FinancialDashboardSt
 export async function exportFinancialDataCSV(dateRange: DateRange): Promise<string> {
   const supabase = createServerClient();
   
-  // Get payments in date range
+  // Get payments in date range - ONLY succeeded payments
   const { data: payments } = await supabase
     .from('payments')
     .select(`
@@ -595,7 +717,7 @@ export async function exportFinancialDataCSV(dateRange: DateRange): Promise<stri
     `)
     .gte('created_at', dateRange.start)
     .lte('created_at', dateRange.end + 'T23:59:59Z')
-    .eq('status', 'succeeded')
+    .eq('status', 'succeeded')  // Only succeeded payments
     .order('created_at', { ascending: false });
 
   // Get expenses in date range
@@ -613,7 +735,7 @@ export async function exportFinancialDataCSV(dateRange: DateRange): Promise<stri
   const lines: string[] = [];
   
   // Header
-  lines.push('Type,Date,Description,Category,Amount,Stripe Fee,Net Amount,Booking Number');
+  lines.push('Type,Date,Description,Category,Payment Method,Amount,Stripe Fee,Net Amount,Booking Number');
   
   // Revenue entries
   for (const payment of payments || []) {
@@ -621,8 +743,9 @@ export async function exportFinancialDataCSV(dateRange: DateRange): Promise<stri
     const bookingNum = payment.booking?.booking_number || '';
     const stripeFee = payment.stripe_fee || 0;
     const netAmount = payment.amount - stripeFee;
+    const paymentMethod = payment.payment_method_type || payment.payment_method || 'card';
     lines.push(
-      `Revenue,${date},Payment received,Income,${payment.amount.toFixed(2)},${stripeFee.toFixed(2)},${netAmount.toFixed(2)},${bookingNum}`
+      `Revenue,${date},Payment received,Income,${paymentMethod},${payment.amount.toFixed(2)},${stripeFee.toFixed(2)},${netAmount.toFixed(2)},${bookingNum}`
     );
   }
   
@@ -630,7 +753,7 @@ export async function exportFinancialDataCSV(dateRange: DateRange): Promise<stri
   for (const expense of expenses || []) {
     const categoryName = expense.category?.name || 'Other';
     lines.push(
-      `Expense,${expense.expense_date},${expense.description.replace(/,/g, ';')},${categoryName},-${expense.amount.toFixed(2)},0.00,-${expense.amount.toFixed(2)},`
+      `Expense,${expense.expense_date},${expense.description.replace(/,/g, ';')},${categoryName},,-${expense.amount.toFixed(2)},0.00,-${expense.amount.toFixed(2)},`
     );
   }
   

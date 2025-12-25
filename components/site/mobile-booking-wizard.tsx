@@ -16,6 +16,11 @@ import {
   isDeliveryAvailable,
   type PricingOption,
 } from "@/lib/rentals";
+import {
+  isDateBlockedByCutoff,
+  isPastCutoffTime,
+  getCutoffMessage,
+} from "@/lib/booking-cutoff";
 import type { ProductDisplay } from "@/lib/database-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -626,6 +631,18 @@ function Step2DateTime({
     [unavailableDates]
   );
 
+  // Check if date is blocked by cutoff rule
+  const isDateBlockedByCutoffRule = useCallback(
+    (date: Date) => {
+      const dateStr = date.toISOString().split('T')[0];
+      return isDateBlockedByCutoff(dateStr);
+    },
+    []
+  );
+
+  // Check if we should show cutoff warning
+  const showCutoffWarning = isPastCutoffTime();
+
   const canContinue = eventDate && selectedOption && formData.deliveryTime && formData.pickupTime;
 
   return (
@@ -640,6 +657,29 @@ function Step2DateTime({
               Pick your date and delivery times
             </p>
           </div>
+
+          {/* Cutoff Warning - Show when tomorrow is blocked */}
+          {showCutoffWarning && (
+            <div className="mb-4 rounded-xl border border-cyan-500/20 bg-cyan-950/20 p-3 animate-in fade-in duration-300">
+              <div className="flex gap-2 text-xs">
+                <Clock className="h-4 w-4 shrink-0 text-cyan-400" />
+                <div>
+                  <p className="font-medium text-cyan-300">
+                    {getCutoffMessage().short}
+                  </p>
+                  <p className="mt-1 text-foreground/60">
+                    {getCutoffMessage().contactNudge}{" "}
+                    <a
+                      href="tel:3524453723"
+                      className="font-medium text-cyan-400 underline underline-offset-2"
+                    >
+                      352-445-3723
+                    </a>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Calendar Card - responsive container */}
           <div className={styles.nestedCard}>
@@ -698,7 +738,8 @@ function Step2DateTime({
                     date < minDate ||
                     date > maxDate ||
                     !isDeliveryAvailable(date) ||
-                    isDateUnavailable(date)
+                    isDateUnavailable(date) ||
+                    isDateBlockedByCutoffRule(date)
                   }
                   className="!p-0 [--cell-size:clamp(28px,calc((100vw-140px)/7),40px)]"
                   classNames={{

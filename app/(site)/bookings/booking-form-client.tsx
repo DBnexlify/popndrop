@@ -11,6 +11,12 @@ import {
   DEPOSIT_AMOUNT,
   type PricingOption,
 } from "@/lib/rentals";
+import {
+  isDateBlockedByCutoff,
+  isPastCutoffTime,
+  BOOKING_CUTOFF,
+  getCutoffMessage,
+} from "@/lib/booking-cutoff";
 import type { ProductDisplay } from "@/lib/database-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -466,6 +472,20 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     [unavailableDates]
   );
 
+  // Check if date is blocked by cutoff rule (tomorrow after 12 PM ET)
+  const isDateBlockedByCutoffRule = useCallback(
+    (date: Date) => {
+      const dateStr = date.toISOString().split('T')[0];
+      return isDateBlockedByCutoff(dateStr);
+    },
+    []
+  );
+
+  // Check if we should show cutoff warning (when tomorrow would be blocked)
+  const showCutoffWarning = useMemo(() => {
+    return isPastCutoffTime();
+  }, []);
+
   const goToPreviousMonth = useCallback(() => {
     const newMonth = new Date(calendarMonth);
     newMonth.setMonth(newMonth.getMonth() - 1);
@@ -811,6 +831,26 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
               </div>
               <div className="p-4 sm:p-5">
                 <div className="space-y-4">
+                  {/* Cutoff Warning - Show when tomorrow is blocked */}
+                  {showCutoffWarning && (
+                    <Callout variant="info" icon={Clock}>
+                      <div>
+                        <p className="font-medium text-cyan-300">
+                          {getCutoffMessage().short}
+                        </p>
+                        <p className="mt-1 text-foreground/70">
+                          {getCutoffMessage().contactNudge}{" "}
+                          <a
+                            href="tel:3524453723"
+                            className="font-medium text-cyan-400 underline underline-offset-2 hover:text-cyan-300"
+                          >
+                            352-445-3723
+                          </a>
+                        </p>
+                      </div>
+                    </Callout>
+                  )}
+
                   {/* Date Picker */}
                   <div className="space-y-2">
                     <Label>Event date *</Label>
@@ -875,7 +915,8 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                             date < minDate ||
                             date > maxDate ||
                             !isDeliveryAvailable(date) ||
-                            isDateUnavailable(date)
+                            isDateUnavailable(date) ||
+                            isDateBlockedByCutoffRule(date)
                           }
                           className="p-3"
                           classNames={{
@@ -898,6 +939,12 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                             <p className="flex items-center gap-1.5 text-xs text-foreground/50">
                               <AlertCircle className="h-3 w-3 shrink-0" />
                               Crossed-out dates are already booked
+                            </p>
+                          )}
+                          {showCutoffWarning && (
+                            <p className="flex items-center gap-1.5 text-xs text-amber-400/80">
+                              <Clock className="h-3 w-3 shrink-0" />
+                              {getCutoffMessage().short}
                             </p>
                           )}
                         </div>

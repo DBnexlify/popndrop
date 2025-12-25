@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { resend, FROM_EMAIL, NOTIFY_EMAIL } from '@/lib/resend';
 import { notifyNewBooking } from '@/lib/push-notifications';
 import { stripe, dollarsToCents, DEPOSIT_AMOUNT_CENTS, DEPOSIT_AMOUNT_DOLLARS } from '@/lib/stripe';
+import { validateBookingDateCutoff } from '@/lib/booking-cutoff';
 
 // ============================================================================
 // CONSTANTS
@@ -171,6 +172,23 @@ export async function POST(request: NextRequest) {
       console.error('Missing required fields:', { productSlug, eventDate, customerEmail, customerPhone, address });
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    // ========================================================================
+    // VALIDATE BOOKING CUTOFF
+    // Bookings for tomorrow must be made by 12 PM Eastern the day before
+    // ========================================================================
+    const cutoffValidation = validateBookingDateCutoff(eventDate);
+    if (!cutoffValidation.valid) {
+      console.log('Booking rejected by cutoff rule:', { eventDate, reason: cutoffValidation.reason });
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: cutoffValidation.reason || 'This date is no longer available for booking.',
+          earliestAvailable: cutoffValidation.earliestAvailable,
+        },
         { status: 400 }
       );
     }

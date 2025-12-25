@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Calendar, Phone, Mail, Check, MapPin, Clock, Copy, Share2, Facebook, Twitter, MessageCircle, Loader2 } from "lucide-react";
+import { Calendar, Phone, Mail, Check, MapPin, Clock, Copy, Share2, Facebook, Twitter, MessageCircle, Loader2, AlertTriangle, Building2 } from "lucide-react";
 import { Confetti } from "@/components/ui/confetti";
 import { AddToCalendar } from "@/components/ui/add-to-calendar";
 import { buildCustomerCalendarEvent, type CustomerCalendarData } from "@/lib/calendar";
@@ -64,7 +64,6 @@ interface SuccessContentProps {
   eventDate: string;
   pickupDate: string;
   styles: Styles;
-  // URL params passed from Stripe redirect for immediate display
   paymentTypeFromUrl?: string | null;
 }
 
@@ -75,15 +74,19 @@ interface PaymentStatus {
   balancePaid: boolean;
   balanceDue: number;
   status: string;
+  // ACH-specific fields
+  isAsyncPayment: boolean;
+  asyncPaymentPending: boolean;
+  asyncPaymentFailed: boolean;
+  asyncPaymentFailureReason: string | null;
+  paymentMethodType: string;
 }
 
 /* ---------------------------------------------------------------------------
  * Hook: Poll for payment confirmation
- * Polls the booking status until webhook has processed
+ * Handles both card (immediate) and ACH (async) payments
  * --------------------------------------------------------------------------- */
 function usePaymentStatus(bookingId: string, initialData: BookingData, paymentTypeFromUrl?: string | null) {
-  // Determine initial state from URL params or database
-  // If paymentTypeFromUrl is 'full', we know they paid in full even before webhook
   const initialPaidInFull = paymentTypeFromUrl === 'full' || initialData.balance_paid === true || Number(initialData.balance_due) === 0;
   
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>({
@@ -93,11 +96,17 @@ function usePaymentStatus(bookingId: string, initialData: BookingData, paymentTy
     balancePaid: initialData.balance_paid,
     balanceDue: initialPaidInFull ? 0 : Number(initialData.balance_due),
     status: initialData.deposit_paid ? 'confirmed' : 'pending',
+    // ACH defaults
+    isAsyncPayment: false,
+    asyncPaymentPending: false,
+    asyncPaymentFailed: false,
+    asyncPaymentFailureReason: null,
+    paymentMethodType: 'card',
   });
   
   const [isPolling, setIsPolling] = useState(!initialData.deposit_paid);
   const [pollCount, setPollCount] = useState(0);
-  const maxPolls = 15; // Max 15 polls (30 seconds total)
+  const maxPolls = 15;
 
   const checkStatus = useCallback(async () => {
     try {
@@ -106,6 +115,10 @@ function usePaymentStatus(bookingId: string, initialData: BookingData, paymentTy
       
       const data = await response.json();
       if (data.success) {
+        const isAsync = data.isAsyncPayment === true;
+        const asyncPending = isAsync && data.asyncPayment?.isPending === true;
+        const asyncFailed = isAsync && data.asyncPayment?.isFailed === true;
+        
         setPaymentStatus({
           isPaymentConfirmed: data.isPaymentConfirmed,
           isPaidInFull: data.isPaidInFull,
@@ -113,11 +126,25 @@ function usePaymentStatus(bookingId: string, initialData: BookingData, paymentTy
           balancePaid: data.booking.balancePaid,
           balanceDue: data.isPaidInFull ? 0 : Number(data.booking.balanceDue),
           status: data.booking.status,
+          // ACH status
+          isAsyncPayment: isAsync,
+          asyncPaymentPending: asyncPending,
+          asyncPaymentFailed: asyncFailed,
+          asyncPaymentFailureReason: data.asyncPayment?.failureReason || null,
+          paymentMethodType: data.booking.paymentMethodType || 'card',
         });
         
-        // Stop polling if payment is confirmed
-        if (data.isPaymentConfirmed) {
+        // Stop polling if:
+        // 1. Card payment confirmed
+        // 2. ACH payment confirmed (succeeded)
+        // 3. ACH payment failed
+        // Keep polling if ACH is pending
+        if (data.isPaymentConfirmed || asyncFailed) {
           setIsPolling(false);
+        } else if (asyncPending) {
+          // For ACH pending, we can poll less frequently or stop
+          // The webhook will update the status when it clears
+          setIsPolling(false); // Stop polling - show pending state
         }
       }
     } catch (error) {
@@ -134,58 +161,56 @@ function usePaymentStatus(bookingId: string, initialData: BookingData, paymentTy
     const timer = setTimeout(() => {
       checkStatus();
       setPollCount(prev => prev + 1);
-    }, 2000); // Poll every 2 seconds
+    }, 2000);
 
     return () => clearTimeout(timer);
   }, [isPolling, pollCount, checkStatus, maxPolls]);
 
-  // If we have paymentTypeFromUrl, trust it (Stripe redirect happened)
-  // This handles the case where webhook hasn't processed yet
   const effectivePaidInFull = paymentTypeFromUrl === 'full' || paymentStatus.isPaidInFull;
 
   return {
     ...paymentStatus,
     isPaidInFull: effectivePaidInFull,
     isPolling,
-    isConfirmed: paymentStatus.isPaymentConfirmed || paymentTypeFromUrl !== null,
+    isConfirmed: paymentStatus.isPaymentConfirmed || (paymentTypeFromUrl !== null && !paymentStatus.asyncPaymentPending),
   };
 }
 
 /* ---------------------------------------------------------------------------
  * Animated Success Checkmark
  * --------------------------------------------------------------------------- */
-function AnimatedCheckmark() {
+function AnimatedCheckmark({ variant = 'success' }: { variant?: 'success' | 'pending' | 'failed' }) {
+  const colors = {
+    success: { bg: 'from-fuchsia-500/30 via-purple-500/30 to-cyan-400/30', stroke: '#22c55e' },
+    pending: { bg: 'from-amber-500/30 via-yellow-500/30 to-orange-400/30', stroke: '#fbbf24' },
+    failed: { bg: 'from-red-500/30 via-rose-500/30 to-pink-400/30', stroke: '#ef4444' },
+  };
+  
+  const { bg } = colors[variant];
+
   return (
     <div className="relative mx-auto mb-6 flex h-24 w-24 items-center justify-center sm:h-28 sm:w-28">
-      <div className="absolute inset-0 animate-pulse rounded-full bg-gradient-to-br from-fuchsia-500/30 via-purple-500/30 to-cyan-400/30 blur-xl motion-reduce:animate-none" />
-      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-fuchsia-500/20 via-purple-500/20 to-cyan-400/20" />
+      <div className={`absolute inset-0 animate-pulse rounded-full bg-gradient-to-br ${bg} blur-xl motion-reduce:animate-none`} />
+      <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${bg.replace('/30', '/20')}`} />
       <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-background/80 backdrop-blur-sm sm:h-24 sm:w-24">
-        <svg
-          className="h-10 w-10 sm:h-12 sm:w-12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="url(#checkGradient)"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <defs>
-            <linearGradient id="checkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#d946ef" />
-              <stop offset="50%" stopColor="#a855f7" />
-              <stop offset="100%" stopColor="#22d3ee" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M4 12l5 5L20 6"
-            className="motion-reduce:[stroke-dashoffset:0]"
-            style={{
-              strokeDasharray: 24,
-              strokeDashoffset: 24,
-              animation: "check-draw 0.5s ease-out 0.3s forwards",
-            }}
-          />
-        </svg>
+        {variant === 'success' && (
+          <svg className="h-10 w-10 sm:h-12 sm:w-12" viewBox="0 0 24 24" fill="none" stroke="url(#checkGradient)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <defs>
+              <linearGradient id="checkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#d946ef" />
+                <stop offset="50%" stopColor="#a855f7" />
+                <stop offset="100%" stopColor="#22d3ee" />
+              </linearGradient>
+            </defs>
+            <path d="M4 12l5 5L20 6" style={{ strokeDasharray: 24, strokeDashoffset: 24, animation: "check-draw 0.5s ease-out 0.3s forwards" }} />
+          </svg>
+        )}
+        {variant === 'pending' && (
+          <Building2 className="h-10 w-10 text-amber-400 sm:h-12 sm:w-12" />
+        )}
+        {variant === 'failed' && (
+          <AlertTriangle className="h-10 w-10 text-red-400 sm:h-12 sm:w-12" />
+        )}
       </div>
     </div>
   );
@@ -199,6 +224,57 @@ function ProcessingIndicator() {
     <div className="flex items-center justify-center gap-2 rounded-lg bg-cyan-500/10 px-3 py-2 text-xs text-cyan-400">
       <Loader2 className="h-3 w-3 animate-spin" />
       <span>Confirming payment...</span>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * ACH Pending Banner
+ * --------------------------------------------------------------------------- */
+function ACHPendingBanner({ styles }: { styles: Styles }) {
+  return (
+    <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/20">
+          <Building2 className="h-5 w-5 text-amber-400" />
+        </div>
+        <div>
+          <h3 className="font-semibold text-amber-400">Bank Transfer Processing</h3>
+          <p className="mt-1 text-sm text-amber-300/80">
+            Your bank transfer has been initiated. It typically takes <strong>3-5 business days</strong> to complete.
+          </p>
+          <p className="mt-2 text-xs text-amber-300/60">
+            We'll email you as soon as your payment clears and your booking is confirmed. Your date is reserved while we wait.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * ACH Failed Banner
+ * --------------------------------------------------------------------------- */
+function ACHFailedBanner({ reason, styles }: { reason: string | null; styles: Styles }) {
+  return (
+    <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/20">
+          <AlertTriangle className="h-5 w-5 text-red-400" />
+        </div>
+        <div>
+          <h3 className="font-semibold text-red-400">Bank Transfer Failed</h3>
+          <p className="mt-1 text-sm text-red-300/80">
+            Unfortunately, your bank transfer couldn't be completed.
+            {reason && <span className="block mt-1 text-xs">{reason}</span>}
+          </p>
+          <Link href="/my-bookings">
+            <Button className="mt-3 bg-red-500 hover:bg-red-600 text-white" size="sm">
+              Retry Payment
+            </Button>
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
@@ -220,16 +296,9 @@ function BookingNumber({ number }: { number: string }) {
   };
 
   return (
-    <button
-      onClick={handleCopy}
-      className="group inline-flex items-center gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-sm font-mono transition-colors hover:bg-white/10"
-    >
+    <button onClick={handleCopy} className="group inline-flex items-center gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-sm font-mono transition-colors hover:bg-white/10">
       <span className="text-foreground/70">{number}</span>
-      {copied ? (
-        <Check className="h-3.5 w-3.5 text-green-400" />
-      ) : (
-        <Copy className="h-3.5 w-3.5 text-foreground/40 transition-colors group-hover:text-foreground/70" />
-      )}
+      {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5 text-foreground/40 transition-colors group-hover:text-foreground/70" />}
     </button>
   );
 }
@@ -289,14 +358,8 @@ function ShareSection({ productName, styles }: { productName: string; styles: St
   
   const handleNativeShare = async () => {
     try {
-      await navigator.share({
-        title: "Pop and Drop Party Rentals",
-        text: shareText,
-        url: shareUrl,
-      });
-    } catch (err) {
-      // User cancelled
-    }
+      await navigator.share({ title: "Pop and Drop Party Rentals", text: shareText, url: shareUrl });
+    } catch (err) { /* User cancelled */ }
   };
   
   const handleCopyLink = async () => {
@@ -320,90 +383,42 @@ function ShareSection({ productName, styles }: { productName: string; styles: St
             <Share2 className="h-6 w-6 text-fuchsia-400" />
           </div>
           <h2 className={styles.cardHeading}>Spread the fun! 🎈</h2>
-          <p className={`mt-2 ${styles.smallBody}`}>
-            Know someone planning a party? Share the bounce house love!
-          </p>
+          <p className={`mt-2 ${styles.smallBody}`}>Know someone planning a party? Share the bounce house love!</p>
         </div>
         
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           {canShare && (
-            <Button
-              onClick={handleNativeShare}
-              className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20"
-            >
-              <Share2 className="mr-2 h-4 w-4" />
-              Share
+            <Button onClick={handleNativeShare} className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20">
+              <Share2 className="mr-2 h-4 w-4" />Share
             </Button>
           )}
-          
-          <Button
-            asChild
-            variant="outline"
-            className="border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
-          >
-            <a
-              href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Facebook className="mr-2 h-4 w-4" />
-              Facebook
+          <Button asChild variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20">
+            <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}`} target="_blank" rel="noopener noreferrer">
+              <Facebook className="mr-2 h-4 w-4" />Facebook
             </a>
           </Button>
-          
-          <Button
-            asChild
-            variant="outline"
-            className="border-white/20 bg-white/5 hover:bg-white/10"
-          >
-            <a
-              href={`https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Twitter className="mr-2 h-4 w-4" />
-              X / Twitter
+          <Button asChild variant="outline" className="border-white/20 bg-white/5 hover:bg-white/10">
+            <a href={`https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`} target="_blank" rel="noopener noreferrer">
+              <Twitter className="mr-2 h-4 w-4" />X / Twitter
             </a>
           </Button>
-          
-          <Button
-            asChild
-            variant="outline"
-            className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
-          >
+          <Button asChild variant="outline" className="border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20">
             <a href={`sms:?&body=${encodedText}%20${encodedUrl}`}>
-              <MessageCircle className="mr-2 h-4 w-4" />
-              Text
+              <MessageCircle className="mr-2 h-4 w-4" />Text
             </a>
           </Button>
-          
-          <Button
-            onClick={handleCopyLink}
-            variant="outline"
-            className="border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20"
-          >
-            {copied ? (
-              <>
-                <Check className="mr-2 h-4 w-4" />
-                Copied!
-              </>
-            ) : (
-              <>
-                <Copy className="mr-2 h-4 w-4" />
-                Copy Link
-              </>
-            )}
+          <Button onClick={handleCopyLink} variant="outline" className="border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20">
+            {copied ? (<><Check className="mr-2 h-4 w-4" />Copied!</>) : (<><Copy className="mr-2 h-4 w-4" />Copy Link</>)}
           </Button>
         </div>
       </div>
-      
       <div className={styles.sectionCardInner} />
     </div>
   );
 }
 
 /* ---------------------------------------------------------------------------
- * Payment Summary Component - Now uses real-time status
+ * Payment Summary Component - Handles card and ACH states
  * --------------------------------------------------------------------------- */
 function PaymentSummary({ 
   subtotal, 
@@ -411,6 +426,8 @@ function PaymentSummary({
   isPaidInFull, 
   balanceDue,
   isPolling,
+  isAsyncPayment,
+  asyncPaymentPending,
   styles 
 }: { 
   subtotal: number;
@@ -418,6 +435,8 @@ function PaymentSummary({
   isPaidInFull: boolean;
   balanceDue: number;
   isPolling: boolean;
+  isAsyncPayment: boolean;
+  asyncPaymentPending: boolean;
   styles: Styles;
 }) {
   return (
@@ -433,7 +452,16 @@ function PaymentSummary({
         </div>
       )}
       
-      {!isPolling && isPaidInFull ? (
+      {!isPolling && asyncPaymentPending ? (
+        // ACH PENDING - Show processing state
+        <div className="mt-3 border-t border-white/5 pt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-amber-400">⏳ Payment Processing</span>
+            <span className="text-lg font-semibold text-amber-400">${isPaidInFull ? subtotal : depositAmount}</span>
+          </div>
+          <p className="mt-2 text-xs text-amber-400/70">Bank transfer in progress — typically 3-5 business days</p>
+        </div>
+      ) : !isPolling && isPaidInFull ? (
         // PAID IN FULL - Celebratory green styling
         <div className="mt-3 border-t border-white/5 pt-3">
           <div className="flex items-center justify-between">
@@ -467,20 +495,21 @@ function PaymentSummary({
  * Main Content Component
  * --------------------------------------------------------------------------- */
 export function SuccessContent({ booking, eventDate, pickupDate, styles, paymentTypeFromUrl }: SuccessContentProps) {
-  // Use the smart polling hook to get real-time payment status
   const paymentStatus = usePaymentStatus(booking.id, booking, paymentTypeFromUrl);
   
-  // Scroll to top on mount
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
   const productName = booking.product_snapshot?.name || "Bounce House Rental";
-  const customerName = booking.customers 
-    ? `${booking.customers.first_name} ${booking.customers.last_name}`
-    : "Valued Customer";
+  const customerName = booking.customers ? `${booking.customers.first_name} ${booking.customers.last_name}` : "Valued Customer";
 
-  // Build calendar event using real-time payment status
+  // Determine display state
+  const showACHPending = paymentStatus.isAsyncPayment && paymentStatus.asyncPaymentPending;
+  const showACHFailed = paymentStatus.isAsyncPayment && paymentStatus.asyncPaymentFailed;
+  const showConfetti = !showACHPending && !showACHFailed && paymentStatus.isConfirmed;
+
+  // Build calendar event
   const calendarData: CustomerCalendarData = {
     productName,
     bookingNumber: booking.booking_number,
@@ -494,22 +523,34 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles, payment
     balanceDue: paymentStatus.isPaidInFull ? 0 : paymentStatus.balanceDue,
     isPaidInFull: paymentStatus.isPaidInFull,
   };
-  
   const calendarEvent = buildCustomerCalendarEvent(calendarData);
+
+  // Determine header variant
+  const headerVariant = showACHFailed ? 'failed' : showACHPending ? 'pending' : 'success';
+  const headerTitle = showACHFailed 
+    ? 'Payment Failed' 
+    : showACHPending 
+    ? 'Payment Processing' 
+    : "You're All Set!";
+  const headerSubtitle = showACHFailed
+    ? 'Please retry your payment'
+    : showACHPending
+    ? `Your bank transfer is being processed, ${booking.customers?.first_name || 'friend'}!`
+    : `Your rental is confirmed. Get ready for an amazing party, ${booking.customers?.first_name || 'friend'}!`;
 
   return (
     <main className="mx-auto max-w-2xl px-4 pb-28 pt-6 sm:px-6 sm:pb-12 sm:pt-10">
-      <Confetti />
+      {showConfetti && <Confetti />}
+
+      {/* ACH Status Banners */}
+      {showACHPending && <ACHPendingBanner styles={styles} />}
+      {showACHFailed && <ACHFailedBanner reason={paymentStatus.asyncPaymentFailureReason} styles={styles} />}
 
       {/* Success Header */}
       <div className="text-center">
-        <AnimatedCheckmark />
-
-        <h1 className={styles.pageTitle}>You&apos;re All Set!</h1>
-        <p className={`mx-auto mt-3 max-w-md ${styles.bodyText}`}>
-          Your rental is confirmed. Get ready for an amazing party, {booking.customers?.first_name || "friend"}!
-        </p>
-        
+        <AnimatedCheckmark variant={headerVariant} />
+        <h1 className={styles.pageTitle}>{headerTitle}</h1>
+        <p className={`mx-auto mt-3 max-w-md ${styles.bodyText}`}>{headerSubtitle}</p>
         <div className="mt-4 flex items-center justify-center gap-2">
           <span className={styles.helperText}>Booking</span>
           <BookingNumber number={booking.booking_number} />
@@ -525,51 +566,24 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles, payment
           </p>
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <DetailRow
-              icon={<Calendar className="h-4 w-4 text-fuchsia-400 sm:h-5 sm:w-5" />}
-              iconStyle={styles.iconFuchsia}
-              label="Event Date"
-              value={eventDate}
-              labelClass={styles.label}
-              valueClass="text-sm sm:text-base"
-            />
-            <DetailRow
-              icon={<Clock className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />}
-              iconStyle={styles.iconCyan}
-              label="Delivery Time"
-              value={getDeliveryWindowLabel(booking.delivery_window)}
-              labelClass={styles.label}
-              valueClass="text-sm sm:text-base"
-            />
-            <DetailRow
-              icon={<MapPin className="h-4 w-4 text-purple-400 sm:h-5 sm:w-5" />}
-              iconStyle={styles.iconPurple}
-              label="Delivery Address"
-              value={`${booking.delivery_address}, ${booking.delivery_city}`}
-              labelClass={styles.label}
-              valueClass="text-sm sm:text-base"
-            />
-            <DetailRow
-              icon={<Calendar className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />}
-              iconStyle={styles.iconCyan}
-              label="Pickup"
-              value={`${pickupDate}, ${getPickupWindowLabel(booking.pickup_window)}`}
-              labelClass={styles.label}
-              valueClass="text-sm sm:text-base"
-            />
+            <DetailRow icon={<Calendar className="h-4 w-4 text-fuchsia-400 sm:h-5 sm:w-5" />} iconStyle={styles.iconFuchsia} label="Event Date" value={eventDate} labelClass={styles.label} valueClass="text-sm sm:text-base" />
+            <DetailRow icon={<Clock className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />} iconStyle={styles.iconCyan} label="Delivery Time" value={getDeliveryWindowLabel(booking.delivery_window)} labelClass={styles.label} valueClass="text-sm sm:text-base" />
+            <DetailRow icon={<MapPin className="h-4 w-4 text-purple-400 sm:h-5 sm:w-5" />} iconStyle={styles.iconPurple} label="Delivery Address" value={`${booking.delivery_address}, ${booking.delivery_city}`} labelClass={styles.label} valueClass="text-sm sm:text-base" />
+            <DetailRow icon={<Calendar className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />} iconStyle={styles.iconCyan} label="Pickup" value={`${pickupDate}, ${getPickupWindowLabel(booking.pickup_window)}`} labelClass={styles.label} valueClass="text-sm sm:text-base" />
           </div>
 
-          {/* Payment Summary - Uses real-time status */}
+          {/* Payment Summary */}
           <PaymentSummary
             subtotal={Number(booking.subtotal)}
             depositAmount={Number(booking.deposit_amount)}
             isPaidInFull={paymentStatus.isPaidInFull}
             balanceDue={paymentStatus.balanceDue}
             isPolling={paymentStatus.isPolling}
+            isAsyncPayment={paymentStatus.isAsyncPayment}
+            asyncPaymentPending={paymentStatus.asyncPaymentPending}
             styles={styles}
           />
         </div>
-
         <div className={styles.sectionCardInner} />
       </div>
 
@@ -577,35 +591,39 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles, payment
       <div className={`mt-6 ${styles.sectionCard}`}>
         <div className="p-5 sm:p-6 lg:p-8">
           <h2 className={styles.cardHeading}>What happens next?</h2>
-
           <ul className="mt-5 space-y-4">
-            <NextStep
-              icon={<Mail className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />}
-              iconStyle={styles.iconCyan}
-              smallBody={styles.smallBody}
-            >
-              Check your email for a confirmation with all the details
-            </NextStep>
-
-            <NextStep
-              icon={<Phone className="h-4 w-4 text-fuchsia-400 sm:h-5 sm:w-5" />}
-              iconStyle={styles.iconFuchsia}
-              smallBody={styles.smallBody}
-            >
+            {showACHPending ? (
+              <>
+                <NextStep icon={<Building2 className="h-4 w-4 text-amber-400 sm:h-5 sm:w-5" />} iconStyle="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/10" smallBody={styles.smallBody}>
+                  Your bank transfer is being processed (3-5 business days)
+                </NextStep>
+                <NextStep icon={<Mail className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />} iconStyle={styles.iconCyan} smallBody={styles.smallBody}>
+                  We&apos;ll email you as soon as your payment clears
+                </NextStep>
+              </>
+            ) : (
+              <NextStep icon={<Mail className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />} iconStyle={styles.iconCyan} smallBody={styles.smallBody}>
+                Check your email for a confirmation with all the details
+              </NextStep>
+            )}
+            <NextStep icon={<Phone className="h-4 w-4 text-fuchsia-400 sm:h-5 sm:w-5" />} iconStyle={styles.iconFuchsia} smallBody={styles.smallBody}>
               We&apos;ll text you the morning of delivery to confirm our arrival window
             </NextStep>
-
-            <NextStep
-              icon={<Check className="h-4 w-4 text-purple-400 sm:h-5 sm:w-5" />}
-              iconStyle={styles.iconPurple}
-              smallBody={styles.smallBody}
-            >
+            <NextStep icon={<Check className="h-4 w-4 text-purple-400 sm:h-5 sm:w-5" />} iconStyle={styles.iconPurple} smallBody={styles.smallBody}>
               Have the setup area clear and a power outlet within 50 feet ready
             </NextStep>
           </ul>
 
-          {/* Payment status callout - dynamic based on payment */}
-          {paymentStatus.isPaidInFull ? (
+          {/* Payment status callout */}
+          {showACHPending ? (
+            <div className={`mt-6 p-4 sm:p-5 ${styles.nestedCard}`} style={{ borderColor: 'rgba(251, 191, 36, 0.2)', backgroundColor: 'rgba(251, 191, 36, 0.05)' }}>
+              <p className={styles.smallBody}>
+                <strong className="text-amber-400">⏳ Date Reserved:</strong> Your rental date is held while we wait for your bank transfer to complete. 
+                No action needed — we&apos;ll email you when confirmed!
+              </p>
+              <div className={styles.nestedCardInner} />
+            </div>
+          ) : paymentStatus.isPaidInFull ? (
             <div className={`mt-6 p-4 sm:p-5 ${styles.nestedCard}`} style={{ borderColor: 'rgba(34, 197, 94, 0.2)', backgroundColor: 'rgba(34, 197, 94, 0.05)' }}>
               <p className={styles.smallBody}>
                 <strong className="text-green-400">✓ You&apos;re all set!</strong> Your rental is fully paid. 
@@ -616,14 +634,12 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles, payment
           ) : (
             <div className={`mt-6 p-4 sm:p-5 ${styles.nestedCard}`}>
               <p className={styles.smallBody}>
-                <strong className="text-foreground">Payment on delivery:</strong> We accept cash, card,
-                Venmo, or Zelle for the remaining ${paymentStatus.balanceDue} balance.
+                <strong className="text-foreground">Payment on delivery:</strong> We accept cash, card, Venmo, or Zelle for the remaining ${paymentStatus.balanceDue} balance.
               </p>
               <div className={styles.nestedCardInner} />
             </div>
           )}
         </div>
-
         <div className={styles.sectionCardInner} />
       </div>
 
@@ -632,7 +648,6 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles, payment
         <Button asChild className={styles.primaryButton}>
           <Link href="/">Back to Home</Link>
         </Button>
-
         <AddToCalendar event={calendarEvent} />
       </div>
 
@@ -642,26 +657,20 @@ export function SuccessContent({ booking, eventDate, pickupDate, styles, payment
           Questions or need to make changes? Reference booking <strong>{booking.booking_number}</strong>
         </p>
         <div className="mt-3 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-6">
-          <a
-            href="tel:3524453723"
-            className="flex items-center gap-2 text-sm text-cyan-400 transition-colors hover:text-cyan-300"
-          >
-            <Phone className="h-4 w-4" />
-            352-445-3723
+          <a href="tel:3524453723" className="flex items-center gap-2 text-sm text-cyan-400 transition-colors hover:text-cyan-300">
+            <Phone className="h-4 w-4" />352-445-3723
           </a>
-          <a
-            href="mailto:bookings@popndroprentals.com"
-            className="flex items-center gap-2 text-sm text-cyan-400 transition-colors hover:text-cyan-300"
-          >
-            <Mail className="h-4 w-4" />
-            bookings@popndroprentals.com
+          <a href="mailto:bookings@popndroprentals.com" className="flex items-center gap-2 text-sm text-cyan-400 transition-colors hover:text-cyan-300">
+            <Mail className="h-4 w-4" />bookings@popndroprentals.com
           </a>
         </div>
         <div className={styles.nestedCardInner} />
       </div>
 
-      {/* Share Section */}
-      <ShareSection productName={productName} styles={styles} />
+      {/* Share Section - Only show for confirmed bookings */}
+      {!showACHPending && !showACHFailed && (
+        <ShareSection productName={productName} styles={styles} />
+      )}
 
       {/* Footer */}
       <p className={`mt-8 text-center ${styles.helperText}`}>

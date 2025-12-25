@@ -4,12 +4,13 @@ import { useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Home, PartyPopper, CalendarCheck, Phone } from "lucide-react";
+import { Home, PartyPopper, CalendarCheck, Phone, ClipboardList } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", Icon: Home },
   { href: "/rentals", label: "Rentals", Icon: PartyPopper },
   { href: "/bookings", label: "Book", Icon: CalendarCheck },
+  { href: "/my-bookings", label: "Bookings", Icon: ClipboardList },
   { href: "/contact", label: "Contact", Icon: Phone },
 ] as const;
 
@@ -137,7 +138,7 @@ export function MobileBottomNav() {
             "border-white/10"
           )}
         >
-          <div className="grid grid-cols-4 px-1.5 py-1.5" role="menubar">
+          <div className="grid grid-cols-5 px-1 py-1.5" role="menubar">
             {NAV_ITEMS.map(({ href, label, Icon }) => {
               const isActive = pathname === href;
 
@@ -149,7 +150,7 @@ export function MobileBottomNav() {
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
                     "relative flex flex-col items-center justify-center rounded-xl",
-                    "px-1 py-2 transition-all duration-300 ease-out",
+                    "px-0.5 py-2 transition-all duration-300 ease-out",
                     "group-data-[collapsed=true]/nav:py-1.5",
                     isActive ? "bg-muted/70" : "active:bg-muted/40"
                   )}
@@ -164,7 +165,7 @@ export function MobileBottomNav() {
                   />
                   <span
                     className={cn(
-                      "mt-1 text-[11px] leading-none",
+                      "mt-1 text-[10px] leading-none",
                       "transition-all duration-300 ease-out origin-top",
                       "group-data-[collapsed=true]/nav:mt-0",
                       "group-data-[collapsed=true]/nav:h-0",

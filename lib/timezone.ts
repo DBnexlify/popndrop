@@ -303,6 +303,107 @@ export function isTomorrow(dateStr: string): boolean {
   return dateStr === tomorrowFormatter.format(tomorrow);
 }
 
+/**
+ * Calculate calendar days until an event date (in Eastern timezone)
+ * 
+ * IMPORTANT: This compares calendar dates, NOT timestamps!
+ * - Dec 24 to Dec 25 = 1 day, regardless of current time
+ * - Dec 24 to Dec 24 = 0 days (today)
+ * - Dec 24 to Dec 23 = -1 days (past)
+ * 
+ * @param eventDateStr - Date string in YYYY-MM-DD format
+ * @returns Number of calendar days until the event (negative if past)
+ * 
+ * @example getCalendarDaysUntil('2024-12-25') // On Dec 24 => 1
+ * @example getCalendarDaysUntil('2024-12-24') // On Dec 24 => 0
+ * @example getCalendarDaysUntil('2024-12-23') // On Dec 24 => -1
+ */
+export function getCalendarDaysUntil(eventDateStr: string): number {
+  // Get today's date in Eastern timezone as YYYY-MM-DD
+  const todayStr = getCurrentDateET();
+  
+  // Parse both dates as UTC midnight to compare pure calendar days
+  // This eliminates any timezone shifting issues
+  const todayParts = todayStr.split('-').map(Number);
+  const eventParts = eventDateStr.split('-').map(Number);
+  
+  const todayUTC = Date.UTC(todayParts[0], todayParts[1] - 1, todayParts[2]);
+  const eventUTC = Date.UTC(eventParts[0], eventParts[1] - 1, eventParts[2]);
+  
+  // Calculate difference in days (86400000 = ms per day)
+  return Math.round((eventUTC - todayUTC) / 86400000);
+}
+
+/**
+ * Check if a date is in the past (before today in Eastern timezone)
+ * @param eventDateStr - Date string in YYYY-MM-DD format
+ */
+export function isPastDate(eventDateStr: string): boolean {
+  return getCalendarDaysUntil(eventDateStr) < 0;
+}
+
+/**
+ * Get a human-readable "days until" label for an event
+ * @param eventDateStr - Date string in YYYY-MM-DD format
+ * @returns Object with label, short label, and days count
+ * 
+ * @example getDaysUntilLabel('2024-12-25') // On Dec 24
+ * // => { days: 1, label: "Tomorrow", shortLabel: "Tomorrow", isToday: false, isTomorrow: true, isPast: false }
+ */
+export function getDaysUntilLabel(eventDateStr: string): {
+  days: number;
+  label: string;
+  shortLabel: string;
+  isToday: boolean;
+  isTomorrow: boolean;
+  isPast: boolean;
+} {
+  const days = getCalendarDaysUntil(eventDateStr);
+  
+  if (days < 0) {
+    const absDays = Math.abs(days);
+    return {
+      days,
+      label: absDays === 1 ? 'Yesterday' : `${absDays} days ago`,
+      shortLabel: absDays === 1 ? 'Yesterday' : `${absDays}d ago`,
+      isToday: false,
+      isTomorrow: false,
+      isPast: true,
+    };
+  }
+  
+  if (days === 0) {
+    return {
+      days,
+      label: 'Today',
+      shortLabel: 'Today!',
+      isToday: true,
+      isTomorrow: false,
+      isPast: false,
+    };
+  }
+  
+  if (days === 1) {
+    return {
+      days,
+      label: 'Tomorrow',
+      shortLabel: 'Tomorrow',
+      isToday: false,
+      isTomorrow: true,
+      isPast: false,
+    };
+  }
+  
+  return {
+    days,
+    label: `${days} days`,
+    shortLabel: `${days} days`,
+    isToday: false,
+    isTomorrow: false,
+    isPast: false,
+  };
+}
+
 // =============================================================================
 // DELIVERY/PICKUP WINDOW TIME LABELS
 // Shows actual times (e.g., "8–11 AM") instead of abstract labels ("Morning")

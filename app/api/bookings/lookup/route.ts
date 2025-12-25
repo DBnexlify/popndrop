@@ -43,11 +43,18 @@ export async function GET(request: NextRequest) {
         success: true,
         customer: null,
         bookings: [],
+        upcoming: [],
+        past: [],
+        stats: {
+          total: 0,
+          upcoming: 0,
+          past: 0,
+        },
         message: "No bookings found for this email",
       });
     }
 
-    // Get all bookings for this customer
+    // Get all bookings for this customer with complete data for timeline
     const { data: bookings, error: bookingsError } = await supabase
       .from("bookings")
       .select(`
@@ -62,15 +69,27 @@ export async function GET(request: NextRequest) {
         pickup_window,
         delivery_address,
         delivery_city,
+        delivery_zip,
         subtotal,
         deposit_amount,
         balance_due,
         deposit_paid,
+        deposit_paid_at,
         balance_paid,
+        balance_paid_at,
         customer_notes,
         product_snapshot,
         created_at,
-        confirmed_at
+        confirmed_at,
+        delivered_at,
+        picked_up_at,
+        completed_at,
+        cancelled_at,
+        cancellation_reason,
+        cancelled_by,
+        refund_amount,
+        refund_status,
+        refund_processed_at
       `)
       .eq("customer_id", customer.id)
       .order("event_date", { ascending: false });
@@ -88,11 +107,11 @@ export async function GET(request: NextRequest) {
     const today = now.toISOString().split("T")[0];
 
     const upcoming = bookings?.filter(
-      (b) => b.event_date >= today && b.status !== "cancelled"
+      (b) => b.event_date >= today && b.status !== "cancelled" && b.status !== "completed"
     ) || [];
 
     const past = bookings?.filter(
-      (b) => b.event_date < today || b.status === "cancelled"
+      (b) => b.event_date < today || b.status === "cancelled" || b.status === "completed"
     ) || [];
 
     return NextResponse.json({

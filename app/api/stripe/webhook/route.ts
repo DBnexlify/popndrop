@@ -1,7 +1,12 @@
 // =============================================================================
-// STRIPE WEBHOOK HANDLER
+// STRIPE WEBHOOK HANDLER - COMPREHENSIVE PAYMENT PROCESSING
 // app/api/stripe/webhook/route.ts
-// Receives payment confirmations from Stripe and updates booking status
+// 
+// Handles ALL payment events including:
+// - Card payments (immediate)
+// - ACH/Bank transfers (async - 3-5 business days)
+// - Refunds (full and partial)
+// - Disputes/Chargebacks
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -22,212 +27,291 @@ export async function POST(request: NextRequest) {
   let event: Stripe.Event;
 
   try {
-    // Get raw body as text (required for signature verification)
     const body = await request.text();
-    
-    // Get Stripe signature from headers
     const headersList = await headers();
     const signature = headersList.get('stripe-signature');
 
     if (!signature) {
       console.error('❌ [WEBHOOK] Missing stripe-signature header');
-      return NextResponse.json(
-        { error: 'Missing stripe-signature header' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Missing stripe-signature header' }, { status: 400 });
     }
 
-    // Verify webhook secret is configured
     if (!process.env.STRIPE_WEBHOOK_SECRET) {
       console.error('❌ [WEBHOOK] STRIPE_WEBHOOK_SECRET not configured');
-      return NextResponse.json(
-        { error: 'Webhook secret not configured' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 });
     }
 
-    // Verify the webhook signature
     try {
-      event = stripe.webhooks.constructEvent(
-        body,
-        signature,
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
+      event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       console.error('❌ [WEBHOOK] Signature verification failed:', message);
-      return NextResponse.json(
-        { error: `Webhook signature verification failed: ${message}` },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: `Signature verification failed: ${message}` }, { status: 400 });
     }
 
     console.log(`📨 [WEBHOOK] Received: ${event.type} | ID: ${event.id}`);
 
     // ==========================================================================
-    // HANDLE EVENTS
+    // IDEMPOTENCY CHECK - Don't process the same event twice
+    // ==========================================================================
+    const supabase = createServerClient();
+    const { data: alreadyProcessed } = await supabase
+      .rpc('is_stripe_event_processed', { p_event_id: event.id });
+    
+    if (alreadyProcessed) {
+      console.log(`ℹ️ [WEBHOOK] Event ${event.id} already processed - skipping (idempotent)`);
+      return NextResponse.json({ received: true, skipped: true });
+    }
+
+    // ==========================================================================
+    // HANDLE ALL WEBHOOK EVENTS
     // ==========================================================================
 
     switch (event.type) {
+      // ========================================================================
+      // CHECKOUT SESSION EVENTS
+      // ========================================================================
+      
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        console.log(`💳 [WEBHOOK] checkout.session.completed | Session: ${session.id} | Booking: ${session.metadata?.booking_id}`);
+        console.log(`💳 [WEBHOOK] checkout.session.completed | Session: ${session.id}`);
         await handleCheckoutCompleted(session, event.id);
+        break;
+      }
+
+      case 'checkout.session.async_payment_succeeded': {
+        // CRITICAL FOR ACH - This fires when bank transfer clears (3-5 days later)
+        const session = event.data.object as Stripe.Checkout.Session;
+        console.log(`✅ [WEBHOOK] checkout.session.async_payment_succeeded | Session: ${session.id}`);
+        await handleAsyncPaymentSucceeded(session, event.id);
+        break;
+      }
+
+      case 'checkout.session.async_payment_failed': {
+        // CRITICAL FOR ACH - This fires when bank transfer fails
+        const session = event.data.object as Stripe.Checkout.Session;
+        console.log(`❌ [WEBHOOK] checkout.session.async_payment_failed | Session: ${session.id}`);
+        await handleAsyncPaymentFailed(session, event.id);
         break;
       }
 
       case 'checkout.session.expired': {
         const session = event.data.object as Stripe.Checkout.Session;
-        console.log(`⏰ [WEBHOOK] checkout.session.expired | Session: ${session.id} | Booking: ${session.metadata?.booking_id}`);
-        await handleCheckoutExpired(session);
+        console.log(`⏰ [WEBHOOK] checkout.session.expired | Session: ${session.id}`);
+        await handleCheckoutExpired(session, event.id);
         break;
       }
+
+      // ========================================================================
+      // PAYMENT INTENT EVENTS
+      // ========================================================================
 
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         console.log(`✅ [WEBHOOK] payment_intent.succeeded | PI: ${paymentIntent.id}`);
-        // We handle this via checkout.session.completed, but log for debugging
+        await handlePaymentIntentSucceeded(paymentIntent, event.id);
         break;
       }
 
       case 'payment_intent.payment_failed': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        console.log(`❌ [WEBHOOK] payment_intent.payment_failed | PI: ${paymentIntent.id} | Error: ${paymentIntent.last_payment_error?.message}`);
+        console.log(`❌ [WEBHOOK] payment_intent.payment_failed | PI: ${paymentIntent.id}`);
+        await handlePaymentIntentFailed(paymentIntent, event.id);
         break;
       }
 
+      // ========================================================================
+      // CHARGE EVENTS
+      // ========================================================================
+
       case 'charge.refunded': {
         const charge = event.data.object as Stripe.Charge;
-        console.log(`💸 [WEBHOOK] charge.refunded | Charge: ${charge.id} | Amount Refunded: ${(charge.amount_refunded || 0) / 100}`);
-        await handleChargeRefunded(charge);
+        console.log(`💸 [WEBHOOK] charge.refunded | Charge: ${charge.id}`);
+        await handleChargeRefunded(charge, event.id);
+        break;
+      }
+
+      case 'charge.updated': {
+        const charge = event.data.object as Stripe.Charge;
+        console.log(`🔄 [WEBHOOK] charge.updated | Charge: ${charge.id}`);
+        await handleChargeUpdated(charge, event.id);
         break;
       }
 
       case 'charge.dispute.created': {
         const dispute = event.data.object as Stripe.Dispute;
-        console.log(`⚠️ [WEBHOOK] charge.dispute.created | Dispute: ${dispute.id} | Amount: ${dispute.amount / 100}`);
-        await handleDisputeCreated(dispute);
+        console.log(`⚠️ [WEBHOOK] charge.dispute.created | Dispute: ${dispute.id}`);
+        await handleDisputeCreated(dispute, event.id);
         break;
       }
 
+      // ========================================================================
+      // REFUND EVENTS
+      // ========================================================================
+
+      case 'refund.created': {
+        const refund = event.data.object as Stripe.Refund;
+        console.log(`💰 [WEBHOOK] refund.created | Refund: ${refund.id}`);
+        await handleRefundCreated(refund, event.id);
+        break;
+      }
+
+      case 'refund.updated': {
+        const refund = event.data.object as Stripe.Refund;
+        console.log(`🔄 [WEBHOOK] refund.updated | Refund: ${refund.id}`);
+        await handleRefundUpdated(refund, event.id);
+        break;
+      }
+
+      // ========================================================================
+      // UNHANDLED EVENTS
+      // ========================================================================
+
       default:
-        console.log(`ℹ️ [WEBHOOK] Unhandled event: ${event.type}`);
+        console.log(`ℹ️ [WEBHOOK] Unhandled event type: ${event.type}`);
     }
+
+    // Record that we processed this event
+    await supabase.rpc('record_stripe_event', {
+      p_event_id: event.id,
+      p_event_type: event.type,
+      p_payload: { processed_at: new Date().toISOString() }
+    });
 
     const duration = Date.now() - startTime;
     console.log(`✅ [WEBHOOK] Processed ${event.type} in ${duration}ms`);
 
-    // Always return 200 to acknowledge receipt
     return NextResponse.json({ received: true });
 
   } catch (error) {
     console.error('❌ [WEBHOOK] Handler error:', error);
-    return NextResponse.json(
-      { error: 'Webhook handler failed' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
   }
 }
 
 // =============================================================================
-// CHECKOUT COMPLETED - Customer successfully paid!
+// CHECKOUT COMPLETED
+// Handles both immediate (card) and async (ACH) payments
 // =============================================================================
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId: string) {
   const bookingId = session.metadata?.booking_id;
   const paymentType = session.metadata?.payment_type || 'deposit';
   const customerId = session.metadata?.customer_id;
-  const promoCodeId = session.metadata?.promo_code_id || null;
-  const promoDiscount = parseFloat(session.metadata?.promo_discount || '0');
-  const originalPrice = parseFloat(session.metadata?.original_price || '0');
-  const finalPrice = parseFloat(session.metadata?.final_price || '0');
   
   if (!bookingId) {
     console.error('❌ [WEBHOOK] No booking_id in session metadata:', session.id);
     return;
   }
 
-  console.log(`🔄 [WEBHOOK] Processing payment for booking ${bookingId} | Type: ${paymentType} | Amount: $${(session.amount_total || 0) / 100}`);
-
   const supabase = createServerClient();
 
-  // ==========================================================================
-  // IDEMPOTENCY CHECK - Don't process the same payment twice
-  // ==========================================================================
+  // Check if this is an async payment (ACH/bank transfer)
+  const isAsyncPayment = session.payment_status === 'unpaid' || 
+                         session.payment_status === 'no_payment_required' ||
+                         (session.payment_method_types?.includes('us_bank_account') && 
+                          session.payment_status !== 'paid');
+
+  // For async payments, payment_status will be 'unpaid' until the bank transfer clears
+  // We need to handle this differently than card payments
+  
+  if (session.payment_status === 'paid') {
+    // IMMEDIATE PAYMENT (Card) - Process normally
+    console.log(`💳 [WEBHOOK] Immediate payment confirmed for booking ${bookingId}`);
+    await processSuccessfulPayment(session, eventId, bookingId, paymentType, customerId);
+  } else if (session.payment_status === 'unpaid' && session.payment_method_types?.includes('us_bank_account')) {
+    // ACH PAYMENT - Mark as pending, don't confirm yet
+    console.log(`🏦 [WEBHOOK] ACH payment initiated for booking ${bookingId} - awaiting bank transfer`);
+    await processAsyncPaymentInitiated(session, eventId, bookingId, paymentType, customerId);
+  } else {
+    // Unknown state - log for investigation
+    console.log(`⚠️ [WEBHOOK] Unexpected payment_status: ${session.payment_status} for booking ${bookingId}`);
+  }
+}
+
+// =============================================================================
+// PROCESS SUCCESSFUL PAYMENT (Card or ACH after clearing)
+// =============================================================================
+
+async function processSuccessfulPayment(
+  session: Stripe.Checkout.Session,
+  eventId: string,
+  bookingId: string,
+  paymentType: string,
+  customerId: string | undefined
+) {
+  const supabase = createServerClient();
+  const promoCodeId = session.metadata?.promo_code_id || null;
+  const promoDiscount = parseFloat(session.metadata?.promo_discount || '0');
+  const originalPrice = parseFloat(session.metadata?.original_price || '0');
+  const finalPrice = parseFloat(session.metadata?.final_price || '0');
+
+  // Idempotency check
   const { data: existingPayment } = await supabase
     .from('payments')
     .select('id')
     .eq('stripe_checkout_session_id', session.id)
+    .eq('status', 'succeeded')
     .single();
 
   if (existingPayment) {
-    console.log(`ℹ️ [WEBHOOK] Payment already processed for session ${session.id} - skipping (idempotent)`);
+    console.log(`ℹ️ [WEBHOOK] Payment already processed for session ${session.id}`);
     return;
   }
 
-  // Also check if booking is already confirmed (double-safety)
-  const { data: bookingCheck } = await supabase
-    .from('bookings')
-    .select('status, stripe_payment_intent_id')
-    .eq('id', bookingId)
-    .single();
-
-  if (bookingCheck?.status === 'confirmed' && bookingCheck?.stripe_payment_intent_id === session.payment_intent) {
-    console.log(`ℹ️ [WEBHOOK] Booking ${bookingId} already confirmed with this payment - skipping (idempotent)`);
-    return;
-  }
-
-  // ==========================================================================
-  // FETCH STRIPE PAYMENT DETAILS (for receipt URL, card info, ACTUAL FEE)
-  // ==========================================================================
+  // Fetch payment details from Stripe
   let stripeReceiptUrl: string | null = null;
   let cardLast4: string | null = null;
   let cardBrand: string | null = null;
+  let bankName: string | null = null;
+  let bankLast4: string | null = null;
   let actualStripeFee: number | null = null;
+  let paymentMethodType = 'card';
   
   if (session.payment_intent && typeof session.payment_intent === 'string') {
     try {
       const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent, {
-        expand: ['latest_charge.balance_transaction'],
+        expand: ['latest_charge.balance_transaction', 'payment_method'],
       });
       
       const charge = paymentIntent.latest_charge as Stripe.Charge | null;
       if (charge) {
         stripeReceiptUrl = charge.receipt_url || null;
+        
+        // Get payment method details
         if (charge.payment_method_details?.card) {
           cardLast4 = charge.payment_method_details.card.last4 || null;
           cardBrand = charge.payment_method_details.card.brand || null;
+          paymentMethodType = 'card';
+        } else if (charge.payment_method_details?.us_bank_account) {
+          bankName = charge.payment_method_details.us_bank_account.bank_name || null;
+          bankLast4 = charge.payment_method_details.us_bank_account.last4 || null;
+          paymentMethodType = 'us_bank_account';
         }
         
-        // Get ACTUAL Stripe fee from balance_transaction
+        // Get actual Stripe fee
         const balanceTx = charge.balance_transaction as Stripe.BalanceTransaction | null;
         if (balanceTx && typeof balanceTx === 'object') {
-          actualStripeFee = balanceTx.fee / 100; // Convert cents to dollars
-          console.log(`💰 [WEBHOOK] Actual Stripe fee: ${actualStripeFee.toFixed(2)}`);
+          actualStripeFee = balanceTx.fee / 100;
+          console.log(`💰 [WEBHOOK] Actual Stripe fee: $${actualStripeFee.toFixed(2)}`);
         }
       }
-      console.log(`✅ [WEBHOOK] Fetched payment details | Card: ${cardBrand} ****${cardLast4}`);
     } catch (stripeErr) {
       console.log('ℹ️ [WEBHOOK] Could not fetch payment details:', stripeErr);
     }
   }
 
   const now = new Date().toISOString();
-  const amountPaid = (session.amount_total || 0) / 100; // Convert cents to dollars
+  const amountPaid = (session.amount_total || 0) / 100;
   const isFullPayment = paymentType === 'full';
 
-  // ==========================================================================
-  // 1. GET BOOKING WITH ALL DETAILS
-  // ==========================================================================
+  // Get booking with all details
   const { data: booking, error: fetchError } = await supabase
     .from('bookings')
     .select(`
       *,
       customer:customers (*),
-      unit:units (
-        *,
-        product:products (*)
-      )
+      unit:units (*, product:products (*))
     `)
     .eq('id', bookingId)
     .single();
@@ -237,27 +321,25 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId
     return;
   }
 
-  console.log(`📋 [WEBHOOK] Booking found: ${booking.booking_number} | Current status: ${booking.status}`);
+  console.log(`📋 [WEBHOOK] Booking found: ${booking.booking_number} | Status: ${booking.status}`);
 
-  // ==========================================================================
-  // 2. UPDATE BOOKING STATUS TO CONFIRMED
-  // ==========================================================================
+  // Update booking status
   const bookingUpdate: Record<string, unknown> = {
     status: 'confirmed',
     deposit_paid: true,
     deposit_paid_at: now,
     confirmed_at: now,
     stripe_payment_intent_id: session.payment_intent as string || null,
+    payment_method_type: paymentMethodType,
+    is_async_payment: paymentMethodType === 'us_bank_account',
+    async_payment_status: paymentMethodType === 'us_bank_account' ? 'succeeded' : null,
+    async_payment_completed_at: paymentMethodType === 'us_bank_account' ? now : null,
   };
 
-  // If full payment, mark balance as paid too
-  // NOTE: balance_due stays at calculated value due to valid_balance constraint
-  // We use balance_paid = true to indicate full payment was received
   if (isFullPayment) {
     bookingUpdate.balance_paid = true;
     bookingUpdate.balance_paid_at = now;
-    bookingUpdate.balance_payment_method = 'stripe';
-    console.log(`💰 [WEBHOOK] Full payment recorded - balance_paid = true`);
+    bookingUpdate.balance_payment_method = paymentMethodType;
   }
 
   const { error: bookingError } = await supabase
@@ -267,14 +349,11 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId
 
   if (bookingError) {
     console.error('❌ [WEBHOOK] Error updating booking:', bookingError);
-    // Don't return - try to continue with other operations
   } else {
-    console.log(`✅ [WEBHOOK] Booking ${booking.booking_number} status updated to CONFIRMED`);
+    console.log(`✅ [WEBHOOK] Booking ${booking.booking_number} confirmed`);
   }
 
-  // ==========================================================================
-  // 3. CREATE PAYMENT RECORD (with actual Stripe fee)
-  // ==========================================================================
+  // Create payment record
   const { error: paymentError } = await supabase
     .from('payments')
     .insert({
@@ -282,66 +361,54 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId
       payment_type: isFullPayment ? 'full' : 'deposit',
       amount: amountPaid,
       status: 'succeeded',
-      payment_method: 'card',
+      payment_method: paymentMethodType,
+      payment_method_type: paymentMethodType,
       stripe_payment_intent_id: session.payment_intent as string || null,
       stripe_checkout_session_id: session.id,
       card_brand: cardBrand,
       card_last_four: cardLast4,
-      stripe_fee: actualStripeFee, // Actual fee from Stripe, not estimated!
+      bank_name: bankName,
+      bank_last_four: bankLast4,
+      stripe_fee: actualStripeFee,
+      is_async: paymentMethodType === 'us_bank_account',
+      async_status: 'succeeded',
+      async_completed_at: paymentMethodType === 'us_bank_account' ? now : null,
     });
 
   if (paymentError) {
     console.error('❌ [WEBHOOK] Error creating payment record:', paymentError);
   } else {
-    console.log(`✅ [WEBHOOK] Payment record created: $${amountPaid} (${isFullPayment ? 'full' : 'deposit'})`);
+    console.log(`✅ [WEBHOOK] Payment recorded: $${amountPaid} (${isFullPayment ? 'full' : 'deposit'})`);
   }
 
-  // ==========================================================================
-  // 3.5. RECORD PROMO CODE USAGE (if promo code was applied)
-  // ==========================================================================
+  // Record promo code usage
   if (promoCodeId && promoDiscount > 0 && customerId) {
     try {
-      const { error: promoUsageError } = await supabase
-        .rpc('apply_promo_code', {
-          p_promo_code_id: promoCodeId,
-          p_booking_id: bookingId,
-          p_customer_id: customerId,
-          p_original_amount: originalPrice,
-          p_discount_applied: promoDiscount,
-        });
-
-      if (promoUsageError) {
-        console.error('❌ [WEBHOOK] Error recording promo code usage:', promoUsageError);
-      } else {
-        console.log(`✅ [WEBHOOK] Promo code usage recorded: -$${promoDiscount}`);
-      }
+      await supabase.rpc('apply_promo_code', {
+        p_promo_code_id: promoCodeId,
+        p_booking_id: bookingId,
+        p_customer_id: customerId,
+        p_original_amount: originalPrice,
+        p_discount_applied: promoDiscount,
+      });
+      console.log(`✅ [WEBHOOK] Promo code usage recorded`);
     } catch (promoErr) {
-      console.error('❌ [WEBHOOK] Error in promo code usage:', promoErr);
+      console.error('❌ [WEBHOOK] Error recording promo code:', promoErr);
     }
   }
 
-  // ==========================================================================
-  // 4. UPDATE CUSTOMER STATS
-  // ==========================================================================
+  // Update customer stats
   if (customerId) {
-    const { error: customerError } = await supabase
+    await supabase
       .from('customers')
       .update({
         booking_count: (booking.customer?.booking_count || 0) + 1,
         total_spent: (Number(booking.customer?.total_spent) || 0) + amountPaid,
       })
       .eq('id', customerId);
-
-    if (customerError) {
-      console.error('❌ [WEBHOOK] Error updating customer stats:', customerError);
-    } else {
-      console.log(`✅ [WEBHOOK] Customer stats updated`);
-    }
   }
 
-  // ==========================================================================
-  // 5. SEND PUSH NOTIFICATION TO ADMIN
-  // ==========================================================================
+  // Send push notification
   try {
     const customerName = `${booking.customer?.first_name || ''} ${booking.customer?.last_name || ''}`.trim();
     const productName = booking.product_snapshot?.name || 'Bounce House';
@@ -355,96 +422,279 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventId
       booking.delivery_address,
       booking.delivery_city
     );
-    console.log('✅ [WEBHOOK] Push notification sent to admin');
   } catch (pushError) {
-    console.log('ℹ️ [WEBHOOK] Push notification skipped (no subscriptions or error)');
+    console.log('ℹ️ [WEBHOOK] Push notification skipped');
   }
 
-  // ==========================================================================
-  // 6. SEND CONFIRMATION EMAILS
-  // ==========================================================================
+  // Send confirmation emails
+  await sendConfirmationEmails(booking, amountPaid, isFullPayment, paymentMethodType, cardBrand, cardLast4, bankName, bankLast4, stripeReceiptUrl, session.payment_intent as string);
+}
+
+// =============================================================================
+// PROCESS ASYNC PAYMENT INITIATED (ACH - waiting for bank transfer)
+// =============================================================================
+
+async function processAsyncPaymentInitiated(
+  session: Stripe.Checkout.Session,
+  eventId: string,
+  bookingId: string,
+  paymentType: string,
+  customerId: string | undefined
+) {
+  const supabase = createServerClient();
+  const now = new Date().toISOString();
+  const amountPaid = (session.amount_total || 0) / 100;
+  const isFullPayment = paymentType === 'full';
+
+  // Get booking
+  const { data: booking, error: fetchError } = await supabase
+    .from('bookings')
+    .select(`*, customer:customers (*)`)
+    .eq('id', bookingId)
+    .single();
+
+  if (fetchError || !booking) {
+    console.error('❌ [WEBHOOK] Error fetching booking:', fetchError);
+    return;
+  }
+
+  // Update booking - DO NOT CONFIRM YET
+  // Status stays 'pending' until payment clears
+  const { error: bookingError } = await supabase
+    .from('bookings')
+    .update({
+      // Keep status as pending - NOT confirmed yet
+      payment_method_type: 'us_bank_account',
+      is_async_payment: true,
+      async_payment_status: 'pending',
+      async_payment_initiated_at: now,
+      stripe_payment_intent_id: session.payment_intent as string || null,
+      internal_notes: `ACH payment initiated. Amount: $${amountPaid}. Awaiting bank transfer (3-5 business days).`,
+    })
+    .eq('id', bookingId);
+
+  if (bookingError) {
+    console.error('❌ [WEBHOOK] Error updating booking:', bookingError);
+  } else {
+    console.log(`✅ [WEBHOOK] Booking ${booking.booking_number} marked as awaiting ACH clearance`);
+  }
+
+  // Create payment record with pending status
+  const { error: paymentError } = await supabase
+    .from('payments')
+    .insert({
+      booking_id: bookingId,
+      payment_type: isFullPayment ? 'full' : 'deposit',
+      amount: amountPaid,
+      status: 'pending', // PENDING until ACH clears
+      payment_method: 'us_bank_account',
+      payment_method_type: 'us_bank_account',
+      stripe_payment_intent_id: session.payment_intent as string || null,
+      stripe_checkout_session_id: session.id,
+      is_async: true,
+      async_status: 'pending',
+    });
+
+  if (paymentError) {
+    console.error('❌ [WEBHOOK] Error creating payment record:', paymentError);
+  }
+
+  // Send "Payment Processing" email to customer
   const customerName = `${booking.customer?.first_name || ''} ${booking.customer?.last_name || ''}`.trim();
   const productName = booking.product_snapshot?.name || 'Bounce House';
-  const customerEmailAddr = booking.customer?.email || session.customer_email || '';
-
-  console.log(`📧 [WEBHOOK] Preparing to send customer email to: ${customerEmailAddr}`);
-
-  // Customer email - send FIRST, before business email
+  
   try {
-    console.log(`📧 [WEBHOOK] Calling resend.emails.send for customer...`);
-    const customerResult = await resend.emails.send({
+    await resend.emails.send({
       from: FROM_EMAIL,
-      to: customerEmailAddr,
-      subject: `🎉 Booking Confirmed: ${productName} on ${formatDate(booking.event_date)}`,
-      html: createCustomerEmail({
+      to: booking.customer?.email || '',
+      subject: `🏦 Payment Processing: ${productName} on ${formatDate(booking.event_date)}`,
+      html: createACHPendingEmail({
         customerName: booking.customer?.first_name || 'there',
         productName,
         bookingNumber: booking.booking_number,
         eventDate: booking.event_date,
-        pickupDate: booking.pickup_date,
-        deliveryWindow: booking.delivery_window,
-        pickupWindow: booking.pickup_window,
-        address: booking.delivery_address,
-        city: booking.delivery_city,
-        totalPrice: Number(booking.subtotal),
-        depositAmount: Number(booking.deposit_amount),
-        balanceDue: isFullPayment ? 0 : Number(booking.balance_due),
-        notes: booking.customer_notes || undefined,
-        bookingType: booking.booking_type as 'daily' | 'weekend' | 'sunday',
-        paidInFull: isFullPayment,
-        deliveryDate: booking.delivery_date,
+        amount: amountPaid,
+        isFullPayment,
       }),
     });
-    console.log(`✅ [WEBHOOK] Customer email sent! ID: ${customerResult?.data?.id}`);
+    console.log('✅ [WEBHOOK] ACH pending email sent to customer');
   } catch (emailError) {
-    console.error('❌ [WEBHOOK] Failed to send customer email:', emailError);
+    console.error('❌ [WEBHOOK] Failed to send ACH pending email:', emailError);
   }
 
-  // Business notification email
+  // Notify business
   try {
     await resend.emails.send({
       from: FROM_EMAIL,
       to: NOTIFY_EMAIL,
-      subject: `🎉 New Booking: ${booking.booking_number} - ${productName} - ${isFullPayment ? 'PAID IN FULL' : '$50 Deposit'}`,
-      html: createBusinessEmail({
-        bookingNumber: booking.booking_number,
-        customerName,
-        customerEmail: booking.customer?.email || '',
-        customerPhone: booking.customer?.phone || '',
-        productName,
-        eventDate: booking.event_date,
-        deliveryDate: booking.delivery_date,
-        pickupDate: booking.pickup_date,
-        deliveryWindow: booking.delivery_window,
-        pickupWindow: booking.pickup_window,
-        address: booking.delivery_address,
-        city: booking.delivery_city,
-        totalPrice: Number(booking.subtotal),
-        depositAmount: Number(booking.deposit_amount),
-        balanceDue: isFullPayment ? 0 : Number(booking.balance_due),
-        notes: booking.customer_notes || undefined,
-        bookingType: booking.booking_type as 'daily' | 'weekend' | 'sunday',
-        paidInFull: isFullPayment,
-        amountPaid,
-        stripePaymentIntentId: session.payment_intent as string || undefined,
-        stripeReceiptUrl: stripeReceiptUrl || undefined,
-        cardLast4: cardLast4 || undefined,
-        cardBrand: cardBrand || undefined,
-      }),
+      subject: `🏦 ACH Payment Pending: ${booking.booking_number} - $${amountPaid}`,
+      html: `
+        <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; background: #1a1a1a; color: #fff; padding: 24px; border-radius: 12px;">
+          <h2 style="color: #fbbf24;">🏦 ACH Payment Initiated</h2>
+          <p>A customer has initiated a bank transfer payment. The booking will be confirmed automatically when the payment clears (typically 3-5 business days).</p>
+          <table style="width: 100%; margin-top: 20px;">
+            <tr><td style="color: #888;">Booking:</td><td style="color: #fff;">${booking.booking_number}</td></tr>
+            <tr><td style="color: #888;">Customer:</td><td style="color: #fff;">${customerName}</td></tr>
+            <tr><td style="color: #888;">Amount:</td><td style="color: #22c55e;">$${amountPaid}</td></tr>
+            <tr><td style="color: #888;">Event Date:</td><td style="color: #fff;">${formatDate(booking.event_date)}</td></tr>
+            <tr><td style="color: #888;">Status:</td><td style="color: #fbbf24;">⏳ Awaiting Bank Transfer</td></tr>
+          </table>
+          <p style="margin-top: 20px; color: #888; font-size: 12px;">You'll receive another notification when the payment clears or fails.</p>
+        </div>
+      `,
     });
-    console.log('✅ [WEBHOOK] Business notification email sent');
   } catch (emailError) {
-    console.error('❌ [WEBHOOK] Failed to send business email:', emailError);
+    console.error('❌ [WEBHOOK] Failed to send business notification:', emailError);
   }
-
-  console.log(`🎉 [WEBHOOK] Booking ${booking.booking_number} fully processed!`);
 }
 
 // =============================================================================
-// CHECKOUT EXPIRED - Customer didn't complete payment in time
+// ASYNC PAYMENT SUCCEEDED (ACH cleared!)
 // =============================================================================
 
-async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
+async function handleAsyncPaymentSucceeded(session: Stripe.Checkout.Session, eventId: string) {
+  const bookingId = session.metadata?.booking_id;
+  const paymentType = session.metadata?.payment_type || 'deposit';
+  const customerId = session.metadata?.customer_id;
+
+  if (!bookingId) {
+    console.error('❌ [WEBHOOK] No booking_id in async_payment_succeeded');
+    return;
+  }
+
+  console.log(`🎉 [WEBHOOK] ACH payment cleared for booking ${bookingId}!`);
+
+  // Process as successful payment - this will confirm the booking
+  await processSuccessfulPayment(session, eventId, bookingId, paymentType, customerId);
+}
+
+// =============================================================================
+// ASYNC PAYMENT FAILED (ACH failed)
+// =============================================================================
+
+async function handleAsyncPaymentFailed(session: Stripe.Checkout.Session, eventId: string) {
+  const bookingId = session.metadata?.booking_id;
+
+  if (!bookingId) {
+    console.error('❌ [WEBHOOK] No booking_id in async_payment_failed');
+    return;
+  }
+
+  const supabase = createServerClient();
+  const now = new Date().toISOString();
+
+  // Get booking
+  const { data: booking, error: fetchError } = await supabase
+    .from('bookings')
+    .select(`*, customer:customers (*)`)
+    .eq('id', bookingId)
+    .single();
+
+  if (fetchError || !booking) {
+    console.error('❌ [WEBHOOK] Error fetching booking:', fetchError);
+    return;
+  }
+
+  console.log(`❌ [WEBHOOK] ACH payment FAILED for booking ${booking.booking_number}`);
+
+  // Update booking
+  const { error: bookingError } = await supabase
+    .from('bookings')
+    .update({
+      async_payment_status: 'failed',
+      async_payment_failed_at: now,
+      async_payment_failure_reason: 'Bank transfer failed',
+      needs_attention: true,
+      attention_reason: 'ACH payment failed - customer needs to retry payment',
+    })
+    .eq('id', bookingId);
+
+  if (bookingError) {
+    console.error('❌ [WEBHOOK] Error updating booking:', bookingError);
+  }
+
+  // Update payment record
+  await supabase
+    .from('payments')
+    .update({
+      status: 'failed',
+      async_status: 'failed',
+      async_failed_at: now,
+      async_failure_reason: 'Bank transfer failed',
+    })
+    .eq('stripe_checkout_session_id', session.id);
+
+  // Send failure notification to customer
+  const customerName = booking.customer?.first_name || 'there';
+  const productName = booking.product_snapshot?.name || 'Bounce House';
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: booking.customer?.email || '',
+      subject: `⚠️ Payment Failed: ${productName} Booking`,
+      html: `
+        <div style="font-family: system-ui, sans-serif; max-width: 500px; margin: 0 auto; background: #1a1a1a; color: #fff; padding: 24px; border-radius: 12px;">
+          <div style="text-align: center; padding: 20px;">
+            <div style="width: 56px; height: 56px; margin: 0 auto 16px; background: #ef4444; border-radius: 50%; line-height: 56px;">
+              <span style="color: white; font-size: 28px;">!</span>
+            </div>
+            <h1 style="color: #ef4444; margin: 0;">Payment Failed</h1>
+          </div>
+          
+          <p>Hey ${customerName},</p>
+          <p>Unfortunately, your bank transfer for the ${productName} rental couldn't be completed.</p>
+          
+          <div style="background: #222; border-radius: 8px; padding: 16px; margin: 20px 0;">
+            <p style="margin: 0; color: #888;">Booking: <strong style="color: #fff;">${booking.booking_number}</strong></p>
+            <p style="margin: 8px 0 0; color: #888;">Event: <strong style="color: #fff;">${formatDate(booking.event_date)}</strong></p>
+          </div>
+          
+          <p><strong>What to do next:</strong></p>
+          <p>Please visit <a href="https://popndroprentals.com/my-bookings" style="color: #22d3ee;">My Bookings</a> to complete your payment with a different method.</p>
+          
+          <p style="margin-top: 20px;">Questions? Call us at <a href="tel:3524453723" style="color: #22d3ee;">(352) 445-3723</a></p>
+        </div>
+      `,
+    });
+    console.log('✅ [WEBHOOK] ACH failure email sent to customer');
+  } catch (emailError) {
+    console.error('❌ [WEBHOOK] Failed to send ACH failure email:', emailError);
+  }
+
+  // Send urgent notification to business
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: NOTIFY_EMAIL,
+      subject: `🚨 ACH Payment FAILED: ${booking.booking_number}`,
+      html: `
+        <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; background: #1a1a1a; color: #fff; padding: 24px; border-radius: 12px;">
+          <div style="background: #7f1d1d; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+            <h2 style="color: #fca5a5; margin: 0;">🚨 ACH Payment Failed</h2>
+            <p style="color: #fecaca; margin: 8px 0 0;">Action may be required!</p>
+          </div>
+          <table style="width: 100%;">
+            <tr><td style="color: #888;">Booking:</td><td style="color: #fff;">${booking.booking_number}</td></tr>
+            <tr><td style="color: #888;">Customer:</td><td style="color: #fff;">${booking.customer?.first_name} ${booking.customer?.last_name}</td></tr>
+            <tr><td style="color: #888;">Email:</td><td style="color: #fff;">${booking.customer?.email}</td></tr>
+            <tr><td style="color: #888;">Phone:</td><td style="color: #fff;">${booking.customer?.phone}</td></tr>
+            <tr><td style="color: #888;">Event Date:</td><td style="color: #fbbf24;">${formatDate(booking.event_date)}</td></tr>
+          </table>
+          <p style="margin-top: 20px;">The customer has been notified to retry their payment. Consider following up if the event date is soon.</p>
+        </div>
+      `,
+    });
+  } catch (emailError) {
+    console.error('❌ [WEBHOOK] Failed to send business notification:', emailError);
+  }
+}
+
+// =============================================================================
+// CHECKOUT EXPIRED
+// =============================================================================
+
+async function handleCheckoutExpired(session: Stripe.Checkout.Session, eventId: string) {
   const bookingId = session.metadata?.booking_id;
   
   if (!bookingId) {
@@ -452,11 +702,8 @@ async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
     return;
   }
 
-  console.log(`⏰ [WEBHOOK] Checkout expired for booking ${bookingId}`);
-
   const supabase = createServerClient();
 
-  // Check if booking is still pending
   const { data: booking } = await supabase
     .from('bookings')
     .select('status, booking_number')
@@ -464,35 +711,56 @@ async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
     .single();
 
   if (booking?.status === 'pending') {
-    // Keep it pending - customer can retry via "My Bookings" page
-    // The "Complete Payment" button will create a new Stripe session
-    console.log(`ℹ️ [WEBHOOK] Booking ${booking.booking_number} remains pending - customer can retry payment`);
-    
-    // Optionally: You could send a reminder email here
-    // await sendPaymentReminderEmail(bookingId);
-  } else {
-    console.log(`ℹ️ [WEBHOOK] Booking ${booking?.booking_number} is already ${booking?.status}`);
+    console.log(`ℹ️ [WEBHOOK] Booking ${booking.booking_number} checkout expired - customer can retry`);
   }
 }
 
 // =============================================================================
-// HELPER FUNCTIONS
+// PAYMENT INTENT SUCCEEDED
 // =============================================================================
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
+async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent, eventId: string) {
+  // Most processing happens in checkout.session.completed
+  // This is mainly for logging and edge cases
+  console.log(`ℹ️ [WEBHOOK] Payment intent ${paymentIntent.id} succeeded - Amount: $${paymentIntent.amount / 100}`);
 }
 
 // =============================================================================
-// CHARGE REFUNDED - Track refunds and lost fees
+// PAYMENT INTENT FAILED
 // =============================================================================
 
-async function handleChargeRefunded(charge: Stripe.Charge) {
+async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent, eventId: string) {
+  const supabase = createServerClient();
+  const errorMessage = paymentIntent.last_payment_error?.message || 'Unknown error';
+  
+  console.log(`❌ [WEBHOOK] Payment failed: ${errorMessage}`);
+
+  // Find related booking by payment intent
+  const { data: booking } = await supabase
+    .from('bookings')
+    .select('id, booking_number, customer:customers(email, first_name)')
+    .eq('stripe_payment_intent_id', paymentIntent.id)
+    .single();
+
+  if (booking) {
+    // Update booking with failure info
+    await supabase
+      .from('bookings')
+      .update({
+        needs_attention: true,
+        attention_reason: `Payment failed: ${errorMessage}`,
+      })
+      .eq('id', booking.id);
+
+    console.log(`⚠️ [WEBHOOK] Marked booking ${booking.booking_number} as needing attention`);
+  }
+}
+
+// =============================================================================
+// CHARGE REFUNDED
+// =============================================================================
+
+async function handleChargeRefunded(charge: Stripe.Charge, eventId: string) {
   const supabase = createServerClient();
   const paymentIntentId = typeof charge.payment_intent === 'string' 
     ? charge.payment_intent 
@@ -503,40 +771,29 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
     return;
   }
 
-  // Find the original payment by payment_intent_id
+  // Find original payment
   const { data: paymentData, error: paymentError } = await supabase
     .from('payments')
-    .select(`
-      id,
-      booking_id,
-      amount,
-      stripe_fee,
-      booking:bookings(booking_number, customer_id)
-    `)
+    .select(`id, booking_id, amount, stripe_fee, booking:bookings(booking_number, customer_id)`)
     .eq('stripe_payment_intent_id', paymentIntentId)
     .single();
 
   if (paymentError || !paymentData) {
-    console.error('❌ [WEBHOOK] Could not find original payment for refund:', paymentIntentId);
+    console.error('❌ [WEBHOOK] Could not find original payment:', paymentIntentId);
     return;
   }
 
-  // Extract booking from array (Supabase returns joins as arrays)
   const booking = Array.isArray(paymentData.booking) ? paymentData.booking[0] : paymentData.booking;
   const payment = { ...paymentData, booking };
 
-  // Calculate refund details
   const refundAmount = (charge.amount_refunded || 0) / 100;
   const isFullRefund = refundAmount >= payment.amount;
-  
-  // IMPORTANT: Stripe does NOT return processing fees on refunds!
-  // We lose the original fee when we refund
   const originalFee = payment.stripe_fee || (payment.amount * 0.029 + 0.30);
   const feeLost = isFullRefund ? originalFee : (originalFee * (refundAmount / payment.amount));
 
-  console.log(`💸 [WEBHOOK] Processing refund: ${refundAmount} | Fee lost: ${feeLost.toFixed(2)} | Full refund: ${isFullRefund}`);
+  console.log(`💸 [WEBHOOK] Refund: $${refundAmount} | Fee lost: $${feeLost.toFixed(2)} | Full: ${isFullRefund}`);
 
-  // Check if we already recorded this refund (idempotency)
+  // Check idempotency
   const { data: existingRefund } = await supabase
     .from('refunds')
     .select('id')
@@ -545,11 +802,11 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
     .single();
 
   if (existingRefund) {
-    console.log('ℹ️ [WEBHOOK] Refund already recorded - skipping (idempotent)');
+    console.log('ℹ️ [WEBHOOK] Refund already recorded');
     return;
   }
 
-  // Get the latest Stripe refund ID
+  // Get Stripe refund ID
   let stripeRefundId: string | null = null;
   if (charge.refunds?.data && charge.refunds.data.length > 0) {
     stripeRefundId = charge.refunds.data[0].id;
@@ -577,11 +834,11 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
   }
 
   const bookingNumber = booking?.booking_number || 'Unknown';
-  console.log(`✅ [WEBHOOK] Refund recorded: ${refundAmount} for booking ${bookingNumber}`);
+  console.log(`✅ [WEBHOOK] Refund recorded for ${bookingNumber}`);
 
-  // Update booking status if full refund
+  // Update booking if full refund
   if (isFullRefund) {
-    const { error: bookingError } = await supabase
+    await supabase
       .from('bookings')
       .update({
         status: 'cancelled',
@@ -589,209 +846,344 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
         cancellation_reason: 'Refunded via Stripe',
       })
       .eq('id', payment.booking_id);
-
-    if (bookingError) {
-      console.error('❌ [WEBHOOK] Error updating booking status:', bookingError);
-    } else {
-      console.log(`✅ [WEBHOOK] Booking ${bookingNumber} marked as cancelled`);
-    }
   }
 
-  // Send notification email to business
+  // Send notification
   try {
     await resend.emails.send({
       from: FROM_EMAIL,
       to: NOTIFY_EMAIL,
-      subject: `⚠️ Refund Processed: ${bookingNumber} - ${refundAmount.toFixed(2)}`,
+      subject: `⚠️ Refund Processed: ${bookingNumber} - $${refundAmount.toFixed(2)}`,
       html: `
         <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #ef4444;">⚠️ Refund Processed</h2>
           <p><strong>Booking:</strong> ${bookingNumber}</p>
-          <p><strong>Refund Amount:</strong> ${refundAmount.toFixed(2)}</p>
-          <p><strong>Original Payment:</strong> ${payment.amount.toFixed(2)}</p>
-          <p><strong>Stripe Fee Lost:</strong> ${feeLost.toFixed(2)}</p>
+          <p><strong>Refund Amount:</strong> $${refundAmount.toFixed(2)}</p>
+          <p><strong>Original Payment:</strong> $${payment.amount.toFixed(2)}</p>
+          <p><strong>Stripe Fee Lost:</strong> $${feeLost.toFixed(2)}</p>
           <p><strong>Full Refund:</strong> ${isFullRefund ? 'Yes' : 'No (Partial)'}</p>
-          <p><strong>Stripe Refund ID:</strong> ${stripeRefundId || 'N/A'}</p>
           <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 20px 0;">
           <p style="color: #666; font-size: 14px;">
-            💡 <strong>Note:</strong> Stripe does not return processing fees on refunds. 
-            This refund cost you ${feeLost.toFixed(2)} in lost fees.
+            💡 Stripe does not return processing fees on refunds. This cost you $${feeLost.toFixed(2)} in lost fees.
           </p>
         </div>
       `,
     });
-    console.log('✅ [WEBHOOK] Refund notification email sent');
   } catch (emailError) {
     console.error('❌ [WEBHOOK] Failed to send refund notification:', emailError);
   }
 }
 
 // =============================================================================
-// DISPUTE CREATED - Track chargebacks
+// CHARGE UPDATED
 // =============================================================================
 
-async function handleDisputeCreated(dispute: Stripe.Dispute) {
+async function handleChargeUpdated(charge: Stripe.Charge, eventId: string) {
+  // Log for audit trail
+  console.log(`🔄 [WEBHOOK] Charge ${charge.id} updated | Status: ${charge.status} | Disputed: ${charge.disputed}`);
+  
+  // Could track specific changes here if needed
+}
+
+// =============================================================================
+// DISPUTE CREATED
+// =============================================================================
+
+async function handleDisputeCreated(dispute: Stripe.Dispute, eventId: string) {
   const supabase = createServerClient();
   
-  // Get the charge to find the payment
-  const chargeId = typeof dispute.charge === 'string' 
-    ? dispute.charge 
-    : dispute.charge?.id;
-
+  const chargeId = typeof dispute.charge === 'string' ? dispute.charge : dispute.charge?.id;
   if (!chargeId) {
     console.log('ℹ️ [WEBHOOK] Dispute has no charge ID');
     return;
   }
 
-  // Fetch the charge to get payment_intent
+  // Get payment intent from charge
   let paymentIntentId: string | null = null;
+  let booking: { booking_number?: string } | null = null;
+  
   try {
     const charge = await stripe.charges.retrieve(chargeId);
-    paymentIntentId = typeof charge.payment_intent === 'string' 
-      ? charge.payment_intent 
-      : charge.payment_intent?.id || null;
+    paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id || null;
   } catch (err) {
-    console.error('❌ [WEBHOOK] Could not fetch charge for dispute:', err);
+    console.error('❌ [WEBHOOK] Could not fetch charge:', err);
   }
 
-  // Find the original payment
-  let payment = null;
-  let booking: { booking_number?: string; customer_id?: string } | null = null;
-  
   if (paymentIntentId) {
     const { data } = await supabase
       .from('payments')
-      .select(`
-        id,
-        booking_id,
-        amount,
-        stripe_fee,
-        booking:bookings(booking_number, customer_id)
-      `)
+      .select(`booking:bookings(booking_number)`)
       .eq('stripe_payment_intent_id', paymentIntentId)
       .single();
     
-    payment = data;
-    // Extract booking from array (Supabase returns joins as arrays)
     const bookingData = Array.isArray(data?.booking) ? data?.booking[0] : data?.booking;
-    booking = bookingData || null;
+    booking = bookingData ?? null;
   }
 
   const bookingNumber = booking?.booking_number || 'Unknown';
-
   const disputeAmount = dispute.amount / 100;
-  const disputeFee = 15.00; // Stripe charges $15 dispute fee
+  const disputeFee = 15.00;
+  
+  const evidenceDueDate = dispute.evidence_details?.due_by 
+    ? new Date(dispute.evidence_details.due_by * 1000).toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+      })
+    : 'Unknown';
 
-  console.log(`⚠️ [WEBHOOK] Dispute created: ${disputeAmount} | Reason: ${dispute.reason}`);
-
-  // Record dispute as an expense (it's a real cost to the business)
-  // First, get or create a "Chargebacks" expense category
-  let categoryId: string | null = null;
+  // Record expense
   const { data: category } = await supabase
     .from('expense_categories')
     .select('id')
     .eq('name', 'Bank/Processing Fees')
     .single();
-  
-  categoryId = category?.id || null;
 
-  if (categoryId) {
-    // Record the dispute fee as an expense
-    const { error: expenseError } = await supabase
-      .from('expenses')
-      .insert({
-        category_id: categoryId,
-        booking_id: payment?.booking_id || null,
-        amount: disputeFee,
-        description: `Stripe dispute fee - ${dispute.reason} - ${bookingNumber}`,
-        vendor_name: 'Stripe',
-        expense_date: new Date().toISOString().split('T')[0],
-        is_recurring: false,
-        notes: `Dispute ID: ${dispute.id}. Status: ${dispute.status}. Evidence due: ${dispute.evidence_details?.due_by ? new Date(dispute.evidence_details.due_by * 1000).toISOString() : 'N/A'}`,
-      });
-
-    if (expenseError) {
-      console.error('❌ [WEBHOOK] Error recording dispute expense:', expenseError);
-    } else {
-      console.log('✅ [WEBHOOK] Dispute fee recorded as expense');
-    }
+  if (category) {
+    await supabase.from('expenses').insert({
+      category_id: category.id,
+      amount: disputeFee,
+      description: `Stripe dispute fee - ${dispute.reason} - ${bookingNumber}`,
+      vendor_name: 'Stripe',
+      expense_date: new Date().toISOString().split('T')[0],
+      notes: `Dispute ID: ${dispute.id}. Evidence due: ${evidenceDueDate}`,
+    });
   }
 
-  // Send URGENT notification email to business
-  const evidenceDueDate = dispute.evidence_details?.due_by 
-    ? new Date(dispute.evidence_details.due_by * 1000).toLocaleDateString('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      })
-    : 'Unknown';
-
+  // Send URGENT notification
   try {
     await resend.emails.send({
       from: FROM_EMAIL,
       to: NOTIFY_EMAIL,
-      subject: `🚨 URGENT: Chargeback Dispute - ${bookingNumber} - ${disputeAmount.toFixed(2)}`,
+      subject: `🚨 URGENT: Chargeback - ${bookingNumber} - $${disputeAmount.toFixed(2)}`,
       html: `
         <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #fef2f2; border: 2px solid #ef4444; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-            <h2 style="color: #dc2626; margin: 0;">🚨 CHARGEBACK DISPUTE FILED</h2>
-            <p style="color: #991b1b; margin: 10px 0 0 0;">Action required within deadline!</p>
+            <h2 style="color: #dc2626; margin: 0;">🚨 CHARGEBACK DISPUTE</h2>
+            <p style="color: #991b1b; margin: 10px 0 0 0;">Action required!</p>
           </div>
           
-          <h3>Dispute Details</h3>
           <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;"><strong>Booking:</strong></td>
-              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;">${bookingNumber}</td>
-            </tr>
-            <tr>
-              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;"><strong>Disputed Amount:</strong></td>
-              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;">${disputeAmount.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;"><strong>Dispute Fee:</strong></td>
-              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;">${disputeFee.toFixed(2)} (charged regardless of outcome)</td>
-            </tr>
-            <tr>
-              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;"><strong>Reason:</strong></td>
-              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;">${dispute.reason?.replace(/_/g, ' ')}</td>
-            </tr>
-            <tr>
-              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;"><strong>Status:</strong></td>
-              <td style="padding: 8px 0; border-bottom: 1px solid #e5e5e5;">${dispute.status}</td>
-            </tr>
-            <tr style="background: #fef9c3;">
-              <td style="padding: 8px 0;"><strong>⏰ Evidence Due:</strong></td>
-              <td style="padding: 8px 0;"><strong>${evidenceDueDate}</strong></td>
-            </tr>
+            <tr><td style="padding: 8px 0;"><strong>Booking:</strong></td><td>${bookingNumber}</td></tr>
+            <tr><td style="padding: 8px 0;"><strong>Amount:</strong></td><td>$${disputeAmount.toFixed(2)}</td></tr>
+            <tr><td style="padding: 8px 0;"><strong>Fee:</strong></td><td>$${disputeFee} (charged regardless)</td></tr>
+            <tr><td style="padding: 8px 0;"><strong>Reason:</strong></td><td>${dispute.reason?.replace(/_/g, ' ')}</td></tr>
+            <tr style="background: #fef9c3;"><td style="padding: 8px;"><strong>⏰ Evidence Due:</strong></td><td style="padding: 8px;"><strong>${evidenceDueDate}</strong></td></tr>
           </table>
           
-          <div style="background: #f3f4f6; border-radius: 8px; padding: 15px; margin-top: 20px;">
-            <h4 style="margin: 0 0 10px 0;">📝 What to do:</h4>
-            <ol style="margin: 0; padding-left: 20px;">
-              <li>Log into Stripe Dashboard immediately</li>
-              <li>Go to Payments → Disputes</li>
-              <li>Submit evidence (signed waiver, delivery photos, communication)</li>
-              <li>Submit before ${evidenceDueDate}</li>
-            </ol>
-          </div>
-          
           <p style="margin-top: 20px;">
-            <a href="https://dashboard.stripe.com/disputes/${dispute.id}" 
-               style="background: #6366f1; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; display: inline-block;">
-              View Dispute in Stripe →
+            <a href="https://dashboard.stripe.com/disputes/${dispute.id}" style="background: #6366f1; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none;">
+              View in Stripe →
             </a>
-          </p>
-          
-          <p style="color: #666; font-size: 12px; margin-top: 20px;">
-            Dispute ID: ${dispute.id}
           </p>
         </div>
       `,
     });
-    console.log('✅ [WEBHOOK] Dispute notification email sent');
   } catch (emailError) {
     console.error('❌ [WEBHOOK] Failed to send dispute notification:', emailError);
   }
+}
+
+// =============================================================================
+// REFUND CREATED
+// =============================================================================
+
+async function handleRefundCreated(refund: Stripe.Refund, eventId: string) {
+  console.log(`💰 [WEBHOOK] Refund created: ${refund.id} | Amount: $${(refund.amount || 0) / 100} | Status: ${refund.status}`);
+  // Main processing happens in charge.refunded
+}
+
+// =============================================================================
+// REFUND UPDATED
+// =============================================================================
+
+async function handleRefundUpdated(refund: Stripe.Refund, eventId: string) {
+  const supabase = createServerClient();
+  
+  console.log(`🔄 [WEBHOOK] Refund ${refund.id} updated | Status: ${refund.status}`);
+
+  // Update our refund record if status changed
+  if (refund.status === 'succeeded' || refund.status === 'failed') {
+    const { error } = await supabase
+      .from('refunds')
+      .update({
+        status: refund.status === 'succeeded' ? 'completed' : 'failed',
+        processed_at: new Date().toISOString(),
+      })
+      .eq('stripe_refund_id', refund.id);
+
+    if (error) {
+      console.error('❌ [WEBHOOK] Error updating refund status:', error);
+    } else {
+      console.log(`✅ [WEBHOOK] Refund ${refund.id} marked as ${refund.status}`);
+    }
+  }
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  });
+}
+
+async function sendConfirmationEmails(
+  booking: any,
+  amountPaid: number,
+  isFullPayment: boolean,
+  paymentMethodType: string,
+  cardBrand: string | null,
+  cardLast4: string | null,
+  bankName: string | null,
+  bankLast4: string | null,
+  stripeReceiptUrl: string | null,
+  paymentIntentId: string
+) {
+  const customerName = `${booking.customer?.first_name || ''} ${booking.customer?.last_name || ''}`.trim();
+  const productName = booking.product_snapshot?.name || 'Bounce House';
+  const customerEmail = booking.customer?.email || '';
+
+  // Customer email
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: customerEmail,
+      subject: `🎉 Booking Confirmed: ${productName} on ${formatDate(booking.event_date)}`,
+      html: createCustomerEmail({
+        customerName: booking.customer?.first_name || 'there',
+        productName,
+        bookingNumber: booking.booking_number,
+        eventDate: booking.event_date,
+        pickupDate: booking.pickup_date,
+        deliveryWindow: booking.delivery_window,
+        pickupWindow: booking.pickup_window,
+        address: booking.delivery_address,
+        city: booking.delivery_city,
+        totalPrice: Number(booking.subtotal),
+        depositAmount: Number(booking.deposit_amount),
+        balanceDue: isFullPayment ? 0 : Number(booking.balance_due),
+        notes: booking.customer_notes || undefined,
+        bookingType: booking.booking_type,
+        paidInFull: isFullPayment,
+        deliveryDate: booking.delivery_date,
+      }),
+    });
+    console.log('✅ [WEBHOOK] Customer email sent');
+  } catch (emailError) {
+    console.error('❌ [WEBHOOK] Failed to send customer email:', emailError);
+  }
+
+  // Business email
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: NOTIFY_EMAIL,
+      subject: `🎉 New Booking: ${booking.booking_number} - ${productName} - ${isFullPayment ? 'PAID IN FULL' : '$50 Deposit'}`,
+      html: createBusinessEmail({
+        bookingNumber: booking.booking_number,
+        customerName,
+        customerEmail: booking.customer?.email || '',
+        customerPhone: booking.customer?.phone || '',
+        productName,
+        eventDate: booking.event_date,
+        deliveryDate: booking.delivery_date,
+        pickupDate: booking.pickup_date,
+        deliveryWindow: booking.delivery_window,
+        pickupWindow: booking.pickup_window,
+        address: booking.delivery_address,
+        city: booking.delivery_city,
+        totalPrice: Number(booking.subtotal),
+        depositAmount: Number(booking.deposit_amount),
+        balanceDue: isFullPayment ? 0 : Number(booking.balance_due),
+        notes: booking.customer_notes || undefined,
+        bookingType: booking.booking_type,
+        paidInFull: isFullPayment,
+        amountPaid,
+        stripePaymentIntentId: paymentIntentId,
+        stripeReceiptUrl: stripeReceiptUrl || undefined,
+        cardLast4: cardLast4 || undefined,
+        cardBrand: cardBrand || undefined,
+      }),
+    });
+    console.log('✅ [WEBHOOK] Business email sent');
+  } catch (emailError) {
+    console.error('❌ [WEBHOOK] Failed to send business email:', emailError);
+  }
+}
+
+// =============================================================================
+// ACH PENDING EMAIL TEMPLATE
+// =============================================================================
+
+function createACHPendingEmail(data: {
+  customerName: string;
+  productName: string;
+  bookingNumber: string;
+  eventDate: string;
+  amount: number;
+  isFullPayment: boolean;
+}): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #111; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 500px; margin: 0 auto; padding: 32px 16px;">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <img src="https://popndroprentals.com/brand/logo.png" alt="Pop and Drop Party Rentals" width="180" />
+    </div>
+    
+    <div style="background-color: #1a1a1a; border-radius: 16px; overflow: hidden;">
+      <div style="padding: 24px; text-align: center; border-bottom: 1px solid #2a2a2a;">
+        <div style="width: 56px; height: 56px; margin: 0 auto 16px; background-color: #fbbf24; border-radius: 50%; line-height: 56px;">
+          <span style="color: white; font-size: 28px;">🏦</span>
+        </div>
+        <h1 style="margin: 0; color: white; font-size: 24px;">Payment Processing</h1>
+        <p style="margin: 8px 0 0; color: #888;">Booking ${data.bookingNumber}</p>
+      </div>
+      
+      <div style="padding: 24px;">
+        <p style="color: #ccc; margin: 0 0 20px;">Hey ${data.customerName}! Your bank transfer is being processed.</p>
+        
+        <div style="background: #422006; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+          <p style="margin: 0; color: #fbbf24; font-weight: 600;">⏳ What's next?</p>
+          <p style="margin: 8px 0 0; color: #fde68a; font-size: 14px;">Bank transfers typically take 3-5 business days to complete. We'll email you as soon as your payment clears and your booking is confirmed!</p>
+        </div>
+        
+        <div style="background-color: #222; border-radius: 12px; padding: 16px;">
+          <table style="width: 100%;">
+            <tr>
+              <td style="padding: 8px 0; color: #666; font-size: 13px;">Rental</td>
+              <td style="padding: 8px 0; color: white; text-align: right;">${data.productName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #666; font-size: 13px;">Event Date</td>
+              <td style="padding: 8px 0; color: white; text-align: right;">${formatDate(data.eventDate)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #666; font-size: 13px;">Amount</td>
+              <td style="padding: 8px 0; color: #22c55e; text-align: right; font-weight: 600;">$${data.amount}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #666; font-size: 13px;">Status</td>
+              <td style="padding: 8px 0; color: #fbbf24; text-align: right;">⏳ Processing</td>
+            </tr>
+          </table>
+        </div>
+        
+        <p style="margin: 20px 0; color: #888; font-size: 13px;">
+          Your date is reserved while we wait for the payment to clear. If there are any issues, we'll reach out right away.
+        </p>
+      </div>
+      
+      <div style="padding: 20px 24px; background-color: #141414; border-top: 1px solid #2a2a2a; text-align: center;">
+        <p style="margin: 0 0 8px; color: #888; font-size: 13px;">Questions? We're here to help!</p>
+        <a href="tel:3524453723" style="color: #22d3ee; text-decoration: none;">(352) 445-3723</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+  `;
 }

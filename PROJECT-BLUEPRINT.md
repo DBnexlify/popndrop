@@ -3052,6 +3052,137 @@ export const REFUND_RULES: RefundRule[] = [
 
 ---
 
+## SECTION 28: CUSTOMER MY BOOKINGS DASHBOARD
+
+> Added: December 24, 2024
+> Status: Complete
+
+### Overview
+
+Comprehensive customer-facing booking management dashboard with loyalty rewards integration, payment recovery for abandoned checkouts, booking timeline/history, and mobile-first design.
+
+### Features Implemented
+
+1. **Mobile Bottom Navigation** - Added "Bookings" as 5th tab with ClipboardList icon
+2. **Loyalty Dashboard** - Shows customer tier, progress, and available rewards
+3. **Filter Tabs** - All, Upcoming, Past booking filters
+4. **Enhanced Booking Cards** with:
+   - Status badges with contextual colors and icons
+   - Days until event countdown
+   - Payment status (deposit paid, paid in full, balance due)
+   - Expandable timeline showing booking lifecycle
+   - Delivery and pickup windows
+   - Book Again action for completed/cancelled bookings
+5. **Payment Recovery** - Complete pending payments with deposit/full payment choice
+6. **Booking Timeline** - Visual timeline of booking events (created, confirmed, delivered, etc.)
+7. **Cancellation Support** - Request cancellation with modal and reason
+
+### File Changes
+
+| File | Changes |
+|------|---------|  
+| `components/site/mobile-bottom-nav.tsx` | Added 5th tab for My Bookings, adjusted grid to 5 columns |
+| `app/(site)/my-bookings/my-bookings-content.tsx` | Complete rewrite with loyalty, filters, timeline, enhanced cards |
+| `app/api/bookings/lookup/route.ts` | Added timestamp fields for timeline (delivered_at, completed_at, etc.) |
+
+### Mobile Navigation Changes
+
+The mobile bottom nav now has 5 tabs:
+1. Home (Home icon)
+2. Rentals (PartyPopper icon)
+3. Book (CalendarCheck icon)
+4. Bookings (ClipboardList icon) - NEW
+5. Contact (Phone icon)
+
+Grid changed from `grid-cols-4` to `grid-cols-5` with adjusted padding.
+
+### Booking Status Flow Display
+
+```
+PENDING (amber)
+   ↓ Payment
+CONFIRMED (green)
+   ↓ Delivery
+DELIVERED (blue)
+   ↓ Pickup
+PICKED_UP (purple)
+   ↓ Complete
+COMPLETED (cyan)
+
+Or at any point:
+   → CANCELLED (red)
+```
+
+### Loyalty Integration
+
+- Fetches customer loyalty status via `/api/loyalty?email=`
+- Shows:
+  - Current tier badge (Bronze, Silver, etc.)
+  - Available rewards with promo codes
+  - Progress bar to next tier
+  - Reward history (used/available)
+- Expandable/collapsible for cleaner UI
+
+### Payment Recovery Flow
+
+1. Customer visits My Bookings page
+2. System shows pending bookings with amber alert
+3. Customer selects deposit ($50) or full payment
+4. "Complete Payment" button creates new Stripe checkout session
+5. Customer redirected to Stripe
+6. On success, booking updates to confirmed
+
+### Timeline Events Tracked
+
+- Booking Created (created_at)
+- Payment Confirmed (confirmed_at / deposit_paid_at)
+- Delivery (delivered_at)
+- Pickup (picked_up_at)
+- Completed (completed_at)
+- Cancelled (cancelled_at) + Refund info if applicable
+
+### API Changes
+
+`GET /api/bookings/lookup?email=` now returns additional fields:
+- `deposit_paid_at`
+- `balance_paid_at`
+- `delivered_at`
+- `picked_up_at`
+- `completed_at`
+- `cancelled_at`
+- `cancellation_reason`
+- `cancelled_by`
+- `refund_amount`
+- `refund_status`
+- `refund_processed_at`
+- `delivery_zip`
+
+### Design System Compliance
+
+- Uses 3-tier card system (section, standard, nested)
+- Inner feather overlays on all cards
+- Brand gradients (fuchsia → purple → cyan)
+- Standard typography scale
+- Mobile-first responsive design
+- Safe area support for iOS/Android
+
+### Testing Checklist
+
+- [ ] Mobile bottom nav shows 5 tabs properly aligned
+- [ ] Email lookup returns bookings with complete data
+- [ ] Filter tabs work (All, Upcoming, Past)
+- [ ] Pending bookings show payment alert and type selector
+- [ ] Complete Payment redirects to Stripe
+- [ ] Booking cards show correct status badges
+- [ ] Timeline expands/collapses correctly
+- [ ] Loyalty dashboard loads and displays progress
+- [ ] Available rewards show promo codes
+- [ ] Book Again button works for completed bookings
+- [ ] Cancel booking modal opens and submits
+- [ ] Works on iOS Safari, Android Chrome, Desktop browsers
+
+---
+
 *Blueprint Complete — Last Updated: December 24, 2024*
 
 ---

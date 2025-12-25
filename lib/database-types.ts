@@ -163,7 +163,8 @@ export interface Customer {
   state: string | null;
   zip_code: string | null;
   merged_into_id: string | null;
-  booking_count: number;
+  booking_count: number;  // Total confirmed+ bookings (incremented on payment)
+  completed_bookings_count: number;  // Only completed rentals (for loyalty/metrics)
   total_spent: number;
   internal_notes: string | null;
   tags: string[] | null;
@@ -260,6 +261,17 @@ export interface Booking {
   delivered_by: string | null;
   picked_up_by: string | null;
   followup_sent_at: string | null;
+  // ACH/Async payment tracking
+  payment_method_type: string | null;
+  is_async_payment: boolean;
+  async_payment_status: string | null;
+  async_payment_initiated_at: string | null;
+  async_payment_completed_at: string | null;
+  async_payment_failed_at: string | null;
+  async_payment_failure_reason: string | null;
+  stripe_payment_intent_id: string | null;
+  needs_attention: boolean;
+  attention_reason: string | null;
 }
 
 export interface BookingInsert {
@@ -341,6 +353,19 @@ export interface Payment {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  // Stripe fee tracking
+  stripe_fee: number | null;
+  // ACH/Async payment tracking
+  payment_method_type: string | null;
+  bank_name: string | null;
+  bank_last_four: string | null;
+  is_async: boolean;
+  async_status: string | null;
+  async_completed_at: string | null;
+  async_failed_at: string | null;
+  async_failure_reason: string | null;
+  is_manual_entry: boolean;
+  notes: string | null;
 }
 
 export interface PaymentInsert {
@@ -482,7 +507,8 @@ export interface CustomerLeaderboardEntry {
   name: string;
   email: string;
   phone: string;
-  booking_count: number;
+  total_bookings: number;  // All confirmed+ bookings
+  completed_bookings: number;  // Only completed rentals (used for tier)
   total_spent: number;
   last_booking_at: string | null;
   customer_tier: 'VIP' | 'Loyal' | 'Returning' | 'New';

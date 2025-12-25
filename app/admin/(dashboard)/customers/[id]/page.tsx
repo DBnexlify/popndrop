@@ -51,11 +51,12 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-// Calculate tier from booking count and total spent
+// Calculate tier from COMPLETED bookings count (not total bookings)
 function getCustomerTier(customer: Customer): CustomerLeaderboardEntry['customer_tier'] {
-  if (customer.total_spent >= 1000 || customer.booking_count >= 10) return 'VIP';
-  if (customer.booking_count >= 5) return 'Loyal';
-  if (customer.booking_count >= 2) return 'Returning';
+  const completedBookings = customer.completed_bookings_count ?? 0;
+  if (customer.total_spent >= 1000 || completedBookings >= 10) return 'VIP';
+  if (completedBookings >= 5) return 'Loyal';
+  if (completedBookings >= 2) return 'Returning';
   return 'New';
 }
 
@@ -213,16 +214,16 @@ export default async function CustomerDetailPage({ params }: PageProps) {
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-2xl font-bold text-foreground/90">{customer.booking_count}</p>
-                  <p className="text-xs text-foreground/50">Total Bookings</p>
+                  <p className="text-2xl font-bold text-foreground/90">{customer.completed_bookings_count ?? 0}</p>
+                  <p className="text-xs text-foreground/50">Completed Rentals</p>
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-green-400">{formatCurrency(customer.total_spent)}</p>
                   <p className="text-xs text-foreground/50">Lifetime Value</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-foreground/90">{completedBookings}</p>
-                  <p className="text-xs text-foreground/50">Completed</p>
+                  <p className="text-2xl font-bold text-foreground/90">{customer.booking_count}</p>
+                  <p className="text-xs text-foreground/50">Total Bookings</p>
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-foreground/60">{cancelledBookings}</p>

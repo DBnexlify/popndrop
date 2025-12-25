@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { createServerClient } from "@/lib/supabase";
 import { SuccessContent } from "./success-content";
@@ -69,9 +68,12 @@ interface BookingData {
   subtotal: number;
   deposit_amount: number;
   balance_due: number;
-  // Payment status fields - critical for showing correct payment state
   deposit_paid: boolean;
   balance_paid: boolean;
+  // ACH/Async payment fields
+  is_async_payment?: boolean;
+  async_payment_status?: string | null;
+  payment_method_type?: string | null;
   customers: {
     first_name: string;
     last_name: string;
@@ -82,7 +84,6 @@ interface BookingData {
 interface PageProps {
   searchParams: Promise<{ 
     booking_id?: string;
-    // Payment type passed from Stripe redirect for immediate accurate display
     payment_type?: string;
   }>;
 }
@@ -111,6 +112,9 @@ async function getBooking(bookingId: string): Promise<BookingData | null> {
       balance_due,
       deposit_paid,
       balance_paid,
+      is_async_payment,
+      async_payment_status,
+      payment_method_type,
       customers (
         first_name,
         last_name,
@@ -171,24 +175,18 @@ function NoBookingState() {
 export default async function BookingSuccessPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const bookingId = params.booking_id;
-  // Get payment_type from URL - this is passed from Stripe redirect
-  // so we can show accurate payment status before webhook processes
   const paymentTypeFromUrl = params.payment_type || null;
 
-  // No booking ID provided
   if (!bookingId) {
     return <NoBookingState />;
   }
 
-  // Fetch booking data
   const booking = await getBooking(bookingId);
 
-  // Booking not found
   if (!booking) {
     return <NoBookingState />;
   }
 
-  // Format dates for display using timezone-aware utilities
   const eventDate = formatEventDate(booking.event_date);
   const pickupDate = formatEventDateShort(booking.pickup_date);
 

@@ -206,12 +206,13 @@ export function getTierBadgeClasses(badgeColor: string): string {
 
 /**
  * Get progress bar color based on progress percent
+ * Uses brand colors: fuchsia → purple → cyan
  */
 export function getProgressBarColor(percent: number): string {
-  if (percent >= 100) return 'from-green-500 to-emerald-600';
-  if (percent >= 75) return 'from-cyan-500 to-blue-600';
-  if (percent >= 50) return 'from-fuchsia-500 to-purple-600';
-  return 'from-amber-500 to-orange-600';
+  if (percent >= 100) return 'from-cyan-400 to-cyan-500';         // Complete! Cyan success
+  if (percent >= 75) return 'from-purple-500 to-cyan-500';        // Almost there
+  if (percent >= 50) return 'from-fuchsia-500 to-purple-600';     // Good progress (main brand)
+  return 'from-fuchsia-600 to-fuchsia-400';                       // Getting started
 }
 
 /**

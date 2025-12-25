@@ -65,11 +65,12 @@ function getTierBadge(tier: CustomerLeaderboardEntry['customer_tier'] | string) 
   }
 }
 
-// Calculate tier from booking count and total spent
+// Calculate tier from COMPLETED bookings count (not total bookings)
 function getCustomerTier(customer: Customer): CustomerLeaderboardEntry['customer_tier'] {
-  if (customer.total_spent >= 1000 || customer.booking_count >= 10) return 'VIP';
-  if (customer.booking_count >= 5) return 'Loyal';
-  if (customer.booking_count >= 2) return 'Returning';
+  const completedBookings = customer.completed_bookings_count ?? 0;
+  if (customer.total_spent >= 1000 || completedBookings >= 10) return 'VIP';
+  if (completedBookings >= 5) return 'Loyal';
+  if (completedBookings >= 2) return 'Returning';
   return 'New';
 }
 
@@ -139,7 +140,7 @@ export default async function AdminCustomersPage({ searchParams }: PageProps) {
                     {customer.name}
                   </p>
                   <p className="text-xs text-foreground/50">
-                    {customer.booking_count} booking{customer.booking_count !== 1 ? 's' : ''}
+                    {customer.completed_bookings} completed rental{customer.completed_bookings !== 1 ? 's' : ''}
                   </p>
                   <div className={styles.cardInner} />
                 </Link>
@@ -232,7 +233,7 @@ export default async function AdminCustomersPage({ searchParams }: PageProps) {
                   {/* Stats */}
                   <div className="hidden text-right sm:block">
                     <p className="text-sm font-semibold text-foreground/90">
-                      {customer.booking_count} booking{customer.booking_count !== 1 ? 's' : ''}
+                      {customer.completed_bookings_count ?? 0} completed
                     </p>
                     <p className="text-xs text-green-400">
                       {formatCurrency(customer.total_spent)} lifetime
@@ -247,9 +248,9 @@ export default async function AdminCustomersPage({ searchParams }: PageProps) {
                   {/* Mobile stats */}
                   <div className="text-right sm:hidden">
                     <p className="text-sm font-medium text-foreground/90">
-                      {customer.booking_count}
+                      {customer.completed_bookings_count ?? 0}
                     </p>
-                    <p className="text-[10px] text-foreground/50">bookings</p>
+                    <p className="text-[10px] text-foreground/50">completed</p>
                   </div>
                   
                   <ChevronRight className="h-4 w-4 shrink-0 text-foreground/30" />

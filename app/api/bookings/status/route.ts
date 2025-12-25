@@ -1,7 +1,9 @@
 // =============================================================================
 // BOOKING STATUS API
 // GET /api/bookings/status?id={bookingId}
+// 
 // Used by success page to poll for webhook completion
+// Handles both card (immediate) and ACH (async) payments
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -33,7 +35,14 @@ export async function GET(request: NextRequest) {
         subtotal,
         deposit_amount,
         confirmed_at,
-        stripe_payment_intent_id
+        stripe_payment_intent_id,
+        payment_method_type,
+        is_async_payment,
+        async_payment_status,
+        async_payment_initiated_at,
+        async_payment_completed_at,
+        async_payment_failed_at,
+        async_payment_failure_reason
       `)
       .eq('id', bookingId)
       .single();
@@ -45,20 +54,56 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Determine if payment has been processed
-    // A booking is "payment confirmed" if:
-    // 1. Status is 'confirmed' (webhook processed)
-    // 2. OR deposit_paid is true
-    // 3. OR stripe_payment_intent_id exists
-    const isPaymentConfirmed = 
-      booking.status === 'confirmed' ||
-      booking.deposit_paid === true ||
-      !!booking.stripe_payment_intent_id;
+    // ==========================================================================
+    // DETERMINE PAYMENT STATUS
+    // ==========================================================================
+
+    // Is this an ACH (async) payment?
+    const isAsyncPayment = booking.is_async_payment === true;
+    const asyncStatus = booking.async_payment_status;
+
+    // Determine if payment has been processed/confirmed
+    // For card: immediate confirmation
+    // For ACH: only confirmed when async_payment_status = 'succeeded'
+    let isPaymentConfirmed = false;
+    let isPaymentPending = false;
+    let isPaymentFailed = false;
+
+    if (isAsyncPayment) {
+      // ACH payment flow
+      switch (asyncStatus) {
+        case 'succeeded':
+          isPaymentConfirmed = true;
+          break;
+        case 'pending':
+        case 'processing':
+          isPaymentPending = true;
+          break;
+        case 'failed':
+          isPaymentFailed = true;
+          break;
+        default:
+          // Unknown state - treat as pending if async payment was initiated
+          if (booking.async_payment_initiated_at) {
+            isPaymentPending = true;
+          }
+      }
+    } else {
+      // Card payment flow (immediate)
+      isPaymentConfirmed = 
+        booking.status === 'confirmed' ||
+        booking.deposit_paid === true ||
+        !!booking.stripe_payment_intent_id;
+    }
 
     // Determine if paid in full
     const isPaidInFull = 
       booking.balance_paid === true || 
       Number(booking.balance_due) === 0;
+
+    // ==========================================================================
+    // BUILD RESPONSE
+    // ==========================================================================
 
     return NextResponse.json({
       success: true,
@@ -73,9 +118,28 @@ export async function GET(request: NextRequest) {
         depositAmount: booking.deposit_amount,
         confirmedAt: booking.confirmed_at,
         hasStripePayment: !!booking.stripe_payment_intent_id,
+        // Payment method info
+        paymentMethodType: booking.payment_method_type || 'card',
       },
+      // Overall payment status
       isPaymentConfirmed,
       isPaidInFull,
+      // ACH-specific status
+      isAsyncPayment,
+      asyncPayment: isAsyncPayment ? {
+        status: asyncStatus,
+        isPending: isPaymentPending,
+        isFailed: isPaymentFailed,
+        isSucceeded: asyncStatus === 'succeeded',
+        initiatedAt: booking.async_payment_initiated_at,
+        completedAt: booking.async_payment_completed_at,
+        failedAt: booking.async_payment_failed_at,
+        failureReason: booking.async_payment_failure_reason,
+        // Estimated clearance message
+        estimatedClearance: isPaymentPending 
+          ? 'Bank transfers typically take 3-5 business days to complete.' 
+          : null,
+      } : null,
     });
 
   } catch (error) {
