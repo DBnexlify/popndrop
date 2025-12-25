@@ -195,24 +195,8 @@ function Toast({
 }
 
 // =============================================================================
-// PROGRESS HEADER COMPONENT - Premium scroll-morph behavior
-// Transitions smoothly from floating glassmorphism card to docked header
-// Matches site header dimensions exactly when docked (h-14 mobile, h-16 desktop)
-//
-// CROSS-PLATFORM ARCHITECTURE (ANDROID CHROME FIXED Dec 2025):
-// - Uses position: sticky with top: 0 via Tailwind class
-// - Safe area handled via env(safe-area-inset-top) with 0px fallback
-// - IntersectionObserver detects scroll state without scroll event listeners
-//
-// CRITICAL: These properties BREAK sticky on Android Chrome:
-// - transform (any value) - creates containing block
-// - will-change: transform - same effect
-// - contain: layout/paint/strict - creates containing block
-// - backdrop-filter on the sticky element itself
-//
-// GPU acceleration (translateZ(0)) must be on INNER elements only.
-//
-// @see https://developer.chrome.com/docs/css-ui/edge-to-edge
+// PROGRESS HEADER COMPONENT - Simple fixed header
+// Matches site-header.tsx styling for consistency
 // =============================================================================
 
 function WizardHeader({
@@ -231,172 +215,67 @@ function WizardHeader({
   stepLabel: string;
 }) {
   const progressPercentage = ((currentStep - 1) / (totalSteps - 1)) * 100;
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  const [isAtTop, setIsAtTop] = useState(false);
-
-  // IntersectionObserver for scroll state detection
-  // More reliable than scroll events, especially on mobile
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-    if (!sentinel) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsAtTop(!entry.isIntersecting);
-      },
-      {
-        rootMargin: "-1px 0px 0px 0px",
-        threshold: 0,
-      }
-    );
-
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, []);
 
   return (
-    <>
-      {/* Sentinel element - detects when we've scrolled past the top */}
-      <div ref={sentinelRef} className="absolute top-0 h-1 w-full" aria-hidden="true" />
-
-      {/*
-        STICKY CONTAINER - ANDROID CHROME FIXED (Dec 2025)
-        
-        CRITICAL: Do NOT use any of these on sticky containers:
-        - transform (any value) - creates containing block, breaks sticky
-        - will-change: transform - same effect as transform
-        - contain: layout/paint/strict/content - creates containing block
-        - filter/backdrop-filter - creates stacking context
-        
-        The sticky element must have NO containing block ancestors except the viewport.
-        GPU acceleration is applied to INNER elements only.
-      */}
-      <div
-        className="sticky top-0 z-50"
-        style={{
-          // Safe area padding when docked (iOS notch, Android status bar)
-          paddingTop: isAtTop ? 'env(safe-area-inset-top, 0px)' : undefined,
-          // Background extends under safe area when docked
-          backgroundColor: isAtTop ? 'hsl(var(--background) / 0.8)' : 'transparent',
-          // ANDROID FIX: NO contain, NO transform, NO will-change on sticky container
-          // These properties break sticky positioning by creating containing blocks
-        }}
-      >
-        {/* Outer wrapper - handles spacing transitions */}
-        <div
-          className={cn(
-            "transition-all duration-[280ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
-            isAtTop
-              ? "px-0 py-0"
-              : "px-4 pt-3 pb-1"
-          )}
-          style={{
-            // GPU acceleration on the INNER element, not the sticky container
-            transform: 'translateZ(0)',
-            WebkitTransform: 'translateZ(0)',
+    <header
+      className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-background/80 backdrop-blur-xl"
+      style={{
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        // GPU acceleration for smooth behavior
+        transform: 'translateZ(0)',
+        WebkitTransform: 'translateZ(0)',
+      }}
+    >
+      <div className="mx-auto flex items-center gap-3 h-14 max-w-5xl px-4">
+        {/* Back button */}
+        <button
+          onClick={() => {
+            if (canGoBack) {
+              hapticNavigate();
+              onBack();
+            }
           }}
+          disabled={!canGoBack}
+          aria-label="Go back"
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+            "transition-colors duration-200",
+            canGoBack
+              ? "bg-white/10 text-foreground active:bg-white/20"
+              : "text-foreground/20"
+          )}
         >
-          {/* Main morphing container */}
-          <div
-            className={cn(
-              "relative overflow-hidden backdrop-blur-xl",
-              "transition-all duration-[280ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
-              isAtTop
-                ? [
-                    "rounded-none",
-                    "border-b border-white/5",
-                    "bg-background/80",
-                    "shadow-none",
-                  ]
-                : [
-                    "rounded-2xl",
-                    "border border-white/10",
-                    "bg-background/60",
-                    "shadow-[0_8px_32px_rgba(0,0,0,0.25),0_2px_8px_rgba(0,0,0,0.15)]",
-                  ]
-            )}
-          >
-            {/* Content container - uses min-height for cross-platform centering */}
+          <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+        </button>
+
+        {/* Progress section */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium text-foreground/80 truncate">
+              {stepLabel}
+            </span>
+            <span className="text-foreground/50 shrink-0 ml-2">
+              {currentStep} of {totalSteps}
+            </span>
+          </div>
+
+          {/* Progress bar - fuchsia gradient */}
+          <div className="mt-1.5 relative h-1.5 overflow-hidden rounded-full bg-white/10">
             <div
-              className={cn(
-                "flex items-center gap-3",
-                "transition-all duration-[280ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
-                isAtTop
-                  ? "min-h-14 px-4"
-                  : "h-auto px-4 py-3"
-              )}
-            >
-              {/* Back button */}
-              <button
-                onClick={() => {
-                  if (canGoBack) {
-                    hapticNavigate();
-                    onBack();
-                  }
-                }}
-                disabled={!canGoBack}
-                aria-label="Go back"
-                className={cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                  "transition-all duration-200 ease-out",
-                  canGoBack
-                    ? "bg-white/10 text-foreground active:scale-95 active:bg-white/20"
-                    : "text-foreground/20"
-                )}
-              >
-                <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-              </button>
-
-              {/* Progress section */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-foreground/80 truncate">
-                    {stepLabel}
-                  </span>
-                  <span className="text-foreground/50 shrink-0 ml-2">
-                    {currentStep} of {totalSteps}
-                  </span>
-                </div>
-
-                {/* Progress bar - fuchsia gradient with glow */}
-                <div className="mt-1.5 relative h-1.5 overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(217,70,239,0.4)]"
-                    style={{ width: `${progressPercentage}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Price pill */}
-              {price !== undefined && price > 0 && (
-                <div
-                  className={cn(
-                    "shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold",
-                    "transition-all duration-[280ms] ease-out",
-                    isAtTop
-                      ? "bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/20"
-                      : "bg-gradient-to-r from-fuchsia-500/20 to-purple-600/20 border border-fuchsia-500/30 text-fuchsia-300"
-                  )}
-                >
-                  ${price}
-                </div>
-              )}
-            </div>
-
-            {/* Inner feather overlay - creates the premium glass depth effect */}
-            <div
-              className={cn(
-                "pointer-events-none absolute inset-0",
-                "transition-all duration-[280ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)]",
-                isAtTop
-                  ? "[box-shadow:inset_0_-1px_0_0_rgba(255,255,255,0.03)]" // Subtle bottom edge only when docked
-                  : "rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.08),inset_0_1px_0_0_rgba(255,255,255,0.1),inset_0_0_40px_rgba(0,0,0,0.15)]"
-              )}
+              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 transition-all duration-500 ease-out shadow-[0_0_8px_rgba(217,70,239,0.3)]"
+              style={{ width: `${progressPercentage}%` }}
             />
           </div>
         </div>
+
+        {/* Price pill */}
+        {price !== undefined && price > 0 && (
+          <div className="shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/20">
+            ${price}
+          </div>
+        )}
       </div>
-    </>
+    </header>
   );
 }
 
@@ -1733,7 +1612,7 @@ export function MobileBookingWizard({
       {/* Toast */}
       <Toast message={toast.message} visible={toast.visible} icon={Check} />
 
-      {/* Header */}
+      {/* Fixed Header */}
       <WizardHeader
         currentStep={currentStep}
         totalSteps={4}
@@ -1741,6 +1620,12 @@ export function MobileBookingWizard({
         canGoBack={currentStep > 1}
         onBack={goBack}
         stepLabel={stepLabel}
+      />
+
+      {/* Spacer for fixed header (h-14 + safe area) */}
+      <div 
+        className="h-14" 
+        style={{ marginTop: 'env(safe-area-inset-top, 0px)' }} 
       />
 
       {/* Mini summary (steps 2-4) */}
