@@ -67,11 +67,13 @@ import type { AppliedPromoCode } from "@/lib/promo-code-types";
 
 const styles = {
   // Tier 1: Section Cards (Primary Containers) - for floating step cards
-  sectionCard: "relative overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl",
+  // ANDROID FIX: Added isolate to create stacking context, contain:layout to prevent dropdown reflow
+  sectionCard: "relative isolate overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl [contain:layout]",
   sectionCardInner: "pointer-events-none absolute inset-0 rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_70px_rgba(0,0,0,0.2)]",
   
   // Tier 2: Standard Cards (Grid Items) - for product cards
-  card: "relative overflow-hidden rounded-xl border border-white/10 bg-background/50 shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl",
+  // ANDROID FIX: Added isolate for stacking context stability
+  card: "relative isolate overflow-hidden rounded-xl border border-white/10 bg-background/50 shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl",
   cardInner: "pointer-events-none absolute inset-0 rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]",
   
   // Tier 3: Nested Cards (Inside Other Cards)
@@ -97,7 +99,8 @@ const styles = {
   input: "border-white/10 bg-white/5 placeholder:text-foreground/40 focus:border-white/20 focus:ring-1 focus:ring-white/10",
   
   // Select dropdowns - enhanced for proper z-index and styling
-  selectTrigger: "w-full border-white/10 bg-white/5 focus:border-white/20 focus:ring-1 focus:ring-white/10 rounded-xl",
+  // ANDROID FIX: Added !w-full and min-w-0 to prevent shrink during dropdown animation
+  selectTrigger: "!w-full min-w-0 border-white/10 bg-white/5 focus:border-white/20 focus:ring-1 focus:ring-white/10 rounded-xl",
   selectContent: "z-[9999] border-white/10 bg-background/95 backdrop-blur-xl rounded-xl shadow-[0_14px_50px_rgba(0,0,0,0.25)] overflow-hidden",
   selectItem: "focus:bg-fuchsia-500/10 rounded-lg mx-1",
   
@@ -256,12 +259,12 @@ function WizardHeader({
         
         CROSS-PLATFORM STICKY BEHAVIOR:
         - Uses position: sticky with top: 0 (works on both iOS and Android)
-        - will-change: transform tells the browser to optimize for position changes
-        - This helps Android Chrome handle sticky elements during URL bar hide/show
         - Safe area padding is applied when docked (iOS notch)
         
-        IMPORTANT: Do NOT apply transforms to sticky elements on Android.
-        The will-change hint is sufficient without actual transform.
+        CRITICAL ANDROID FIX: 
+        - Removed will-change: transform as it can break sticky positioning on Android Chrome
+        - Use contain: layout instead which doesn't interfere with sticky
+        - The inner element can still use GPU acceleration via translateZ(0)
       */}
       <div
         className="sticky z-50"
@@ -270,10 +273,10 @@ function WizardHeader({
           top: 0,
           // Safe area padding when docked (iOS notch, Android status bar)
           paddingTop: isAtTop ? 'env(safe-area-inset-top, 0px)' : undefined,
-          // Optimize for position changes (helps Android with dynamic viewport)
-          willChange: 'transform',
           // Background extends under safe area when docked
           backgroundColor: isAtTop ? 'hsl(var(--background) / 0.8)' : 'transparent',
+          // ANDROID FIX: Use contain instead of will-change which breaks sticky on Android
+          contain: 'layout style',
         }}
       >
         {/* Outer wrapper - handles spacing transitions */}

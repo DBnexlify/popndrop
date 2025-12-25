@@ -89,15 +89,13 @@ export function MobileBottomNav() {
          * Use explicit left/right/bottom positioning instead of inset-x-0
          * to ensure consistent behavior across iOS and Android.
          * 
-         * The nav is positioned as a floating element with pointer-events
-         * only on the actual pill (not the full width).
+         * ANDROID FIX: Removed transform: translateZ(0) from the fixed container
+         * as it can interfere with viewport-relative positioning on Android Chrome.
+         * GPU acceleration is applied to the inner pill element instead.
          */
         left: 0,
         right: 0,
         bottom: 0,
-        // GPU acceleration prevents Android scroll jank
-        transform: 'translateZ(0)',
-        WebkitTransform: 'translateZ(0)',
         // Disable pointer events on container (only pill is interactive)
         pointerEvents: 'none',
       }}
@@ -126,7 +124,7 @@ export function MobileBottomNav() {
           pointerEvents: 'auto',
         }}
       >
-        {/* The floating pill itself */}
+        {/* The floating pill itself - GPU accelerated for smooth animations */}
         <div
           className={cn(
             // Glassmorphism styling
@@ -137,6 +135,11 @@ export function MobileBottomNav() {
             "transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
             "border-white/10"
           )}
+          style={{
+            // ANDROID FIX: GPU acceleration on the pill itself, not the fixed container
+            transform: 'translateZ(0)',
+            WebkitTransform: 'translateZ(0)',
+          }}
         >
           <div className="grid grid-cols-5 px-1 py-1.5" role="menubar">
             {NAV_ITEMS.map(({ href, label, Icon }) => {

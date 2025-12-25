@@ -88,20 +88,32 @@ export function PolicyModal({ policy, children }: PolicyModalProps) {
   return (
     <Dialog>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden border-white/10 bg-background/95 backdrop-blur-xl">
-        <DialogHeader className="border-b border-white/10 pb-4">
+      {/* ANDROID FIX: Added p-4 sm:p-5 for proper spacing per design system */}
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden border-white/10 bg-background/95 backdrop-blur-xl p-0">
+        {/* Header with proper padding */}
+        <DialogHeader className="flex-shrink-0 border-b border-white/10 p-4 sm:p-5">
           <div className="flex items-center gap-3">
-            <div className={cn('flex h-10 w-10 items-center justify-center rounded-full', colorClasses[color])}>
+            <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-full', colorClasses[color])}>
               <Icon className="h-5 w-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <DialogTitle className="text-lg font-semibold">{policyData.title}</DialogTitle>
               <p className="text-sm text-foreground/60">Last updated: {policyData.lastUpdated}</p>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="max-h-[60vh] overflow-y-auto py-4">
+        {/* Scrollable content - ANDROID FIX: Added px-4 sm:px-5 for horizontal spacing */}
+        <div 
+          className="flex-1 overflow-y-auto px-4 py-4 sm:px-5"
+          style={{ 
+            maxHeight: '60vh',
+            // iOS momentum scrolling
+            WebkitOverflowScrolling: 'touch',
+            // Prevent scroll chaining on Android
+            overscrollBehavior: 'contain',
+          }}
+        >
           {policy === 'cancellation' && <CancellationPolicy />}
           {policy === 'safety' && <SafetyRequirements />}
           {policy === 'liability' && <LiabilityWaiver />}
@@ -111,9 +123,10 @@ export function PolicyModal({ policy, children }: PolicyModalProps) {
           {policy === 'rentalAgreement' && <RentalAgreement />}
         </div>
 
-        <div className="border-t border-white/10 pt-4">
+        {/* Footer with proper padding */}
+        <div className="flex-shrink-0 border-t border-white/10 p-4 sm:p-5">
           <div className="flex items-center gap-2 text-xs text-foreground/60">
-            <Phone className="h-3.5 w-3.5 text-fuchsia-400" />
+            <Phone className="h-3.5 w-3.5 shrink-0 text-fuchsia-400" />
             <span>
               Questions? Call or text us at{' '}
               <a href="tel:3524453723" className="text-fuchsia-400 hover:underline">
@@ -225,20 +238,32 @@ export function FullTermsDialog({ children, onAccept }: FullTermsDialogProps) {
   return (
     <Dialog>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden border-white/10 bg-background/95 backdrop-blur-xl">
-        <DialogHeader className="border-b border-white/10 pb-4">
+      {/* ANDROID FIX: Restructured with flex layout and proper padding per design system */}
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden border-white/10 bg-background/95 backdrop-blur-xl p-0">
+        {/* Fixed header - won't scroll */}
+        <DialogHeader className="flex-shrink-0 border-b border-white/10 p-4 sm:p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500/10">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-500/10">
               <FileText className="h-5 w-5 text-cyan-400" />
             </div>
-            <div>
+            <div className="min-w-0">
               <DialogTitle className="text-lg font-semibold">Rental Terms & Safety Waiver</DialogTitle>
               <p className="text-sm text-foreground/60">Please review before booking</p>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="max-h-[60vh] overflow-y-auto py-4">
+        {/* Scrollable content area - ANDROID FIX: proper padding and scroll behavior */}
+        <div 
+          className="flex-1 overflow-y-auto px-4 py-4 sm:px-5"
+          style={{ 
+            maxHeight: '55vh',
+            // iOS momentum scrolling
+            WebkitOverflowScrolling: 'touch',
+            // Prevent scroll chaining on Android
+            overscrollBehavior: 'contain',
+          }}
+        >
           <div className="space-y-2">
             {TERMS_SECTIONS.map((section, index) => (
               <div
@@ -250,14 +275,14 @@ export function FullTermsDialog({ children, onAccept }: FullTermsDialogProps) {
                   onClick={() => setExpandedSection(expandedSection === index ? null : index)}
                   className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-white/[0.02]"
                 >
-                  <div className="flex items-center gap-3">
-                    <section.icon className="h-4 w-4 text-foreground/50" />
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <section.icon className="h-4 w-4 shrink-0 text-foreground/50" />
                     <span className="font-medium">{section.title}</span>
                   </div>
                   {expandedSection === index ? (
-                    <ChevronUp className="h-4 w-4 text-foreground/50" />
+                    <ChevronUp className="h-4 w-4 shrink-0 text-foreground/50" />
                   ) : (
-                    <ChevronDown className="h-4 w-4 text-foreground/50" />
+                    <ChevronDown className="h-4 w-4 shrink-0 text-foreground/50" />
                   )}
                 </button>
 
@@ -273,14 +298,14 @@ export function FullTermsDialog({ children, onAccept }: FullTermsDialogProps) {
           </div>
         </div>
 
-        {/* Trust footer with contact */}
-        <div className="flex flex-col gap-2 border-t border-white/10 pt-4">
+        {/* Fixed footer - won't scroll */}
+        <div className="flex flex-shrink-0 flex-col gap-2 border-t border-white/10 p-4 sm:p-5">
           <div className="flex items-center gap-2 text-xs text-foreground/50">
-            <Shield className="h-4 w-4 text-cyan-400" />
+            <Shield className="h-4 w-4 shrink-0 text-cyan-400" />
             <span>Your safety is our priority</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-foreground/60">
-            <Phone className="h-3.5 w-3.5 text-fuchsia-400" />
+            <Phone className="h-3.5 w-3.5 shrink-0 text-fuchsia-400" />
             <span>
               Questions? Call or text us at{' '}
               <a href="tel:3524453723" className="text-fuchsia-400 hover:underline">

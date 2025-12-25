@@ -97,13 +97,15 @@ function useIsMobile(breakpoint: number = 768) {
 
 const styles = {
   // Tier 1: Section Cards (Primary Containers)
+  // ANDROID FIX: Added isolate to create stacking context, contain:layout to prevent dropdown reflow
   sectionCard:
-    "relative overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-3xl",
+    "relative isolate overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-3xl [contain:layout]",
   sectionCardInner:
     "pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_70px_rgba(0,0,0,0.2)]",
 
   // Tier 2: Standard Cards (Grid Items) - for sidebar cards
-  card: "relative overflow-hidden rounded-xl border border-white/10 bg-background/50 shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl sm:rounded-2xl",
+  // ANDROID FIX: Added isolate for stacking context stability
+  card: "relative isolate overflow-hidden rounded-xl border border-white/10 bg-background/50 shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl sm:rounded-2xl",
   cardInner:
     "pointer-events-none absolute inset-0 rounded-xl sm:rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]",
 
@@ -128,8 +130,9 @@ const styles = {
     "border-white/10 bg-white/5 placeholder:text-foreground/40 focus:border-white/20 focus:ring-1 focus:ring-white/10",
 
   // Select dropdowns
+  // ANDROID FIX: Added !w-full and min-w-0 to prevent shrink during dropdown animation
   selectTrigger:
-    "w-full border-white/10 bg-white/5 focus:border-white/20 focus:ring-1 focus:ring-white/10",
+    "!w-full min-w-0 border-white/10 bg-white/5 focus:border-white/20 focus:ring-1 focus:ring-white/10",
   selectContent: "border-white/10 bg-background/95 backdrop-blur-xl",
   selectItem: "focus:bg-cyan-500/10",
 } as const;
@@ -659,10 +662,11 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
 
       {/* ===================================================================== */}
       {/* STICKY PROGRESS BAR - Glassmorphism card matching design system */}
+      {/* ANDROID FIX: Using contain instead of transform on sticky container */}
       {/* ===================================================================== */}
       <div 
         className="sticky top-14 z-40 mt-6 sm:mt-8 sm:top-16"
-        style={{ transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
+        style={{ contain: 'layout style' }}
       >
         <div className={cn(styles.card, "py-4 px-4 sm:px-6")}>
           {/* Desktop version - progress + price */}
