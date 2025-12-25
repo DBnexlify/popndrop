@@ -20,17 +20,14 @@ const SCROLL_THRESHOLD = 60;
 const SCROLL_DELTA_MIN = 8;
 
 /**
- * MOBILE BOTTOM NAVIGATION
- * ========================
- * Pure floating pill navigation - NO background banner.
+ * MOBILE BOTTOM NAVIGATION - ANDROID CHROME FIXED
+ * ================================================
  * 
- * Cross-platform architecture:
- * - iOS: Uses env(safe-area-inset-bottom) for home indicator
- * - Android gesture nav: Falls back to minimum padding
- * - Android button nav: Falls back to minimum padding
- * 
- * The floating pill sits above the safe area with proper spacing.
- * NO full-width background layer - just the floating card.
+ * CRITICAL FIXES (Dec 2025):
+ * 1. Use flexbox centering instead of left/right: 0 + mx-auto (fails on Android)
+ * 2. Use bottom: env(safe-area-inset-bottom) for POSITIONING, not just padding
+ * 3. NO transform on fixed container (breaks viewport positioning on Android)
+ * 4. Explicit width with max-width for reliable centering
  * 
  * @see https://developer.chrome.com/docs/css-ui/edge-to-edge
  */
@@ -77,54 +74,44 @@ export function MobileBottomNav() {
   }, [handleScroll]);
 
   return (
-    <nav
-      ref={navRef}
-      data-collapsed="false"
-      aria-label="Mobile navigation"
-      className="group/nav fixed z-50 sm:hidden"
-      style={{
-        /*
-         * CROSS-PLATFORM POSITIONING:
-         * 
-         * Use explicit left/right/bottom positioning instead of inset-x-0
-         * to ensure consistent behavior across iOS and Android.
-         * 
-         * ANDROID FIX: Removed transform: translateZ(0) from the fixed container
-         * as it can interfere with viewport-relative positioning on Android Chrome.
-         * GPU acceleration is applied to the inner pill element instead.
-         */
-        left: 0,
-        right: 0,
-        bottom: 0,
-        // Disable pointer events on container (only pill is interactive)
-        pointerEvents: 'none',
-      }}
-    >
-      {/* 
-        FLOATING PILL CONTAINER
+    <>
+      {/*
+        FIXED OVERLAY CONTAINER
         =======================
-        Pure floating pill - NO background banner.
-        Uses additive safe area: base padding + any safe area inset.
-        This ensures minimum spacing on all platforms.
+        ANDROID CHROME FIX: Use flexbox for centering instead of left/right: 0 + mx-auto
+        The overlay fills the viewport width and uses flexbox to center the pill.
+        
+        CRITICAL: No transform on this container - it breaks fixed positioning on Android.
       */}
-      <div 
-        className="mx-auto w-full max-w-5xl px-3"
+      <nav
+        ref={navRef}
+        data-collapsed="false"
+        aria-label="Mobile navigation"
+        className="group/nav fixed z-50 sm:hidden"
         style={{
-          /*
-           * CROSS-PLATFORM SAFE AREA:
-           * Uses ADDITIVE approach: 12px base + safe area inset
-           * - iOS: 12px + ~34px = 46px (proper home indicator clearance)
-           * - Android gesture: 12px + 0-24px = 12-36px
-           * - Android buttons: 12px + 0 = 12px (minimum always applies)
-           * 
-           * IMPORTANT: Do NOT use max() - it behaves inconsistently on Android.
-           */
-          paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
-          // Re-enable pointer events on the actual content
-          pointerEvents: 'auto',
+          // Full width positioning
+          left: 0,
+          right: 0,
+          // ANDROID FIX: Position from safe area, not from bottom: 0
+          // This ensures the nav is always visible above gesture bar
+          bottom: 'env(safe-area-inset-bottom, 0px)',
+          // Use flexbox for centering (more reliable than mx-auto on Android)
+          display: 'flex',
+          justifyContent: 'center',
+          // Add padding so pill doesn't touch edges
+          paddingLeft: '12px',
+          paddingRight: '12px',
+          paddingBottom: '12px',
+          // Disable pointer events on container
+          pointerEvents: 'none',
         }}
       >
-        {/* The floating pill itself - GPU accelerated for smooth animations */}
+        {/*
+          FLOATING PILL
+          =============
+          Explicit width + max-width ensures consistent sizing.
+          GPU acceleration applied here, NOT on fixed container.
+        */}
         <div
           className={cn(
             // Glassmorphism styling
@@ -136,7 +123,12 @@ export function MobileBottomNav() {
             "border-white/10"
           )}
           style={{
-            // ANDROID FIX: GPU acceleration on the pill itself, not the fixed container
+            // Explicit width for reliable centering
+            width: '100%',
+            maxWidth: '500px',
+            // Re-enable pointer events
+            pointerEvents: 'auto',
+            // GPU acceleration on pill only (not fixed container)
             transform: 'translateZ(0)',
             WebkitTransform: 'translateZ(0)',
           }}
@@ -185,7 +177,7 @@ export function MobileBottomNav() {
             })}
           </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+    </>
   );
 }

@@ -97,15 +97,14 @@ function useIsMobile(breakpoint: number = 768) {
 
 const styles = {
   // Tier 1: Section Cards (Primary Containers)
-  // ANDROID FIX: Added isolate to create stacking context, contain:layout to prevent dropdown reflow
+  // NOTE: Do NOT use contain:layout - it breaks sticky/fixed children on Android Chrome
   sectionCard:
-    "relative isolate overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-3xl [contain:layout]",
+    "relative overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-3xl",
   sectionCardInner:
     "pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_70px_rgba(0,0,0,0.2)]",
 
   // Tier 2: Standard Cards (Grid Items) - for sidebar cards
-  // ANDROID FIX: Added isolate for stacking context stability
-  card: "relative isolate overflow-hidden rounded-xl border border-white/10 bg-background/50 shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl sm:rounded-2xl",
+  card: "relative overflow-hidden rounded-xl border border-white/10 bg-background/50 shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl sm:rounded-2xl",
   cardInner:
     "pointer-events-none absolute inset-0 rounded-xl sm:rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]",
 

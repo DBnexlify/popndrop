@@ -67,13 +67,12 @@ import type { AppliedPromoCode } from "@/lib/promo-code-types";
 
 const styles = {
   // Tier 1: Section Cards (Primary Containers) - for floating step cards
-  // ANDROID FIX: Added isolate to create stacking context, contain:layout to prevent dropdown reflow
-  sectionCard: "relative isolate overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl [contain:layout]",
+  // NOTE: Do NOT use contain:layout here - it breaks sticky/fixed children on Android Chrome
+  sectionCard: "relative overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl",
   sectionCardInner: "pointer-events-none absolute inset-0 rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_70px_rgba(0,0,0,0.2)]",
   
   // Tier 2: Standard Cards (Grid Items) - for product cards
-  // ANDROID FIX: Added isolate for stacking context stability
-  card: "relative isolate overflow-hidden rounded-xl border border-white/10 bg-background/50 shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl",
+  card: "relative overflow-hidden rounded-xl border border-white/10 bg-background/50 shadow-[0_14px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl",
   cardInner: "pointer-events-none absolute inset-0 rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]",
   
   // Tier 3: Nested Cards (Inside Other Cards)
@@ -200,12 +199,18 @@ function Toast({
 // Transitions smoothly from floating glassmorphism card to docked header
 // Matches site header dimensions exactly when docked (h-14 mobile, h-16 desktop)
 //
-// CROSS-PLATFORM ARCHITECTURE:
-// - Uses position: sticky with top: 0 (works on both iOS and Android)
+// CROSS-PLATFORM ARCHITECTURE (ANDROID CHROME FIXED Dec 2025):
+// - Uses position: sticky with top: 0 via Tailwind class
 // - Safe area handled via env(safe-area-inset-top) with 0px fallback
-// - GPU acceleration via translateZ(0) prevents Android scroll jank
 // - IntersectionObserver detects scroll state without scroll event listeners
-// - NO transforms on the sticky element itself (breaks Android sticky)
+//
+// CRITICAL: These properties BREAK sticky on Android Chrome:
+// - transform (any value) - creates containing block
+// - will-change: transform - same effect
+// - contain: layout/paint/strict - creates containing block
+// - backdrop-filter on the sticky element itself
+//
+// GPU acceleration (translateZ(0)) must be on INNER elements only.
 //
 // @see https://developer.chrome.com/docs/css-ui/edge-to-edge
 // =============================================================================
@@ -255,28 +260,26 @@ function WizardHeader({
       <div ref={sentinelRef} className="absolute top-0 h-1 w-full" aria-hidden="true" />
 
       {/*
-        STICKY CONTAINER
+        STICKY CONTAINER - ANDROID CHROME FIXED (Dec 2025)
         
-        CROSS-PLATFORM STICKY BEHAVIOR:
-        - Uses position: sticky with top: 0 (works on both iOS and Android)
-        - Safe area padding is applied when docked (iOS notch)
+        CRITICAL: Do NOT use any of these on sticky containers:
+        - transform (any value) - creates containing block, breaks sticky
+        - will-change: transform - same effect as transform
+        - contain: layout/paint/strict/content - creates containing block
+        - filter/backdrop-filter - creates stacking context
         
-        CRITICAL ANDROID FIX: 
-        - Removed will-change: transform as it can break sticky positioning on Android Chrome
-        - Use contain: layout instead which doesn't interfere with sticky
-        - The inner element can still use GPU acceleration via translateZ(0)
+        The sticky element must have NO containing block ancestors except the viewport.
+        GPU acceleration is applied to INNER elements only.
       */}
       <div
-        className="sticky z-50"
+        className="sticky top-0 z-50"
         style={{
-          // Position at top
-          top: 0,
           // Safe area padding when docked (iOS notch, Android status bar)
           paddingTop: isAtTop ? 'env(safe-area-inset-top, 0px)' : undefined,
           // Background extends under safe area when docked
           backgroundColor: isAtTop ? 'hsl(var(--background) / 0.8)' : 'transparent',
-          // ANDROID FIX: Use contain instead of will-change which breaks sticky on Android
-          contain: 'layout style',
+          // ANDROID FIX: NO contain, NO transform, NO will-change on sticky container
+          // These properties break sticky positioning by creating containing blocks
         }}
       >
         {/* Outer wrapper - handles spacing transitions */}
