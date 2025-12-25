@@ -128,10 +128,25 @@ export function getDayName(date: Date): string {
  * 
  * IMPORTANT: The BASE option (non-recommended) should be FIRST in the array.
  * This prevents auto-upgrading users without their consent.
+ * 
+ * NEW: Respects product.availableBookingTypes to filter which options are shown.
+ * NEW: Respects product.sameDayPickupOnly to restrict pickup windows.
  */
 export function getPricingOptions(product: ProductDisplay, date: Date): PricingResult {
   const dayOfWeek = date.getDay();
   const dayName = getDayName(date);
+  
+  // Get available booking types for this product (default to all if not set)
+  const availableTypes = product.availableBookingTypes ?? ['daily', 'weekend', 'sunday'];
+  const sameDayOnly = product.sameDayPickupOnly ?? false;
+  
+  // Helper to check if a booking type is available
+  const isTypeAvailable = (type: BookingType) => availableTypes.includes(type);
+  
+  // Pickup windows based on sameDayPickupOnly setting
+  const dailyPickupWindows = sameDayOnly 
+    ? SCHEDULE.sameDayPickupWindows 
+    : [...SCHEDULE.sameDayPickupWindows, ...SCHEDULE.nextMorningPickupWindows];
   
   // Coming soon products (price = 0)
   if (product.pricing.daily === 0) {
@@ -147,35 +162,48 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
   // Base option FIRST so user isn't auto-upgraded
   // =========================================================================
   if (dayOfWeek === 0) {
-    return {
-      available: true,
-      options: [
-        // BASE OPTION FIRST - user's initial selection
-        {
-          type: "sunday",
-          price: product.pricing.sunday,
-          label: "Sunday only",
-          description: "Delivered Saturday 5–7 PM, pickup Monday",
-          deliveryDay: "Saturday",
-          deliveryWindows: SCHEDULE.saturdayEveningWindow,
-          pickupDay: "Monday",
-          pickupWindows: SCHEDULE.mondayPickupWindows,
-        },
-        // UPGRADE OPTION - shown via nudge
-        {
-          type: "weekend",
-          price: product.pricing.weekend,
-          label: "Full weekend",
-          description: "Delivered Saturday 8–11 AM, pickup Monday — more time!",
-          deliveryDay: "Saturday",
-          deliveryWindows: SCHEDULE.deliveryWindows,
-          pickupDay: "Monday",
-          pickupWindows: SCHEDULE.mondayPickupWindows,
-          recommended: true,
-          badge: "Best value",
-        },
-      ],
-    };
+    const options: PricingOption[] = [];
+    
+    // Only add sunday option if available for this product
+    if (isTypeAvailable('sunday')) {
+      options.push({
+        type: "sunday",
+        price: product.pricing.sunday,
+        label: "Sunday only",
+        description: "Delivered Saturday 5–7 PM, pickup Monday",
+        deliveryDay: "Saturday",
+        deliveryWindows: SCHEDULE.saturdayEveningWindow,
+        pickupDay: "Monday",
+        pickupWindows: SCHEDULE.mondayPickupWindows,
+      });
+    }
+    
+    // Only add weekend option if available for this product
+    if (isTypeAvailable('weekend')) {
+      options.push({
+        type: "weekend",
+        price: product.pricing.weekend,
+        label: "Full weekend",
+        description: "Delivered Saturday 8–11 AM, pickup Monday — more time!",
+        deliveryDay: "Saturday",
+        deliveryWindows: SCHEDULE.deliveryWindows,
+        pickupDay: "Monday",
+        pickupWindows: SCHEDULE.mondayPickupWindows,
+        recommended: options.length > 0, // Only recommend if there's a base option
+        badge: options.length > 0 ? "Best value" : undefined,
+      });
+    }
+    
+    // If no options available for Sunday, return unavailable
+    if (options.length === 0) {
+      return {
+        available: false,
+        reason: "This rental is not available for Sunday events.",
+        options: [],
+      };
+    }
+    
+    return { available: true, options };
   }
   
   // =========================================================================
@@ -183,41 +211,62 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
   // Base option FIRST
   // =========================================================================
   if (dayOfWeek === 6) {
-    return {
-      available: true,
-      options: [
-        // BASE OPTION FIRST
-        {
-          type: "daily",
-          price: product.pricing.daily,
-          label: "Saturday only",
-          description: "Single day rental, pickup Saturday evening",
-          deliveryDay: "Saturday",
-          deliveryWindows: SCHEDULE.deliveryWindows,
-          pickupDay: "Saturday",
-          pickupWindows: SCHEDULE.sameDayPickupWindows,
-        },
-        // UPGRADE OPTION
-        {
-          type: "weekend",
-          price: product.pricing.weekend,
-          label: "Full weekend",
-          description: "Keep it Saturday & Sunday, pickup Monday",
-          deliveryDay: "Saturday",
-          deliveryWindows: SCHEDULE.deliveryWindows,
-          pickupDay: "Monday",
-          pickupWindows: SCHEDULE.mondayPickupWindows,
-          recommended: true,
-          badge: "Best value",
-        },
-      ],
-    };
+    const options: PricingOption[] = [];
+    
+    // Only add daily option if available for this product
+    if (isTypeAvailable('daily')) {
+      options.push({
+        type: "daily",
+        price: product.pricing.daily,
+        label: "Saturday only",
+        description: "Single day rental, pickup Saturday evening",
+        deliveryDay: "Saturday",
+        deliveryWindows: SCHEDULE.deliveryWindows,
+        pickupDay: "Saturday",
+        pickupWindows: SCHEDULE.sameDayPickupWindows, // Saturday daily is always same-day
+      });
+    }
+    
+    // Only add weekend option if available for this product
+    if (isTypeAvailable('weekend')) {
+      options.push({
+        type: "weekend",
+        price: product.pricing.weekend,
+        label: "Full weekend",
+        description: "Keep it Saturday & Sunday, pickup Monday",
+        deliveryDay: "Saturday",
+        deliveryWindows: SCHEDULE.deliveryWindows,
+        pickupDay: "Monday",
+        pickupWindows: SCHEDULE.mondayPickupWindows,
+        recommended: options.length > 0,
+        badge: options.length > 0 ? "Best value" : undefined,
+      });
+    }
+    
+    // If no options available for Saturday, return unavailable
+    if (options.length === 0) {
+      return {
+        available: false,
+        reason: "This rental is not available for Saturday events.",
+        options: [],
+      };
+    }
+    
+    return { available: true, options };
   }
   
   // =========================================================================
   // FRIDAY - daily with next-morning pickup option
   // =========================================================================
   if (dayOfWeek === 5) {
+    if (!isTypeAvailable('daily')) {
+      return {
+        available: false,
+        reason: "This rental is not available for Friday events.",
+        options: [],
+      };
+    }
+    
     return {
       available: true,
       options: [
@@ -225,11 +274,11 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
           type: "daily",
           price: product.pricing.daily,
           label: `${dayName} rental`,
-          description: "Single day rental",
+          description: sameDayOnly ? "Single day rental, same-day pickup" : "Single day rental",
           deliveryDay: dayName,
           deliveryWindows: SCHEDULE.deliveryWindows,
           pickupDay: dayName,
-          pickupWindows: [...SCHEDULE.sameDayPickupWindows, ...SCHEDULE.nextMorningPickupWindows],
+          pickupWindows: dailyPickupWindows,
         },
       ],
     };
@@ -238,6 +287,14 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
   // =========================================================================
   // MONDAY-THURSDAY - daily rate only
   // =========================================================================
+  if (!isTypeAvailable('daily')) {
+    return {
+      available: false,
+      reason: "This rental is not available for weekday events.",
+      options: [],
+    };
+  }
+  
   return {
     available: true,
     options: [
@@ -245,11 +302,11 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
         type: "daily",
         price: product.pricing.daily,
         label: `${dayName} rental`,
-        description: "Single day rental",
+        description: sameDayOnly ? "Single day rental, same-day pickup" : "Single day rental",
         deliveryDay: dayName,
         deliveryWindows: SCHEDULE.deliveryWindows,
         pickupDay: dayName,
-        pickupWindows: [...SCHEDULE.sameDayPickupWindows, ...SCHEDULE.nextMorningPickupWindows],
+        pickupWindows: dailyPickupWindows,
       },
     ],
   };

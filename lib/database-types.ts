@@ -72,6 +72,8 @@ export interface Product {
   is_featured: boolean;
   display_order: number | null;
   sort_order: number | null;
+  available_booking_types: BookingType[] | null;
+  same_day_pickup_only: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -101,6 +103,8 @@ export interface ProductInsert {
   is_featured?: boolean;
   display_order?: number;
   sort_order?: number;
+  available_booking_types?: BookingType[];
+  same_day_pickup_only?: boolean;
 }
 
 export interface ProductUpdate extends Partial<ProductInsert> {}
@@ -561,6 +565,9 @@ export interface ProductDisplay {
   gallery: string[];
   safetyNotes?: string[];
   isActive: boolean;
+  // Booking configuration
+  availableBookingTypes: BookingType[];
+  sameDayPickupOnly: boolean;
 }
 
 /**
@@ -594,6 +601,9 @@ export function toProductDisplay(product: Product): ProductDisplay {
     gallery: product.gallery_urls ?? [],
     safetyNotes: product.safety_notes ?? undefined,
     isActive: product.is_active,
+    // Booking configuration - default to all types if not specified
+    availableBookingTypes: product.available_booking_types ?? ['daily', 'weekend', 'sunday'],
+    sameDayPickupOnly: product.same_day_pickup_only ?? false,
   };
 }
 

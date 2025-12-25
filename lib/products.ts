@@ -37,6 +37,9 @@ export function toProductDisplay(product: Product): ProductDisplay {
     image: product.image_url ?? "",
     gallery: product.gallery_urls ?? [],
     safetyNotes: product.safety_notes ?? undefined,
+    // Booking configuration - default to all types if not specified
+    availableBookingTypes: product.available_booking_types ?? ['daily', 'weekend', 'sunday'],
+    sameDayPickupOnly: product.same_day_pickup_only ?? false,
   };
 }
 

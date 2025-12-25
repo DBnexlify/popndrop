@@ -745,12 +745,16 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                           {selectedProduct.subtitle}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2">
-                          <Badge variant="secondary" className="text-xs">
-                            ${selectedProduct.pricing.daily}/day
-                          </Badge>
-                          <Badge variant="secondary" className="text-xs">
-                            ${selectedProduct.pricing.weekend} weekend
-                          </Badge>
+                          {selectedProduct.availableBookingTypes.includes('daily') && (
+                            <Badge variant="secondary" className="text-xs">
+                              ${selectedProduct.pricing.daily}/day
+                            </Badge>
+                          )}
+                          {selectedProduct.availableBookingTypes.includes('weekend') && (
+                            <Badge variant="secondary" className="text-xs">
+                              ${selectedProduct.pricing.weekend} weekend
+                            </Badge>
+                          )}
                         </div>
                       </div>
                       <Button variant="ghost" size="sm" asChild className="shrink-0">
@@ -1468,18 +1472,30 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                     {/* Nested card for rates - Tier 3 */}
                     <div className={styles.nestedCard}>
                       <div className="space-y-2 p-3">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-foreground/50">Daily rate</span>
-                          <span className="text-foreground/70">
-                            ${selectedProduct.pricing.daily}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-foreground/50">Weekend rate</span>
-                          <span className="text-foreground/70">
-                            ${selectedProduct.pricing.weekend}
-                          </span>
-                        </div>
+                        {selectedProduct.availableBookingTypes.includes('daily') && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-foreground/50">Daily rate</span>
+                            <span className="text-foreground/70">
+                              ${selectedProduct.pricing.daily}
+                            </span>
+                          </div>
+                        )}
+                        {selectedProduct.availableBookingTypes.includes('weekend') && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-foreground/50">Weekend rate</span>
+                            <span className="text-foreground/70">
+                              ${selectedProduct.pricing.weekend}
+                            </span>
+                          </div>
+                        )}
+                        {selectedProduct.availableBookingTypes.includes('sunday') && !selectedProduct.availableBookingTypes.includes('weekend') && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-foreground/50">Sunday rate</span>
+                            <span className="text-foreground/70">
+                              ${selectedProduct.pricing.sunday}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div className={styles.nestedCardInner} />
                     </div>
