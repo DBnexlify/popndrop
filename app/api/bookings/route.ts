@@ -262,6 +262,9 @@ export async function POST(request: NextRequest) {
     // Crew IDs assigned during availability check (for ops resource booking blocks)
     let assignedDeliveryCrewId: string | null = null;
     let assignedPickupCrewId: string | null = null;
+    // Delivery/pickup windows - derived from slot times for slot-based products
+    let finalDeliveryWindow: string = deliveryWindow || '';
+    let finalPickupWindow: string = pickupWindow || '';
 
     if (isSlotBased) {
       // ======================================================================
@@ -338,6 +341,29 @@ export async function POST(request: NextRequest) {
 
       unitId = unit.id;
 
+      // Derive delivery/pickup windows from slot times for slot-based products
+      // Format: use slot label or derive from event times
+      if (selectedSlot.label) {
+        finalDeliveryWindow = selectedSlot.label;
+        finalPickupWindow = selectedSlot.label;
+      } else if (eventStartTime && eventEndTime) {
+        // Format the times in Eastern timezone
+        const startTime = new Date(eventStartTime).toLocaleTimeString('en-US', {
+          timeZone: FLORIDA_TIMEZONE,
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+        const endTime = new Date(eventEndTime).toLocaleTimeString('en-US', {
+          timeZone: FLORIDA_TIMEZONE,
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+        finalDeliveryWindow = `${startTime} - ${endTime}`;
+        finalPickupWindow = `${startTime} - ${endTime}`;
+      }
+
       console.log('Slot-based booking:', {
         slotId,
         slotLabel: selectedSlot.label,
@@ -345,6 +371,7 @@ export async function POST(request: NextRequest) {
         eventEnd: eventEndTime,
         serviceStart: serviceStartTime,
         serviceEnd: serviceEndTime,
+        derivedWindows: { delivery: finalDeliveryWindow, pickup: finalPickupWindow },
       });
 
     } else {
@@ -550,8 +577,8 @@ export async function POST(request: NextRequest) {
       event_date: eventDate,
       delivery_date: deliveryDate,
       pickup_date: pickupDate,
-      delivery_window: deliveryWindow,
-      pickup_window: pickupWindow,
+      delivery_window: finalDeliveryWindow,
+      pickup_window: finalPickupWindow,
       delivery_address: address,
       delivery_city: city,
       subtotal: priceTotal,
