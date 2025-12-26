@@ -309,6 +309,79 @@ async function processSuccessfulPayment(
 
     return; // Stop processing - don't confirm the cancelled booking
   }
+
+  // ===========================================================================
+  // CRITICAL FIX: Verify booking blocks still exist
+  // This prevents confirming a booking whose blocks were cleaned up by the
+  // pending cleanup cron (customer took too long to pay)
+  // ===========================================================================
+  const { data: existingBlocks, error: blocksError } = await supabase
+    .from('booking_blocks')
+    .select('id')
+    .eq('booking_id', bookingId);
+
+  if (blocksError || !existingBlocks || existingBlocks.length === 0) {
+    console.error(`🚫 [WEBHOOK] REJECTED: Booking ${bookingStatus?.booking_number || bookingId} has no blocks (expired pending)`);
+    console.log(`🚫 [WEBHOOK] Session: ${session.id} | Amount: ${(session.amount_total || 0) / 100}`);
+    
+    // Record the rejected payment for audit trail
+    await supabase.from('payments').insert({
+      booking_id: bookingId,
+      payment_type: paymentType === 'full' ? 'full' : 'deposit',
+      amount: (session.amount_total || 0) / 100,
+      status: 'rejected',
+      payment_method: 'card',
+      stripe_payment_intent_id: session.payment_intent as string || null,
+      stripe_checkout_session_id: session.id,
+    });
+
+    // Issue automatic refund
+    try {
+      if (session.payment_intent && typeof session.payment_intent === 'string') {
+        const refund = await stripe.refunds.create({
+          payment_intent: session.payment_intent,
+          reason: 'requested_by_customer',
+          metadata: {
+            reason: 'Booking expired while customer was checking out',
+            booking_id: bookingId,
+          },
+        });
+        console.log(`💸 [WEBHOOK] Auto-refund issued: ${refund.id} for expired booking`);
+      }
+    } catch (refundError) {
+      console.error('❌ [WEBHOOK] Failed to auto-refund expired booking:', refundError);
+    }
+
+    // Alert the business owner
+    try {
+      await resend.emails.send({
+        from: FROM_EMAIL,
+        to: NOTIFY_EMAIL,
+        subject: `⚠️ ALERT: Payment on Expired Booking - Auto-Refunded`,
+        html: `
+          <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: #fef9c3; border: 2px solid #eab308; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+              <h2 style="color: #a16207; margin: 0;">⚠️ Expired Booking Payment</h2>
+              <p style="color: #854d0e; margin: 10px 0 0 0;">Auto-refund issued</p>
+            </div>
+            <p>A customer completed payment for a booking that had expired (pending cleanup removed the reservation blocks). An automatic refund has been issued.</p>
+            <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+              <tr><td style="padding: 8px 0;"><strong>Booking ID:</strong></td><td>${bookingId}</td></tr>
+              <tr><td style="padding: 8px 0;"><strong>Amount:</strong></td><td>${((session.amount_total || 0) / 100).toFixed(2)}</td></tr>
+              <tr><td style="padding: 8px 0;"><strong>Stripe Session:</strong></td><td>${session.id}</td></tr>
+            </table>
+            <p style="margin-top: 20px; padding: 15px; background: #f3f4f6; border-radius: 8px;">
+              <strong>What happened:</strong> The customer started checkout but took longer than 45 minutes to complete payment. Our cleanup process released the time slot, then the customer completed payment for a slot that's no longer available.
+            </p>
+          </div>
+        `,
+      });
+    } catch (emailError) {
+      console.error('❌ [WEBHOOK] Failed to send expired booking alert:', emailError);
+    }
+
+    return; // Stop processing - blocks were cleaned up
+  }
   // ===========================================================================
 
   // Idempotency check

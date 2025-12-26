@@ -13,6 +13,26 @@ export type { CalendarEvent, CalendarData } from '@/lib/calendar-types';
 export { getCalendarStatusConfig } from '@/lib/calendar-types';
 
 // -----------------------------------------------------------------------------
+// HELPER FUNCTIONS
+// -----------------------------------------------------------------------------
+
+/**
+ * Format database TIME value to display format
+ * Converts "10:00:00" to "10:00 AM"
+ */
+function formatTimeForDisplay(time: string): string {
+  // Handle HH:MM:SS or HH:MM format
+  const [hoursStr, minutesStr] = time.split(':');
+  const hours = parseInt(hoursStr, 10);
+  const minutes = minutesStr || '00';
+  
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12; // Convert 0 to 12, 13 to 1, etc.
+  
+  return `${displayHours}:${minutes} ${period}`;
+}
+
+// -----------------------------------------------------------------------------
 // MAIN QUERY
 // -----------------------------------------------------------------------------
 
@@ -41,6 +61,7 @@ export async function getCalendarEvents(
   // Fetch bookings and blackout dates in parallel
   const [bookingsResult, blackoutResult, statsResult] = await Promise.all([
     // Bookings that overlap with our date range
+    // Join with booking_blocks to get slot times for slot-based bookings
     supabase
       .from('bookings')
       .select(`
@@ -48,8 +69,9 @@ export async function getCalendarEvents(
         customer:customers(first_name, last_name, phone),
         unit:units(
           unit_number,
-          product:products(name, slug)
-        )
+          product:products(name, slug, scheduling_mode)
+        ),
+        block:booking_blocks(start_time, end_time, label)
       `)
       .or(`and(delivery_date.lte.${endStr},pickup_date.gte.${startStr})`)
       .neq('status', 'cancelled'), // Include all except cancelled in main view
@@ -86,7 +108,11 @@ export async function getCalendarEvents(
   if (bookingsResult.data) {
     for (const booking of bookingsResult.data) {
       const customer = booking.customer as { first_name: string; last_name: string; phone: string } | null;
-      const unit = booking.unit as { unit_number: number; product: { name: string; slug: string } | null } | null;
+      const unit = booking.unit as { unit_number: number; product: { name: string; slug: string; scheduling_mode: string } | null } | null;
+      const block = booking.block as { start_time: string; end_time: string; label: string | null } | null;
+      
+      // Check if this is a slot-based booking
+      const isSlotBased = unit?.product?.scheduling_mode === 'slot_based';
 
       events.push({
         id: booking.id,
@@ -104,6 +130,11 @@ export async function getCalendarEvents(
         deliveryAddress: `${booking.delivery_address}, ${booking.delivery_city}`,
         balanceDue: booking.balance_due,
         balancePaid: booking.balance_paid,
+        // Slot-based fields
+        isSlotBased,
+        slotStartTime: block?.start_time ? formatTimeForDisplay(block.start_time) : undefined,
+        slotEndTime: block?.end_time ? formatTimeForDisplay(block.end_time) : undefined,
+        slotLabel: block?.label || undefined,
       });
     }
   }

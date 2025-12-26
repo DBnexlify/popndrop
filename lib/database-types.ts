@@ -8,6 +8,7 @@ import {
 // DATABASE TYPES - Single Source of Truth
 // Consolidated from database-types.ts + database_types.ts
 // Matches actual Supabase schema as of Dec 2024
+// Updated Dec 2024: Added Booking Blocks System
 // =============================================================================
 
 // =============================================================================
@@ -37,6 +38,30 @@ export type WetDryOption = 'wet' | 'dry' | 'both';
 
 export type DeliveryWindow = 'morning' | 'midday' | 'afternoon' | 'saturday-evening';
 export type PickupWindow = 'evening' | 'next-morning' | 'monday-morning' | 'monday-afternoon';
+
+// -----------------------------------------------------------------------------
+// BOOKING BLOCKS SYSTEM ENUMS (added Dec 2024)
+// -----------------------------------------------------------------------------
+
+/** How a product is scheduled: fixed time slots or all-day rentals */
+export type SchedulingMode = 'slot_based' | 'day_rental';
+
+/** Types of time blocks created for each booking */
+export type BlockType = 'event' | 'service_delivery' | 'service_pickup' | 'cleaning_buffer';
+
+/** Resource types for booking blocks */
+export type ResourceType = 'asset' | 'ops';
+
+/** Operational resource types (crew teams, vehicles) */
+export type OpsResourceType = 'crew' | 'vehicle';
+
+/** Reasons for issuing store credits */
+export type CreditReason =
+  | 'weather'
+  | 'customer_reschedule'
+  | 'owner_override'
+  | 'equipment_issue'
+  | 'other';
 
 // =============================================================================
 // TABLE TYPES (matching actual database columns)
@@ -76,6 +101,12 @@ export interface Product {
   same_day_pickup_only: boolean;
   created_at: string;
   updated_at: string;
+  // Booking blocks system fields (added Dec 2024)
+  scheduling_mode: SchedulingMode;
+  setup_minutes: number;
+  teardown_minutes: number;
+  travel_buffer_minutes: number;
+  cleaning_minutes: number;
 }
 
 export interface ProductInsert {
@@ -105,9 +136,94 @@ export interface ProductInsert {
   sort_order?: number;
   available_booking_types?: BookingType[];
   same_day_pickup_only?: boolean;
+  // Booking blocks system fields
+  scheduling_mode?: SchedulingMode;
+  setup_minutes?: number;
+  teardown_minutes?: number;
+  travel_buffer_minutes?: number;
+  cleaning_minutes?: number;
 }
 
 export interface ProductUpdate extends Partial<ProductInsert> {}
+
+// -----------------------------------------------------------------------------
+// PRODUCT SLOTS (Fixed time windows for slot-based products)
+// -----------------------------------------------------------------------------
+
+export interface ProductSlot {
+  id: string;
+  product_id: string;
+  label: string;                    // "3 PM – 7 PM"
+  start_time_local: string;         // "15:00:00"
+  end_time_local: string;           // "19:00:00"
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductSlotInsert {
+  product_id: string;
+  label: string;
+  start_time_local: string;
+  end_time_local: string;
+  is_active?: boolean;
+  display_order?: number;
+}
+
+export interface ProductSlotUpdate extends Partial<ProductSlotInsert> {}
+
+// -----------------------------------------------------------------------------
+// OPS RESOURCES (Crew teams, vehicles)
+// -----------------------------------------------------------------------------
+
+export interface OpsResource {
+  id: string;
+  name: string;                     // "Crew Team A", "Delivery Van #1"
+  resource_type: OpsResourceType;
+  capacity: number;                 // How many concurrent jobs (typically 1)
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OpsResourceInsert {
+  name: string;
+  resource_type: OpsResourceType;
+  capacity?: number;
+  is_active?: boolean;
+  notes?: string | null;
+}
+
+export interface OpsResourceUpdate extends Partial<OpsResourceInsert> {}
+
+// -----------------------------------------------------------------------------
+// BOOKING BLOCKS (Time blocks for scheduling)
+// -----------------------------------------------------------------------------
+
+export interface BookingBlock {
+  id: string;
+  booking_id: string;
+  block_type: BlockType;
+  resource_type: ResourceType;
+  resource_id: string;              // units.id (asset) or ops_resources.id (ops)
+  units_required: number;           // For ops capacity checking
+  start_ts: string;                 // ISO timestamp
+  end_ts: string;                   // ISO timestamp
+  time_range: string;               // PostgreSQL tstzrange (generated)
+  created_at: string;
+}
+
+export interface BookingBlockInsert {
+  booking_id: string;
+  block_type: BlockType;
+  resource_type: ResourceType;
+  resource_id: string;
+  units_required?: number;
+  start_ts: string;
+  end_ts: string;
+}
 
 // -----------------------------------------------------------------------------
 // UNITS (Individual inventory items)
@@ -276,6 +392,12 @@ export interface Booking {
   stripe_payment_intent_id: string | null;
   needs_attention: boolean;
   attention_reason: string | null;
+  // Booking blocks system fields (added Dec 2024)
+  slot_id: string | null;
+  event_start_time: string | null;
+  event_end_time: string | null;
+  service_start_time: string | null;
+  service_end_time: string | null;
 }
 
 export interface BookingInsert {
@@ -299,6 +421,12 @@ export interface BookingInsert {
   customer_notes?: string | null;
   internal_notes?: string | null;
   status?: BookingStatus;
+  // Booking blocks system fields
+  slot_id?: string | null;
+  event_start_time?: string | null;
+  event_end_time?: string | null;
+  service_start_time?: string | null;
+  service_end_time?: string | null;
 }
 
 export interface BookingUpdate extends Partial<Omit<BookingInsert, 'unit_id' | 'customer_id'>> {
@@ -331,6 +459,72 @@ export interface BookingUpdate extends Partial<Omit<BookingInsert, 'unit_id' | '
 export interface BookingWithRelations extends Booking {
   customer: Customer;
   unit: UnitWithProduct;
+}
+
+// -----------------------------------------------------------------------------
+// CREDITS (Store credits for weather/cancellations)
+// -----------------------------------------------------------------------------
+
+export interface Credit {
+  id: string;
+  customer_id: string;
+  booking_id_origin: string | null;
+  amount_cents: number;
+  remaining_cents: number;
+  reason: CreditReason;
+  reason_notes: string | null;
+  expires_at: string;
+  is_transferable: boolean;
+  transferred_to_customer_id: string | null;
+  transferred_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreditInsert {
+  customer_id: string;
+  booking_id_origin?: string | null;
+  amount_cents: number;
+  remaining_cents: number;
+  reason: CreditReason;
+  reason_notes?: string | null;
+  expires_at: string;
+  is_transferable?: boolean;
+}
+
+export interface CreditUpdate {
+  remaining_cents?: number;
+  reason_notes?: string | null;
+  is_transferable?: boolean;
+  transferred_to_customer_id?: string | null;
+  transferred_at?: string | null;
+}
+
+export interface CreditWithCustomer extends Credit {
+  customer: {
+    id: string;
+    email: string;
+    first_name: string;
+    last_name: string;
+  };
+}
+
+// -----------------------------------------------------------------------------
+// CREDIT REDEMPTIONS (Track how credits are used)
+// -----------------------------------------------------------------------------
+
+export interface CreditRedemption {
+  id: string;
+  credit_id: string;
+  booking_id_new: string;
+  amount_cents: number;
+  created_at: string;
+}
+
+export interface CreditRedemptionInsert {
+  credit_id: string;
+  booking_id_new: string;
+  amount_cents: number;
 }
 
 // -----------------------------------------------------------------------------
@@ -518,6 +712,55 @@ export interface CustomerLeaderboardEntry {
   customer_tier: 'VIP' | 'Loyal' | 'Returning' | 'New';
 }
 
+// -----------------------------------------------------------------------------
+// BOOKING SCHEDULE BLOCKS VIEW
+// -----------------------------------------------------------------------------
+
+export interface BookingScheduleBlock {
+  booking_id: string;
+  booking_number: string;
+  booking_status: string;
+  event_date: string;
+  delivery_date: string;
+  pickup_date: string;
+  block_type: BlockType;
+  resource_type: ResourceType;
+  resource_id: string;
+  start_ts: string;
+  end_ts: string;
+  resource_name: string | null;
+  product_name: string | null;
+  customer_name: string | null;
+}
+
+// =============================================================================
+// AVAILABILITY CHECK TYPES (Booking Blocks System)
+// =============================================================================
+
+/** Result from get_available_slots_for_date function */
+export interface AvailableSlot {
+  slot_id: string;
+  label: string;
+  start_time_local: string;
+  end_time_local: string;
+  event_start: string;              // ISO timestamp
+  event_end: string;                // ISO timestamp
+  service_start: string;            // ISO timestamp
+  service_end: string;              // ISO timestamp
+  is_available: boolean;
+  unavailable_reason: string | null;
+}
+
+/** Result from check_day_rental_availability function */
+export interface DayRentalAvailability {
+  is_available: boolean;
+  unavailable_reason: string | null;
+  unit_id: string | null;
+  service_start: string | null;
+  service_end: string | null;
+  same_day_pickup_possible: boolean;
+}
+
 // =============================================================================
 // DASHBOARD STATS (computed)
 // =============================================================================
@@ -568,6 +811,12 @@ export interface ProductDisplay {
   // Booking configuration
   availableBookingTypes: BookingType[];
   sameDayPickupOnly: boolean;
+  // Scheduling configuration
+  schedulingMode: SchedulingMode;
+  setupMinutes: number;
+  teardownMinutes: number;
+  travelBufferMinutes: number;
+  cleaningMinutes: number;
 }
 
 /**
@@ -604,6 +853,12 @@ export function toProductDisplay(product: Product): ProductDisplay {
     // Booking configuration - default to all types if not specified
     availableBookingTypes: product.available_booking_types ?? ['daily', 'weekend', 'sunday'],
     sameDayPickupOnly: product.same_day_pickup_only ?? false,
+    // Scheduling configuration
+    schedulingMode: product.scheduling_mode ?? 'day_rental',
+    setupMinutes: product.setup_minutes ?? 45,
+    teardownMinutes: product.teardown_minutes ?? 45,
+    travelBufferMinutes: product.travel_buffer_minutes ?? 30,
+    cleaningMinutes: product.cleaning_minutes ?? 30,
   };
 }
 
@@ -642,6 +897,65 @@ export interface AvailabilityRequest {
 export interface AvailabilityResponse {
   unavailableDates: string[];
   error?: string;
+}
+
+/** Request to get available slots for a date (slot-based products) */
+export interface GetAvailableSlotsRequest {
+  productId: string;
+  date: string;                     // YYYY-MM-DD
+  leadTimeHours?: number;           // Default 18
+}
+
+/** Response with available slots */
+export interface GetAvailableSlotsResponse {
+  slots: AvailableSlot[];
+  error?: string;
+}
+
+/** Request to check day rental availability */
+export interface CheckDayRentalRequest {
+  productId: string;
+  deliveryDate: string;             // YYYY-MM-DD
+  pickupDate: string;               // YYYY-MM-DD
+  leadTimeHours?: number;           // Default 18
+}
+
+/** Response for day rental availability */
+export interface CheckDayRentalResponse {
+  availability: DayRentalAvailability;
+  error?: string;
+}
+
+/** Request to create a slot-based booking */
+export interface CreateSlotBookingRequest {
+  productSlug: string;
+  slotId: string;
+  eventDate: string;                // YYYY-MM-DD
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  address: string;
+  city: string;
+  state?: string;
+  zip?: string;
+  notes?: string;
+  promoCode?: string;
+}
+
+/** Request to create a day rental booking */
+export interface CreateDayRentalBookingRequest {
+  productSlug: string;
+  deliveryDate: string;             // YYYY-MM-DD
+  pickupDate: string;               // YYYY-MM-DD
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  address: string;
+  city: string;
+  state?: string;
+  zip?: string;
+  notes?: string;
+  promoCode?: string;
 }
 
 // =============================================================================
@@ -757,6 +1071,153 @@ export function getNextStatus(current: BookingStatus): BookingStatus | null {
   return next[current];
 }
 
+// -----------------------------------------------------------------------------
+// BOOKING BLOCKS HELPER FUNCTIONS
+// -----------------------------------------------------------------------------
+
+/** Format slot label for display */
+export function formatSlotLabel(slot: ProductSlot | AvailableSlot): string {
+  return slot.label;
+}
+
+/** Check if a slot is in the past */
+export function isSlotInPast(slot: AvailableSlot): boolean {
+  return new Date(slot.event_start) < new Date();
+}
+
+/** Format credit amount for display */
+export function formatCreditAmount(cents: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(cents / 100);
+}
+
+/** Check if credit is expired */
+export function isCreditExpired(credit: Credit): boolean {
+  return new Date(credit.expires_at) < new Date();
+}
+
+/** Check if credit has remaining balance */
+export function creditHasBalance(credit: Credit): boolean {
+  return credit.remaining_cents > 0;
+}
+
+/** Check if credit is usable */
+export function isCreditUsable(credit: Credit): boolean {
+  return creditHasBalance(credit) && !isCreditExpired(credit);
+}
+
+/** Get credit status label */
+export function getCreditStatusLabel(credit: Credit): string {
+  if (credit.remaining_cents === 0) return 'Used';
+  if (isCreditExpired(credit)) return 'Expired';
+  return 'Available';
+}
+
+/** Get credit status color */
+export function getCreditStatusColor(credit: Credit): string {
+  if (credit.remaining_cents === 0) return 'bg-gray-500/10 text-gray-400';
+  if (isCreditExpired(credit)) return 'bg-red-500/10 text-red-400';
+  return 'bg-green-500/10 text-green-400';
+}
+
+/** Get block type label */
+export function getBlockTypeLabel(type: BlockType): string {
+  const labels: Record<BlockType, string> = {
+    event: 'Event',
+    service_delivery: 'Delivery',
+    service_pickup: 'Pickup',
+    cleaning_buffer: 'Cleaning',
+  };
+  return labels[type];
+}
+
+/** Get block type color */
+export function getBlockTypeColor(type: BlockType): string {
+  const colors: Record<BlockType, string> = {
+    event: 'bg-purple-500',
+    service_delivery: 'bg-blue-500',
+    service_pickup: 'bg-cyan-500',
+    cleaning_buffer: 'bg-amber-500',
+  };
+  return colors[type];
+}
+
+/** Get resource type label */
+export function getResourceTypeLabel(type: ResourceType): string {
+  return type === 'asset' ? 'Equipment' : 'Operations';
+}
+
+/** Get ops resource type label */
+export function getOpsResourceTypeLabel(type: OpsResourceType): string {
+  return type === 'crew' ? 'Crew' : 'Vehicle';
+}
+
+/** Get credit reason label */
+export function getCreditReasonLabel(reason: CreditReason): string {
+  const labels: Record<CreditReason, string> = {
+    weather: 'Weather Cancellation',
+    customer_reschedule: 'Customer Reschedule',
+    owner_override: 'Owner Override',
+    equipment_issue: 'Equipment Issue',
+    other: 'Other',
+  };
+  return labels[reason];
+}
+
+// -----------------------------------------------------------------------------
+// SERVICE WINDOW CALCULATION HELPERS
+// -----------------------------------------------------------------------------
+
+export interface ServiceWindowConfig {
+  setupMinutes: number;
+  teardownMinutes: number;
+  travelBufferMinutes: number;
+  cleaningMinutes: number;
+}
+
+export const DEFAULT_SERVICE_CONFIG: ServiceWindowConfig = {
+  setupMinutes: 45,
+  teardownMinutes: 45,
+  travelBufferMinutes: 30,
+  cleaningMinutes: 30,
+};
+
+/** Calculate service start time from event start */
+export function calculateServiceStart(
+  eventStart: Date,
+  config: ServiceWindowConfig = DEFAULT_SERVICE_CONFIG
+): Date {
+  const totalPreMinutes = config.travelBufferMinutes + config.setupMinutes;
+  return new Date(eventStart.getTime() - totalPreMinutes * 60 * 1000);
+}
+
+/** Calculate service end time from event end */
+export function calculateServiceEnd(
+  eventEnd: Date,
+  config: ServiceWindowConfig = DEFAULT_SERVICE_CONFIG
+): Date {
+  const totalPostMinutes =
+    config.teardownMinutes + config.travelBufferMinutes + config.cleaningMinutes;
+  return new Date(eventEnd.getTime() + totalPostMinutes * 60 * 1000);
+}
+
+/** Get total service duration in minutes */
+export function getTotalServiceDuration(
+  eventDurationMinutes: number,
+  config: ServiceWindowConfig = DEFAULT_SERVICE_CONFIG
+): number {
+  return (
+    config.travelBufferMinutes +
+    config.setupMinutes +
+    eventDurationMinutes +
+    config.teardownMinutes +
+    config.travelBufferMinutes +
+    config.cleaningMinutes
+  );
+}
+
 // =============================================================================
 // SUPABASE DATABASE TYPE (for createClient generic)
 // =============================================================================
@@ -768,6 +1229,21 @@ export interface Database {
         Row: Product;
         Insert: ProductInsert;
         Update: ProductUpdate;
+      };
+      product_slots: {
+        Row: ProductSlot;
+        Insert: ProductSlotInsert;
+        Update: ProductSlotUpdate;
+      };
+      ops_resources: {
+        Row: OpsResource;
+        Insert: OpsResourceInsert;
+        Update: OpsResourceUpdate;
+      };
+      booking_blocks: {
+        Row: BookingBlock;
+        Insert: BookingBlockInsert;
+        Update: never; // Blocks should not be updated, only deleted and recreated
       };
       units: {
         Row: Unit;
@@ -783,6 +1259,16 @@ export interface Database {
         Row: Booking;
         Insert: BookingInsert;
         Update: BookingUpdate;
+      };
+      credits: {
+        Row: Credit;
+        Insert: CreditInsert;
+        Update: CreditUpdate;
+      };
+      credit_redemptions: {
+        Row: CreditRedemption;
+        Insert: CreditRedemptionInsert;
+        Update: never;
       };
       payments: {
         Row: Payment;
@@ -818,6 +1304,9 @@ export interface Database {
       customer_leaderboard: {
         Row: CustomerLeaderboardEntry;
       };
+      booking_schedule_blocks: {
+        Row: BookingScheduleBlock;
+      };
     };
     Functions: {
       find_available_unit: {
@@ -827,6 +1316,26 @@ export interface Database {
       cleanup_expired_pending_bookings: {
         Args: Record<string, never>;
         Returns: void;
+      };
+      get_available_slots_for_date: {
+        Args: { p_product_id: string; p_date: string; p_lead_time_hours?: number };
+        Returns: AvailableSlot[];
+      };
+      check_day_rental_availability: {
+        Args: { p_product_id: string; p_delivery_date: string; p_pickup_date: string; p_lead_time_hours?: number };
+        Returns: DayRentalAvailability[];
+      };
+      create_booking_blocks: {
+        Args: { p_booking_id: string; p_unit_id: string; p_product_id: string; p_event_start: string; p_event_end: string };
+        Returns: void;
+      };
+      ops_capacity_ok: {
+        Args: { p_ops_resource_id: string; p_start: string; p_end: string; p_units?: number; p_exclude_booking_id?: string };
+        Returns: boolean;
+      };
+      is_asset_available: {
+        Args: { p_unit_id: string; p_start: string; p_end: string; p_exclude_booking_id?: string };
+        Returns: boolean;
       };
     };
   };

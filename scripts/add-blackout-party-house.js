@@ -14,7 +14,7 @@ const { createClient } = require('@supabase/supabase-js');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const BUCKET_NAME = 'product-images';
 const SOURCE_DIR = path.join(PROJECT_ROOT, 'public/temp-product-add');
-const TARGET_FOLDER = 'party-houses/blackout-lounge';
+const TARGET_FOLDER = 'party-houses/blackout-party-house';
 
 function formatBytes(bytes) {
   if (bytes === 0) return '0 B';
@@ -50,7 +50,7 @@ async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
 
-  console.log('\n🎉 Adding Blackout Lounge to Supabase Storage\n');
+  console.log('\n🎉 Adding Blackout Party House to Supabase Storage\n');
   console.log('━'.repeat(55));
 
   if (dryRun) {
@@ -165,10 +165,10 @@ INSERT INTO products (
   is_featured,
   display_order
 ) VALUES (
-  'blackout-lounge',
-  'The Blackout Lounge',
+  'blackout-party-house',
+  'Blackout Party House',
   'Party Houses',
-  'Premium inflatable party lounge with sound & lighting',
+  'Premium inflatable party lounge • 4-hour rental',
   'Transform any backyard into an exclusive VIP lounge! This premium inflatable party house comes fully equipped with a JBL party speaker, stunning LED lighting, and portable AC to keep the party cool. Perfect for teen parties, graduation celebrations, and adult gatherings.',
   400,
   500,

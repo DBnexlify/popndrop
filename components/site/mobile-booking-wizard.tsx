@@ -58,6 +58,8 @@ import { TrustBadges, LowStockIndicator } from "@/components/site/social-proof";
 import { PromoCodeInputCompact } from "@/components/site/promo-code-input";
 import { useCustomerAutofill, saveCustomerInfo } from "@/lib/use-customer-autofill";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { SlotPickerCompact } from "@/components/ui/slot-picker";
+import type { AvailableSlot } from "@/lib/database-types";
 import type { AppliedPromoCode } from "@/lib/promo-code-types";
 
 // =============================================================================
@@ -287,14 +289,19 @@ function MiniSummary({
   product,
   eventDate,
   selectedOption,
+  selectedSlot,
   onEdit,
 }: {
   product?: ProductDisplay;
   eventDate?: Date;
   selectedOption?: PricingOption | null;
+  selectedSlot?: AvailableSlot | null;
   onEdit: (step: number) => void;
 }) {
   if (!product) return null;
+
+  // Determine if slot-based
+  const isSlotBased = product.schedulingMode === 'slot_based';
 
   return (
     <div className="mx-4 mt-3">
@@ -316,7 +323,10 @@ function MiniSummary({
             {eventDate && (
               <p className="text-xs text-foreground/50">
                 {format(eventDate, "EEE, MMM d")}
-                {selectedOption && ` · ${selectedOption.label}`}
+                {isSlotBased 
+                  ? (selectedSlot && ` · ${selectedSlot.start_time_local} - ${selectedSlot.end_time_local}`)
+                  : (selectedOption && ` · ${selectedOption.label}`)
+                }
               </p>
             )}
           </div>
@@ -477,6 +487,12 @@ function Step2DateTime({
   setFormData,
   unavailableDates,
   isLoadingDates,
+  // Slot-based props
+  availableSlots,
+  selectedSlot,
+  setSelectedSlot,
+  isLoadingSlots,
+  slotsError,
   onContinue,
 }: {
   selectedProduct: ProductDisplay;
@@ -488,8 +504,16 @@ function Step2DateTime({
   setFormData: React.Dispatch<React.SetStateAction<FormData>>;
   unavailableDates: Date[];
   isLoadingDates: boolean;
+  // Slot-based types
+  availableSlots: AvailableSlot[];
+  selectedSlot: AvailableSlot | null;
+  setSelectedSlot: (slot: AvailableSlot | null) => void;
+  isLoadingSlots: boolean;
+  slotsError: string | null;
   onContinue: () => void;
 }) {
+  // Detect if this is a slot-based product
+  const isSlotBased = selectedProduct.schedulingMode === 'slot_based';
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
@@ -537,8 +561,10 @@ function Step2DateTime({
   // Check if we should show cutoff warning
   const showCutoffWarning = isPastCutoffTime();
 
-  const canContinue = eventDate && selectedOption && formData.deliveryTime && 
-    (selectedOption.isEventBased || formData.pickupTime);
+  const canContinue = isSlotBased
+    ? eventDate && selectedSlot
+    : eventDate && selectedOption && formData.deliveryTime && 
+      (selectedOption.isEventBased || formData.pickupTime);
 
   return (
     <div className="px-4 pt-4 pb-6">
@@ -681,6 +707,28 @@ function Step2DateTime({
             </div>
           )}
 
+          {/* ============================================================= */}
+          {/* SLOT-BASED PRODUCTS: Show SlotPicker (Party House) */}
+          {/* ============================================================= */}
+          {isSlotBased && eventDate && (
+            <div className="mt-5 space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <Label>Select your time slot</Label>
+              <SlotPickerCompact
+                slots={availableSlots}
+                selectedSlotId={selectedSlot?.slot_id || null}
+                onSelect={setSelectedSlot}
+                isLoading={isLoadingSlots}
+                error={slotsError}
+                price={selectedProduct.pricing.daily}
+              />
+            </div>
+          )}
+
+          {/* ============================================================= */}
+          {/* DAY RENTAL PRODUCTS: Duration + Time Selection */}
+          {/* ============================================================= */}
+          {!isSlotBased && (
+            <>
           {/* Duration options */}
           {hasMultipleOptions && pricingResult && (
             <div className="mt-5 space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -825,6 +873,8 @@ function Step2DateTime({
                 </>
               )}
             </div>
+          )}
+            </>
           )}
 
           {/* Continue button */}
@@ -1031,6 +1081,7 @@ function Step4Review({
   selectedProduct,
   eventDate,
   selectedOption,
+  selectedSlot,
   formData,
   termsAccepted,
   setTermsAccepted,
@@ -1045,7 +1096,8 @@ function Step4Review({
 }: {
   selectedProduct: ProductDisplay;
   eventDate: Date;
-  selectedOption: PricingOption;
+  selectedOption: PricingOption | null;
+  selectedSlot: AvailableSlot | null;
   formData: FormData;
   termsAccepted: boolean;
   setTermsAccepted: (accepted: boolean) => void;
@@ -1058,9 +1110,17 @@ function Step4Review({
   onSubmit: () => void;
   onEdit: (step: number) => void;
 }) {
+  // Determine if slot-based
+  const isSlotBased = selectedProduct.schedulingMode === 'slot_based';
+  
+  // Get price - either from slot or selectedOption
+  const basePrice = isSlotBased 
+    ? selectedProduct.pricing.daily 
+    : (selectedOption?.price || 0);
+  
   // Calculate discount
   const discountAmount = appliedPromoCode?.calculatedDiscount || 0;
-  const finalPrice = selectedOption.price - discountAmount;
+  const finalPrice = basePrice - discountAmount;
   return (
     <div className="px-4 pt-4 pb-6">
       {/* Floating Section Card */}
@@ -1090,7 +1150,12 @@ function Step4Review({
                   </div>
                   <div>
                     <p className="font-semibold">{selectedProduct.name}</p>
-                    <p className="text-xs text-foreground/50">{selectedOption.label}</p>
+                    <p className="text-xs text-foreground/50">
+                      {isSlotBased 
+                        ? (selectedSlot ? `${selectedSlot.start_time_local} - ${selectedSlot.end_time_local}` : 'Time slot')
+                        : selectedOption?.label
+                      }
+                    </p>
                   </div>
                 </div>
                 <button
@@ -1122,7 +1187,14 @@ function Step4Review({
                 </div>
                 <div className="mt-2 space-y-1 text-sm text-foreground/70">
                   <p>{format(eventDate, "EEEE, MMMM d, yyyy")}</p>
-                  {selectedOption.isEventBased ? (
+                  {isSlotBased ? (
+                    /* Slot-based: show time slot */
+                    selectedSlot && (
+                      <p>
+                        Time: {selectedSlot.start_time_local} - {selectedSlot.end_time_local}
+                      </p>
+                    )
+                  ) : selectedOption?.isEventBased ? (
                     /* Event-based: show event time */
                     <p>
                       Event: {selectedOption.eventWindows?.find(
@@ -1131,10 +1203,12 @@ function Step4Review({
                     </p>
                   ) : (
                     /* Standard: show delivery and pickup */
-                    <>
-                      <p>Delivery: {selectedOption.deliveryDay} {formData.deliveryTime}</p>
-                      <p>Pickup: {selectedOption.pickupDay} {formData.pickupTime}</p>
-                    </>
+                    selectedOption && (
+                      <>
+                        <p>Delivery: {selectedOption.deliveryDay} {formData.deliveryTime}</p>
+                        <p>Pickup: {selectedOption.pickupDay} {formData.pickupTime}</p>
+                      </>
+                    )
                   )}
                 </div>
               </div>
@@ -1187,8 +1261,13 @@ function Step4Review({
               {/* Total */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-foreground/70">{selectedOption.label}</span>
-                  <span className="font-semibold">${selectedOption.price}</span>
+                  <span className="text-sm text-foreground/70">
+                    {isSlotBased 
+                      ? `${selectedSlot?.start_time_local} - ${selectedSlot?.end_time_local} slot`
+                      : selectedOption?.label
+                    }
+                  </span>
+                  <span className="font-semibold">${basePrice}</span>
                 </div>
                 
                 {/* Promo discount */}
@@ -1205,7 +1284,7 @@ function Step4Review({
                     {appliedPromoCode && discountAmount > 0 ? (
                       <>
                         <span className="text-sm text-foreground/50 line-through mr-2">
-                          ${selectedOption.price}
+                          ${basePrice}
                         </span>
                         <span className="text-2xl font-semibold text-green-400">
                           ${finalPrice}
@@ -1213,7 +1292,7 @@ function Step4Review({
                       </>
                     ) : (
                       <span className="text-2xl font-semibold text-cyan-400">
-                        ${selectedOption.price}
+                        ${basePrice}
                       </span>
                     )}
                   </div>
@@ -1263,7 +1342,7 @@ function Step4Review({
                   )}>$50</span>
                 </div>
                 <p className="mt-1.5 pl-6 text-[10px] text-foreground/50">
-                  ${selectedOption.price - 50} due on delivery
+                  ${basePrice - 50} due on delivery
                 </p>
                 <div className={styles.nestedCardInner} />
               </button>
@@ -1300,7 +1379,7 @@ function Step4Review({
                   <span className={cn(
                     "text-lg font-semibold",
                     paymentType === 'full' ? "text-green-400" : "text-foreground/50"
-                  )}>${selectedOption.price}</span>
+                  )}>${basePrice}</span>
                 </div>
                 <p className={cn(
                   "mt-1.5 pl-6 text-[10px]",
@@ -1316,7 +1395,7 @@ function Step4Review({
           {/* Promo Code */}
           <div className="mt-5">
             <PromoCodeInputCompact
-              orderAmount={selectedOption.price}
+              orderAmount={basePrice}
               customerEmail={formData.email || undefined}
               productSlug={selectedProduct.slug}
               appliedCode={appliedPromoCode}
@@ -1432,6 +1511,12 @@ export function MobileBookingWizard({
     visible: false,
   });
 
+  // Slot-based booking state (for Party House)
+  const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+
   // Ref for main container (kept for potential future use)
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1506,6 +1591,49 @@ export function MobileBookingWizard({
     fetchAvailability();
   }, [selectedProduct]);
 
+  // ==========================================================================
+  // SLOT-BASED PRODUCT: Fetch available slots when date changes
+  // ==========================================================================
+  
+  useEffect(() => {
+    async function fetchSlots() {
+      if (!selectedProduct || !eventDate || selectedProduct.schedulingMode !== 'slot_based') {
+        setAvailableSlots([]);
+        setSelectedSlot(null);
+        setSlotsError(null);
+        return;
+      }
+
+      setIsLoadingSlots(true);
+      setSlotsError(null);
+      setSelectedSlot(null);
+
+      try {
+        const dateStr = eventDate.toISOString().split('T')[0];
+        const response = await fetch(
+          `/api/bookings/slots?productSlug=${selectedProduct.slug}&date=${dateStr}`
+        );
+        const data = await response.json();
+
+        if (!response.ok) {
+          setSlotsError(data.error || 'Failed to load time slots');
+          setAvailableSlots([]);
+          return;
+        }
+
+        setAvailableSlots(data.slots || []);
+      } catch (error) {
+        console.error('Error fetching slots:', error);
+        setSlotsError('Failed to load time slots. Please try again.');
+        setAvailableSlots([]);
+      } finally {
+        setIsLoadingSlots(false);
+      }
+    }
+
+    fetchSlots();
+  }, [selectedProduct, eventDate]);
+
   // Show toast helper
   const showToast = (message: string) => {
     setToast({ message, visible: true });
@@ -1554,30 +1682,54 @@ export function MobileBookingWizard({
 
   // Handle submit
   const handleSubmit = async () => {
-    if (!selectedProduct || !eventDate || !selectedOption) return;
+    if (!selectedProduct || !eventDate) return;
+    
+    // Check for slot-based vs day rental requirements
+    const isSlotBased = selectedProduct.schedulingMode === 'slot_based';
+    if (isSlotBased && !selectedSlot) return;
+    if (!isSlotBased && !selectedOption) return;
     
     setIsSubmitting(true);
     setSubmitError(null);
 
     try {
+      // Build request body based on scheduling mode
+      const requestBody = isSlotBased
+        ? {
+            // Slot-based booking (Party House)
+            productSlug: selectedProduct.slug,
+            eventDate: eventDate.toISOString().split("T")[0],
+            slotId: selectedSlot!.slot_id,
+            customerName: formData.name.trim(),
+            customerEmail: formData.email.trim(),
+            customerPhone: formData.phone.trim(),
+            address: formData.address.trim(),
+            city: formData.city,
+            notes: formData.notes.trim(),
+            paymentType,
+            promoCode: appliedPromoCode?.code || null,
+          }
+        : {
+            // Day rental booking (bounce houses)
+            productSlug: selectedProduct.slug,
+            eventDate: eventDate.toISOString().split("T")[0],
+            bookingType: selectedOption!.type,
+            deliveryWindow: formData.deliveryTime,
+            pickupWindow: formData.pickupTime,
+            customerName: formData.name.trim(),
+            customerEmail: formData.email.trim(),
+            customerPhone: formData.phone.trim(),
+            address: formData.address.trim(),
+            city: formData.city,
+            notes: formData.notes.trim(),
+            paymentType,
+            promoCode: appliedPromoCode?.code || null,
+          };
+
       const response = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productSlug: selectedProduct.slug,
-          eventDate: eventDate.toISOString().split("T")[0],
-          bookingType: selectedOption.type,
-          deliveryWindow: formData.deliveryTime,
-          pickupWindow: formData.pickupTime,
-          customerName: formData.name.trim(),
-          customerEmail: formData.email.trim(),
-          customerPhone: formData.phone.trim(),
-          address: formData.address.trim(),
-          city: formData.city,
-          notes: formData.notes.trim(),
-          paymentType,
-          promoCode: appliedPromoCode?.code || null,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -1643,6 +1795,7 @@ export function MobileBookingWizard({
           product={selectedProduct}
           eventDate={eventDate}
           selectedOption={selectedOption}
+          selectedSlot={selectedSlot}
           onEdit={goToStep}
         />
       )}
@@ -1690,6 +1843,11 @@ export function MobileBookingWizard({
               setFormData={setFormData}
               unavailableDates={unavailableDates}
               isLoadingDates={isLoadingDates}
+              availableSlots={availableSlots}
+              selectedSlot={selectedSlot}
+              setSelectedSlot={setSelectedSlot}
+              isLoadingSlots={isLoadingSlots}
+              slotsError={slotsError}
               onContinue={goNext}
             />
           )}
@@ -1702,11 +1860,12 @@ export function MobileBookingWizard({
             />
           )}
 
-          {currentStep === 4 && selectedProduct && eventDate && selectedOption && (
+          {currentStep === 4 && selectedProduct && eventDate && (selectedOption || selectedSlot) && (
             <Step4Review
               selectedProduct={selectedProduct}
               eventDate={eventDate}
               selectedOption={selectedOption}
+              selectedSlot={selectedSlot}
               formData={formData}
               termsAccepted={termsAccepted}
               setTermsAccepted={setTermsAccepted}

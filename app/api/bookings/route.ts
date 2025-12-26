@@ -4,6 +4,16 @@ import { resend, FROM_EMAIL, NOTIFY_EMAIL } from '@/lib/resend';
 import { notifyNewBooking } from '@/lib/push-notifications';
 import { stripe, dollarsToCents, DEPOSIT_AMOUNT_CENTS, DEPOSIT_AMOUNT_DOLLARS } from '@/lib/stripe';
 import { validateBookingDateCutoff } from '@/lib/booking-cutoff';
+import {
+  getAvailableSlotsForDate,
+  checkDayRentalAvailability,
+  createBookingBlocks,
+  validateLeadTime,
+  isSlotBasedProduct,
+  LEAD_TIME_HOURS,
+  canHaveSameDayPickup,
+} from '@/lib/booking-blocks';
+import type { Product, SchedulingMode } from '@/lib/database-types';
 
 // ============================================================================
 // CONSTANTS
@@ -48,16 +58,23 @@ interface CreateBookingRequest {
   city: string;
   notes?: string;
   paymentType?: 'deposit' | 'full';
-  promoCode?: string | null; // Promo code to apply
+  promoCode?: string | null;
+  // New: Slot-based booking support
+  slotId?: string;
 }
 
-interface Product {
+interface ProductRow {
   id: string;
   slug: string;
   name: string;
   price_daily: number;
   price_weekend: number;
   price_sunday: number;
+  scheduling_mode: SchedulingMode;
+  setup_minutes: number;
+  teardown_minutes: number;
+  travel_buffer_minutes: number;
+  cleaning_minutes: number;
 }
 
 // ============================================================================
@@ -79,12 +96,13 @@ function splitName(fullName: string): { firstName: string; lastName: string } {
 
 /**
  * Calculate delivery and pickup dates based on event date and booking type
+ * Used for day_rental products (bounce houses)
  */
 function calculateDates(eventDate: string, bookingType: BookingType): {
   deliveryDate: string;
   pickupDate: string;
 } {
-  const event = new Date(eventDate + 'T12:00:00'); // Noon to avoid timezone issues
+  const event = new Date(eventDate + 'T12:00:00');
   const delivery = new Date(event);
   const pickup = new Date(event);
 
@@ -96,7 +114,7 @@ function calculateDates(eventDate: string, bookingType: BookingType): {
     // Saturday event with weekend package: pickup Monday
     pickup.setDate(pickup.getDate() + 2);
   }
-  // Daily: delivery and pickup same day
+  // Daily: delivery and pickup same day (unless Party House conflict)
 
   return {
     deliveryDate: delivery.toISOString().split('T')[0],
@@ -130,7 +148,7 @@ function formatDateShort(dateStr: string): string {
 /**
  * Get price based on booking type
  */
-function getPrice(product: Product, bookingType: BookingType): number {
+function getPrice(product: ProductRow, bookingType: BookingType): number {
   switch (bookingType) {
     case 'daily':
       return Number(product.price_daily);
@@ -165,6 +183,7 @@ export async function POST(request: NextRequest) {
       notes,
       paymentType = 'deposit',
       promoCode,
+      slotId,
     } = body;
 
     // Validate required fields
@@ -177,8 +196,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ========================================================================
-    // VALIDATE BOOKING CUTOFF
-    // Bookings for tomorrow must be made by 12 PM Eastern the day before
+    // VALIDATE BOOKING CUTOFF (Legacy - will be replaced by lead time check)
     // ========================================================================
     const cutoffValidation = validateBookingDateCutoff(eventDate);
     if (!cutoffValidation.valid) {
@@ -196,7 +214,7 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient();
 
     // ========================================================================
-    // 1. GET PRODUCT
+    // 1. GET PRODUCT (with scheduling mode)
     // ========================================================================
     const { data: product, error: productError } = await supabase
       .from('products')
@@ -213,25 +231,203 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ========================================================================
-    // 2. CALCULATE DATES & PRICING
-    // ========================================================================
-    const { deliveryDate, pickupDate } = calculateDates(eventDate, bookingType);
-    const priceTotal = getPrice(product as Product, bookingType);
-    let balanceDue = priceTotal - DEPOSIT_AMOUNT;
+    const productRow = product as ProductRow;
+    const isSlotBased = productRow.scheduling_mode === 'slot_based';
 
-    console.log('Booking details:', { 
+    console.log('Booking request:', { 
       productSlug, 
       eventDate, 
-      deliveryDate, 
-      pickupDate, 
       bookingType,
-      priceTotal,
-      paymentType,
+      schedulingMode: productRow.scheduling_mode,
+      isSlotBased,
+      slotId,
     });
 
     // ========================================================================
-    // 2.5. VALIDATE PROMO CODE (if provided)
+    // 2. HANDLE BASED ON SCHEDULING MODE
+    // ========================================================================
+
+    let unitId: string;
+    let deliveryDate: string;
+    let pickupDate: string;
+    let eventStartTime: string | null = null;
+    let eventEndTime: string | null = null;
+    let serviceStartTime: string | null = null;
+    let serviceEndTime: string | null = null;
+    let selectedSlotId: string | null = null;
+    // Crew IDs assigned during availability check (for ops resource booking blocks)
+    let assignedDeliveryCrewId: string | null = null;
+    let assignedPickupCrewId: string | null = null;
+
+    if (isSlotBased) {
+      // ======================================================================
+      // SLOT-BASED PRODUCT (Party House)
+      // ======================================================================
+      
+      if (!slotId) {
+        return NextResponse.json(
+          { success: false, error: 'Time slot selection is required for this product' },
+          { status: 400 }
+        );
+      }
+
+      // Get available slots for this date
+      const { slots, error: slotsError } = await getAvailableSlotsForDate(
+        productRow.id,
+        eventDate,
+        LEAD_TIME_HOURS
+      );
+
+      if (slotsError) {
+        console.error('Error getting slots:', slotsError);
+        return NextResponse.json(
+          { success: false, error: 'Error checking availability' },
+          { status: 500 }
+        );
+      }
+
+      // Find the selected slot
+      const selectedSlot = slots.find(s => s.slot_id === slotId);
+
+      if (!selectedSlot) {
+        return NextResponse.json(
+          { success: false, error: 'Selected time slot is not valid for this date' },
+          { status: 400 }
+        );
+      }
+
+      if (!selectedSlot.is_available) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: selectedSlot.unavailable_reason || 'This time slot is no longer available' 
+          },
+          { status: 409 }
+        );
+      }
+
+      // For slot-based: delivery and pickup are same day as event
+      deliveryDate = eventDate;
+      pickupDate = eventDate;
+      selectedSlotId = slotId;
+      eventStartTime = selectedSlot.event_start;
+      eventEndTime = selectedSlot.event_end;
+      serviceStartTime = selectedSlot.service_start;
+      serviceEndTime = selectedSlot.service_end;
+
+      // Get the unit for this product
+      const { data: unit } = await supabase
+        .from('units')
+        .select('id')
+        .eq('product_id', productRow.id)
+        .eq('status', 'available')
+        .order('unit_number')
+        .limit(1)
+        .single();
+
+      if (!unit) {
+        return NextResponse.json(
+          { success: false, error: 'No units available' },
+          { status: 409 }
+        );
+      }
+
+      unitId = unit.id;
+
+      console.log('Slot-based booking:', {
+        slotId,
+        slotLabel: selectedSlot.label,
+        eventStart: eventStartTime,
+        eventEnd: eventEndTime,
+        serviceStart: serviceStartTime,
+        serviceEnd: serviceEndTime,
+      });
+
+    } else {
+      // ======================================================================
+      // DAY RENTAL PRODUCT (Bounce Houses)
+      // ======================================================================
+      
+      // Calculate dates based on booking type
+      const dates = calculateDates(eventDate, bookingType);
+      deliveryDate = dates.deliveryDate;
+      pickupDate = dates.pickupDate;
+
+      // For daily bookings, check if same-day pickup is possible
+      // (depends on whether Party House is booked that evening)
+      if (bookingType === 'daily') {
+        const sameDayPossible = await canHaveSameDayPickup(eventDate);
+        
+        if (!sameDayPossible) {
+          // Move pickup to next day
+          const nextDay = new Date(eventDate + 'T12:00:00');
+          nextDay.setDate(nextDay.getDate() + 1);
+          pickupDate = nextDay.toISOString().split('T')[0];
+          
+          console.log('Same-day pickup not possible (Party House conflict), moved to:', pickupDate);
+        }
+      }
+
+      // Check availability using the new block-based system
+      const availability = await checkDayRentalAvailability(
+        productRow.id,
+        deliveryDate,
+        pickupDate,
+        LEAD_TIME_HOURS
+      );
+
+      if (!availability.isAvailable) {
+        console.log('Day rental not available:', availability.unavailableReason);
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: availability.unavailableReason || 'This date is not available' 
+          },
+          { status: 409 }
+        );
+      }
+
+      if (!availability.unitId) {
+        return NextResponse.json(
+          { success: false, error: 'No units available for the selected dates' },
+          { status: 409 }
+        );
+      }
+
+      unitId = availability.unitId;
+      serviceStartTime = availability.serviceStart;
+      serviceEndTime = availability.serviceEnd;
+      // Store assigned crew IDs for booking blocks creation
+      assignedDeliveryCrewId = availability.deliveryCrewId;
+      assignedPickupCrewId = availability.pickupCrewId;
+
+      // Calculate event times for day rental
+      // Event starts at delivery (9 AM) and ends at pickup
+      const eventStart = new Date(`${deliveryDate}T09:00:00`);
+      const eventEnd = availability.sameDayPickupPossible
+        ? new Date(`${deliveryDate}T18:00:00`)
+        : new Date(`${pickupDate}T10:00:00`);
+      
+      eventStartTime = eventStart.toISOString();
+      eventEndTime = eventEnd.toISOString();
+
+      console.log('Day rental booking:', {
+        deliveryDate,
+        pickupDate,
+        eventStart: eventStartTime,
+        eventEnd: eventEndTime,
+        sameDayPickup: availability.sameDayPickupPossible,
+      });
+    }
+
+    // ========================================================================
+    // 3. CALCULATE PRICING
+    // ========================================================================
+    const priceTotal = getPrice(productRow, bookingType);
+    let balanceDue = priceTotal - DEPOSIT_AMOUNT;
+
+    // ========================================================================
+    // 4. VALIDATE PROMO CODE (if provided)
     // ========================================================================
     let promoCodeId: string | null = null;
     let promoDiscount = 0;
@@ -240,7 +436,6 @@ export async function POST(request: NextRequest) {
     if (promoCode && promoCode.trim()) {
       console.log('Validating promo code:', promoCode);
 
-      // Get customer ID for promo validation (if existing customer)
       const { data: existingCustomerForPromo } = await supabase
         .from('customers')
         .select('id')
@@ -249,12 +444,11 @@ export async function POST(request: NextRequest) {
 
       const customerIdForPromo = existingCustomerForPromo?.id || null;
 
-      // Call validation function
       const { data: promoResult, error: promoError } = await supabase
         .rpc('validate_promo_code', {
           p_code: promoCode.trim().toUpperCase(),
           p_customer_id: customerIdForPromo,
-          p_product_id: product.id,
+          p_product_id: productRow.id,
           p_order_amount: priceTotal,
         });
 
@@ -266,7 +460,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // RPC returns array, get first result
       const validation = Array.isArray(promoResult) ? promoResult[0] : promoResult;
 
       if (!validation || !validation.valid) {
@@ -278,7 +471,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Promo code is valid! Apply the discount
       promoCodeId = validation.promo_code_id;
       promoDiscount = validation.calculated_discount || 0;
       finalPrice = priceTotal - promoDiscount;
@@ -294,38 +486,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ========================================================================
-    // 3. FIND AVAILABLE UNIT
-    // ========================================================================
-    const { data: availableUnitId, error: unitError } = await supabase
-      .rpc('find_available_unit', {
-        p_product_id: product.id,
-        p_start_date: deliveryDate,
-        p_end_date: pickupDate,
-      });
-
-    if (unitError) {
-      console.error('Error finding available unit:', unitError);
-      return NextResponse.json(
-        { success: false, error: 'Error checking availability. Please try again.' },
-        { status: 500 }
-      );
-    }
-
-    if (!availableUnitId) {
-      console.log('No available unit found for dates:', { deliveryDate, pickupDate });
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'This product is not available for the selected dates. Please choose another date.' 
-        },
-        { status: 409 }
-      );
-    }
-
-    console.log('Found available unit:', availableUnitId);
-
-    // ========================================================================
-    // 4. FIND OR CREATE CUSTOMER
+    // 5. FIND OR CREATE CUSTOMER
     // ========================================================================
     const { firstName, lastName } = splitName(customerName);
 
@@ -376,10 +537,10 @@ export async function POST(request: NextRequest) {
     }
 
     // ========================================================================
-    // 5. CREATE BOOKING (as PENDING - not confirmed until payment!)
+    // 6. CREATE BOOKING (as PENDING)
     // ========================================================================
     const bookingData = {
-      unit_id: availableUnitId,
+      unit_id: unitId,
       customer_id: customerId,
       booking_type: bookingType,
       event_date: eventDate,
@@ -393,18 +554,25 @@ export async function POST(request: NextRequest) {
       discount_amount: promoDiscount,
       promo_code_id: promoCodeId,
       deposit_amount: DEPOSIT_AMOUNT,
-      balance_due: Math.max(0, balanceDue), // Ensure non-negative
+      balance_due: Math.max(0, balanceDue),
       customer_notes: notes || null,
       product_snapshot: {
-        slug: product.slug,
-        name: product.name,
-        price_daily: product.price_daily,
-        price_weekend: product.price_weekend,
-        price_sunday: product.price_sunday,
+        id: productRow.id,
+        slug: productRow.slug,
+        name: productRow.name,
+        price_daily: productRow.price_daily,
+        price_weekend: productRow.price_weekend,
+        price_sunday: productRow.price_sunday,
         promo_code: promoCodeId ? promoCode?.trim().toUpperCase() : null,
         promo_discount: promoDiscount,
       },
-      // ⚠️ IMPORTANT: Status is PENDING until payment confirmed via webhook
+      // Booking blocks system fields
+      slot_id: selectedSlotId,
+      event_start_time: eventStartTime,
+      event_end_time: eventEndTime,
+      service_start_time: serviceStartTime,
+      service_end_time: serviceEndTime,
+      // Status
       status: 'pending',
       deposit_paid: false,
     };
@@ -418,17 +586,13 @@ export async function POST(request: NextRequest) {
     if (bookingError || !booking) {
       console.error('Error creating booking:', bookingError);
       
-      // ======================================================================
-      // DOUBLE BOOKING PROTECTION
-      // If the exclusion constraint catches a race condition, show friendly error
-      // PostgreSQL error code 23P01 = exclusion_violation
-      // ======================================================================
+      // Handle race condition (exclusion constraint violation)
       if (bookingError?.code === '23P01' || bookingError?.message?.includes('exclusion')) {
-        console.log('Race condition caught by DB constraint - date was just booked');
+        console.log('Race condition caught by DB constraint');
         return NextResponse.json(
           { 
             success: false, 
-            error: 'Someone just booked this date! Please choose another date.' 
+            error: 'Someone just booked this slot! Please choose another time.' 
           },
           { status: 409 }
         );
@@ -443,30 +607,64 @@ export async function POST(request: NextRequest) {
     console.log('Created pending booking:', booking.booking_number);
 
     // ========================================================================
-    // 6. CREATE STRIPE CHECKOUT SESSION
+    // 7. CREATE BOOKING BLOCKS (for scheduling/conflict prevention)
+    // Creates: ASSET block (full rental) + OPS blocks (delivery + pickup legs)
+    // ========================================================================
+    if (eventStartTime && eventEndTime) {
+      const blocksResult = await createBookingBlocks({
+        bookingId: booking.id,
+        unitId: unitId,
+        productId: productRow.id,
+        eventStart: eventStartTime,
+        eventEnd: eventEndTime,
+        // Pass crew IDs from availability check (ensures same crew is reserved)
+        deliveryCrewId: assignedDeliveryCrewId,
+        pickupCrewId: assignedPickupCrewId,
+      });
+
+      if (!blocksResult.success) {
+        console.error('Failed to create booking blocks:', blocksResult.error);
+        // Note: We continue anyway - the booking is created, blocks are for optimization
+        // The database exclusion constraint is the real protection
+      } else {
+        console.log('Created booking blocks for:', booking.booking_number);
+      }
+    }
+
+    // ========================================================================
+    // 8. CREATE STRIPE CHECKOUT SESSION
     // ========================================================================
     const isFullPayment = paymentType === 'full';
-    // Use discounted price for full payment, deposit stays the same
     const amountCents = isFullPayment ? dollarsToCents(finalPrice) : DEPOSIT_AMOUNT_CENTS;
     const actualBalanceDue = Math.max(0, finalPrice - DEPOSIT_AMOUNT);
     
-    // Build nice descriptions for Stripe checkout
     const eventDateFormatted = formatDateShort(eventDate);
     
-    // Include promo code in line item name if applied
     let lineItemName = isFullPayment
-      ? `${product.name} - Paid in Full`
-      : `${product.name} - Deposit`;
+      ? `${productRow.name} - Paid in Full`
+      : `${productRow.name} - Deposit`;
     
     if (promoDiscount > 0) {
-      lineItemName += ` (${promoCode?.trim().toUpperCase()} -${promoDiscount})`;
+      lineItemName += ` (${promoCode?.trim().toUpperCase()} -$${promoDiscount})`;
+    }
+    
+    // Add slot info for slot-based products
+    if (isSlotBased && selectedSlotId) {
+      const { data: slotData } = await supabase
+        .from('product_slots')
+        .select('label')
+        .eq('id', selectedSlotId)
+        .single();
+      
+      if (slotData) {
+        lineItemName += ` • ${slotData.label}`;
+      }
     }
     
     const lineItemDescription = isFullPayment
       ? `Booking ${booking.booking_number} • ${eventDateFormatted} • Nothing due on delivery!`
-      : `Booking ${booking.booking_number} • ${eventDateFormatted} • ${actualBalanceDue} due on delivery`;
+      : `Booking ${booking.booking_number} • ${eventDateFormatted} • $${actualBalanceDue} due on delivery`;
 
-    // Get base URL
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
 
     try {
@@ -480,9 +678,10 @@ export async function POST(request: NextRequest) {
           booking_number: booking.booking_number,
           payment_type: paymentType,
           customer_id: customerId,
-          product_name: product.name,
+          product_name: productRow.name,
           event_date: eventDate,
-          // Promo code info for webhook processing
+          slot_id: selectedSlotId || '',
+          scheduling_mode: productRow.scheduling_mode || 'day_rental',
           promo_code_id: promoCodeId || '',
           promo_code: promoCode?.trim().toUpperCase() || '',
           promo_discount: promoDiscount.toString(),
@@ -503,30 +702,33 @@ export async function POST(request: NextRequest) {
           },
         ],
         success_url: `${baseUrl}/bookings/success?booking_id=${booking.id}&payment_type=${paymentType}`,
-        cancel_url: `${baseUrl}/bookings?cancelled=true&r=${product.slug}`,
-        // Expire after 30 minutes
+        cancel_url: `${baseUrl}/bookings?cancelled=true&r=${productRow.slug}`,
         expires_at: Math.floor(Date.now() / 1000) + (30 * 60),
       });
 
       console.log('Created Stripe session:', session.id);
 
-      // ========================================================================
-      // 7. RETURN CHECKOUT URL (redirect to Stripe)
-      // ========================================================================
       return NextResponse.json({
         success: true,
         bookingId: booking.id,
         bookingNumber: booking.booking_number,
-        // This is the key change - redirect to Stripe, not success page!
         checkoutUrl: session.url,
         paymentType,
         amount: amountCents / 100,
+        // Return slot info for frontend
+        slotId: selectedSlotId,
+        schedulingMode: productRow.scheduling_mode,
       });
 
     } catch (stripeError) {
       console.error('Stripe error:', stripeError);
       
-      // If Stripe fails, we should clean up the pending booking
+      // Clean up the pending booking and its blocks
+      await supabase
+        .from('booking_blocks')
+        .delete()
+        .eq('booking_id', booking.id);
+      
       await supabase
         .from('bookings')
         .delete()
@@ -548,16 +750,15 @@ export async function POST(request: NextRequest) {
 }
 
 // ============================================================================
-// EMAIL TEMPLATES (These are now called from the webhook after payment!)
-// Exported so webhook can use them
+// EMAIL TEMPLATES (Called from webhook after payment)
 // ============================================================================
 
 export function createCustomerEmail(data: {
   customerName: string;
   productName: string;
   bookingNumber: string;
-  eventDate: string; // Raw ISO date: "2024-12-28"
-  pickupDate: string; // Raw ISO date: "2024-12-30"
+  eventDate: string;
+  pickupDate: string;
   deliveryWindow: string;
   pickupWindow: string;
   address: string;
@@ -568,9 +769,9 @@ export function createCustomerEmail(data: {
   notes?: string;
   bookingType: BookingType;
   paidInFull?: boolean;
-  deliveryDate?: string; // Raw ISO date for calendar
+  deliveryDate?: string;
+  slotLabel?: string;  // New: time slot label for slot-based bookings
 }): string {
-  // Format dates for display
   const formatDateDisplay = (dateStr: string): string => {
     return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
       weekday: 'long',
@@ -588,6 +789,16 @@ export function createCustomerEmail(data: {
     : data.bookingType === 'sunday' 
     ? 'Sunday Rental' 
     : 'Daily Rental';
+
+  // Show slot info if available
+  const timeSlotInfo = data.slotLabel 
+    ? `<tr>
+        <td style="padding: 8px 0; vertical-align: top; width: 50%;">
+          <p style="margin: 0; color: #666; font-size: 11px;">⏰ Time Slot</p>
+          <p style="margin: 4px 0 0; color: #c084fc; font-weight: 600;">${data.slotLabel}</p>
+        </td>
+      </tr>`
+    : '';
 
   const paymentSection = data.paidInFull 
     ? `
@@ -650,6 +861,7 @@ export function createCustomerEmail(data: {
         <div style="background: linear-gradient(135deg, #581c87, #0e7490); border-radius: 12px; padding: 16px; margin-bottom: 16px; text-align: center;">
           <p style="margin: 0 0 4px; color: rgba(255,255,255,0.6); font-size: 11px; text-transform: uppercase;">Your Rental</p>
           <p style="margin: 0; color: white; font-size: 18px; font-weight: 600;">${data.productName}</p>
+          ${data.slotLabel ? `<p style="margin: 4px 0 0; color: #c084fc; font-size: 14px;">${data.slotLabel}</p>` : ''}
         </div>
         
         <!-- Details -->
@@ -665,6 +877,7 @@ export function createCustomerEmail(data: {
                 <p style="margin: 4px 0 0; color: white; font-weight: 500;">${bookingTypeLabel}</p>
               </td>
             </tr>
+            ${timeSlotInfo}
             <tr>
               <td style="padding: 8px 0; vertical-align: top;">
                 <p style="margin: 0; color: #666; font-size: 11px;">🚚 Delivery</p>
@@ -687,11 +900,9 @@ export function createCustomerEmail(data: {
         
         <!-- Add to Calendar -->
         ${(() => {
-          // Generate calendar URLs for customer
           const fullAddress = `${data.address}, ${data.city}, FL`;
           const deliveryDateStr = data.deliveryDate || data.eventDate;
           
-          // Parse time window for calendar
           const parseWindow = (window: string) => {
             let startHour = 9, endHour = 11;
             if (window.toLowerCase().includes('afternoon')) { startHour = 13; endHour = 15; }
@@ -699,7 +910,7 @@ export function createCustomerEmail(data: {
             return { startHour, endHour };
           };
           
-          const { startHour: delStart, endHour: delEnd } = parseWindow(data.deliveryWindow);
+          const { startHour: delStart } = parseWindow(data.deliveryWindow);
           const deliveryStartDate = new Date(deliveryDateStr + 'T12:00:00');
           deliveryStartDate.setHours(delStart, 0, 0, 0);
           const deliveryEndDate = new Date(data.pickupDate + 'T12:00:00');
@@ -708,7 +919,7 @@ export function createCustomerEmail(data: {
           
           const formatGoogleDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
           
-          const calDescription = `🎈 ${data.productName} Rental\n\n📋 Booking: ${data.bookingNumber}\n📅 Event: ${eventDateDisplay}\n🚚 Delivery: ${data.deliveryWindow}\n📦 Pickup: ${pickupDateDisplay} at ${data.pickupWindow}\n\n${data.paidInFull ? '✓ PAID IN FULL' : `Balance due: ${data.balanceDue}`}\n\n📞 Questions? Call (352) 445-3723`;
+          const calDescription = `🎈 ${data.productName} Rental${data.slotLabel ? ` (${data.slotLabel})` : ''}\n\n📋 Booking: ${data.bookingNumber}\n📅 Event: ${eventDateDisplay}\n🚚 Delivery: ${data.deliveryWindow}\n📦 Pickup: ${pickupDateDisplay} at ${data.pickupWindow}\n\n${data.paidInFull ? '✓ PAID IN FULL' : `Balance due: $${data.balanceDue}`}\n\n📞 Questions? Call (352) 445-3723`;
           
           const googleParams = new URLSearchParams({
             action: 'TEMPLATE',
@@ -799,11 +1010,11 @@ export function createBusinessEmail(data: {
   bookingType: BookingType;
   paidInFull?: boolean;
   amountPaid: number;
-  // Stripe details
   stripePaymentIntentId?: string;
   stripeReceiptUrl?: string;
   cardLast4?: string;
   cardBrand?: string;
+  slotLabel?: string;  // New: time slot label
 }): string {
   const bookingTypeLabel = data.bookingType === 'weekend' 
     ? 'Weekend Package' 
@@ -811,7 +1022,6 @@ export function createBusinessEmail(data: {
     ? 'Sunday Rental' 
     : 'Daily Rental';
 
-  // Format dates for display
   const formatDateDisplay = (dateStr: string): string => {
     return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
       weekday: 'long',
@@ -821,7 +1031,7 @@ export function createBusinessEmail(data: {
     });
   };
 
-  const formatDateShort = (dateStr: string): string => {
+  const formatDateShortFn = (dateStr: string): string => {
     return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
@@ -829,12 +1039,9 @@ export function createBusinessEmail(data: {
     });
   };
 
-  // Generate Google Calendar URL for delivery
   const generateGoogleCalendarUrl = (title: string, dateStr: string, timeWindow: string, location: string, description: string): string => {
-    // Parse time window (e.g., "9:00 AM - 11:00 AM" or "Morning (9-11 AM)")
     const date = new Date(dateStr + 'T12:00:00');
     
-    // Default to 9 AM - 11 AM for delivery, adjust based on window
     let startHour = 9;
     let endHour = 11;
     
@@ -864,7 +1071,6 @@ export function createBusinessEmail(data: {
     return `https://calendar.google.com/calendar/render?${params.toString()}`;
   };
 
-  // Generate Outlook Calendar URL
   const generateOutlookUrl = (title: string, dateStr: string, timeWindow: string, location: string, description: string): string => {
     const date = new Date(dateStr + 'T12:00:00');
     
@@ -898,7 +1104,7 @@ export function createBusinessEmail(data: {
   };
 
   const fullAddress = `${data.address}, ${data.city}, FL`;
-  const deliveryDescription = `🎈 ${data.productName}\n\n📋 Booking: ${data.bookingNumber}\n👤 Customer: ${data.customerName}\n📱 Phone: ${data.customerPhone}\n\n💰 ${data.paidInFull ? 'PAID IN FULL' : `Balance Due: ${data.balanceDue}`}\n\n📝 Notes: ${data.notes || 'None'}`;
+  const deliveryDescription = `🎈 ${data.productName}${data.slotLabel ? ` (${data.slotLabel})` : ''}\n\n📋 Booking: ${data.bookingNumber}\n👤 Customer: ${data.customerName}\n📱 Phone: ${data.customerPhone}\n\n💰 ${data.paidInFull ? 'PAID IN FULL' : `Balance Due: $${data.balanceDue}`}\n\n📝 Notes: ${data.notes || 'None'}`;
   const pickupDescription = `📦 Pickup: ${data.productName}\n\n📋 Booking: ${data.bookingNumber}\n👤 Customer: ${data.customerName}\n📱 Phone: ${data.customerPhone}`;
 
   const deliveryGoogleUrl = generateGoogleCalendarUrl(
@@ -933,11 +1139,9 @@ export function createBusinessEmail(data: {
     pickupDescription
   );
 
-  // Format card brand nicely
   const cardBrandDisplay = data.cardBrand ? 
     data.cardBrand.charAt(0).toUpperCase() + data.cardBrand.slice(1) : 'Card';
 
-  // Payment timestamp in Florida time
   const paidAt = formatFloridaTime();
 
   return `
@@ -969,7 +1173,7 @@ export function createBusinessEmail(data: {
       <!-- Payment Status Banner -->
       <div style="padding: 14px 24px; background-color: ${data.paidInFull ? '#14532d' : '#1e3a5f'}; text-align: center;">
         <span style="color: ${data.paidInFull ? '#4ade80' : '#38bdf8'}; font-size: 13px; font-weight: 600;">
-          ${data.paidInFull ? `💰 PAID IN FULL — ${data.totalPrice}` : `💳 ${data.amountPaid} Deposit Paid — ${data.balanceDue} Due on Delivery`}
+          ${data.paidInFull ? `💰 PAID IN FULL — $${data.totalPrice}` : `💳 $${data.amountPaid} Deposit Paid — $${data.balanceDue} Due on Delivery`}
         </span>
       </div>
       
@@ -1007,6 +1211,12 @@ export function createBusinessEmail(data: {
               <td style="padding: 10px 0; color: #888; font-size: 13px; border-bottom: 1px solid #333;">Rental</td>
               <td style="padding: 10px 0; color: white; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid #333;">${data.productName}</td>
             </tr>
+            ${data.slotLabel ? `
+            <tr>
+              <td style="padding: 10px 0; color: #888; font-size: 13px; border-bottom: 1px solid #333;">Time Slot</td>
+              <td style="padding: 10px 0; color: #c084fc; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid #333;">${data.slotLabel}</td>
+            </tr>
+            ` : ''}
             <tr>
               <td style="padding: 10px 0; color: #888; font-size: 13px; border-bottom: 1px solid #333;">Package</td>
               <td style="padding: 10px 0; color: white; font-size: 14px; text-align: right; border-bottom: 1px solid #333;">${bookingTypeLabel}</td>
@@ -1017,11 +1227,11 @@ export function createBusinessEmail(data: {
             </tr>
             <tr>
               <td style="padding: 10px 0; color: #888; font-size: 13px; border-bottom: 1px solid #333;">🚚 Delivery</td>
-              <td style="padding: 10px 0; color: white; font-size: 13px; text-align: right; border-bottom: 1px solid #333;">${formatDateShort(data.deliveryDate)}<br><span style="color: #888; font-size: 12px;">${data.deliveryWindow}</span></td>
+              <td style="padding: 10px 0; color: white; font-size: 13px; text-align: right; border-bottom: 1px solid #333;">${formatDateShortFn(data.deliveryDate)}<br><span style="color: #888; font-size: 12px;">${data.deliveryWindow}</span></td>
             </tr>
             <tr>
               <td style="padding: 10px 0; color: #888; font-size: 13px; border-bottom: 1px solid #333;">📦 Pickup</td>
-              <td style="padding: 10px 0; color: white; font-size: 13px; text-align: right; border-bottom: 1px solid #333;">${formatDateShort(data.pickupDate)}<br><span style="color: #888; font-size: 12px;">${data.pickupWindow}</span></td>
+              <td style="padding: 10px 0; color: white; font-size: 13px; text-align: right; border-bottom: 1px solid #333;">${formatDateShortFn(data.pickupDate)}<br><span style="color: #888; font-size: 12px;">${data.pickupWindow}</span></td>
             </tr>
             <tr>
               <td style="padding: 10px 0; color: #888; font-size: 13px;">📍 Address</td>
@@ -1039,14 +1249,14 @@ export function createBusinessEmail(data: {
           <table style="width: 100%;">
             <tr>
               <td style="padding: 8px 0;">
-                <p style="margin: 0 0 8px; color: #c4b5fd; font-size: 12px; font-weight: 600;">🚚 Delivery — ${formatDateShort(data.deliveryDate)}</p>
+                <p style="margin: 0 0 8px; color: #c4b5fd; font-size: 12px; font-weight: 600;">🚚 Delivery — ${formatDateShortFn(data.deliveryDate)}</p>
                 <a href="${deliveryGoogleUrl}" style="display: inline-block; background-color: #4285f4; color: white; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; margin-right: 8px;">Google</a>
                 <a href="${deliveryOutlookUrl}" style="display: inline-block; background-color: #0078d4; color: white; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 500;">Outlook</a>
               </td>
             </tr>
             <tr>
               <td style="padding: 8px 0;">
-                <p style="margin: 0 0 8px; color: #c4b5fd; font-size: 12px; font-weight: 600;">📦 Pickup — ${formatDateShort(data.pickupDate)}</p>
+                <p style="margin: 0 0 8px; color: #c4b5fd; font-size: 12px; font-weight: 600;">📦 Pickup — ${formatDateShortFn(data.pickupDate)}</p>
                 <a href="${pickupGoogleUrl}" style="display: inline-block; background-color: #4285f4; color: white; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; margin-right: 8px;">Google</a>
                 <a href="${pickupOutlookUrl}" style="display: inline-block; background-color: #0078d4; color: white; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 500;">Outlook</a>
               </td>
@@ -1069,16 +1279,16 @@ export function createBusinessEmail(data: {
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
               <td style="padding: 8px 0; color: #a7f3d0; font-size: 13px;">Rental Total</td>
-              <td style="padding: 8px 0; color: white; font-size: 14px; text-align: right;">${data.totalPrice}.00</td>
+              <td style="padding: 8px 0; color: white; font-size: 14px; text-align: right;">$${data.totalPrice}.00</td>
             </tr>
             <tr>
               <td style="padding: 8px 0; color: #a7f3d0; font-size: 13px; border-top: 1px solid #166534;">Amount Paid</td>
-              <td style="padding: 8px 0; color: #4ade80; font-size: 14px; font-weight: 600; text-align: right; border-top: 1px solid #166534;">✓ ${data.amountPaid}.00</td>
+              <td style="padding: 8px 0; color: #4ade80; font-size: 14px; font-weight: 600; text-align: right; border-top: 1px solid #166534;">✓ $${data.amountPaid}.00</td>
             </tr>
             ${!data.paidInFull ? `
             <tr>
               <td style="padding: 12px 0 8px; color: #fde047; font-size: 14px; font-weight: 600; border-top: 1px solid #166534;">Balance Due on Delivery</td>
-              <td style="padding: 12px 0 8px; color: #fbbf24; font-size: 20px; font-weight: 700; text-align: right; border-top: 1px solid #166534;">${data.balanceDue}.00</td>
+              <td style="padding: 12px 0 8px; color: #fbbf24; font-size: 20px; font-weight: 700; text-align: right; border-top: 1px solid #166534;">$${data.balanceDue}.00</td>
             </tr>
             ` : `
             <tr>

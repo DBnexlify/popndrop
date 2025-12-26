@@ -27,6 +27,11 @@ export interface CalendarEvent {
   reason?: string; // For blackout dates
   balanceDue?: number;
   balancePaid?: boolean;
+  // Slot-based booking fields (Party House)
+  slotStartTime?: string; // HH:MM format (e.g., "10:00")
+  slotEndTime?: string; // HH:MM format (e.g., "14:00")
+  slotLabel?: string; // Display label (e.g., "Morning Session")
+  isSlotBased?: boolean; // Whether this is a slot-based booking
 }
 
 export interface CalendarData {

@@ -51,6 +51,7 @@ import {
   Truck,
   Shield,
   Star,
+  Zap,
 } from "lucide-react";
 
 // Import conversion optimization components
@@ -62,7 +63,9 @@ import {
 import { TermsCheckbox } from "@/components/site/terms-acceptance";
 import { TrustBadges, LowStockIndicator } from "@/components/site/social-proof";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { SlotPicker } from "@/components/ui/slot-picker";
 import { MobileBookingWizard } from "@/components/site/mobile-booking-wizard";
+import type { AvailableSlot } from "@/lib/database-types";
 import { PromoCodeInput } from "@/components/site/promo-code-input";
 import { useCustomerAutofill, saveCustomerInfo } from "@/lib/use-customer-autofill";
 import type { AppliedPromoCode } from "@/lib/promo-code-types";
@@ -278,6 +281,12 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   // Promo code state
   const [appliedPromoCode, setAppliedPromoCode] = useState<AppliedPromoCode | null>(null);
 
+  // Slot-based booking state (for Party House)
+  const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+
   // Track the previous date to detect date changes
   const [prevEventDate, setPrevEventDate] = useState<Date | undefined>();
   
@@ -389,6 +398,49 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   }, [selectedProduct, eventDate]);
 
   // ==========================================================================
+  // SLOT-BASED PRODUCT: Fetch available slots when date changes
+  // ==========================================================================
+  
+  useEffect(() => {
+    async function fetchSlots() {
+      if (!selectedProduct || !eventDate || selectedProduct.schedulingMode !== 'slot_based') {
+        setAvailableSlots([]);
+        setSelectedSlot(null);
+        setSlotsError(null);
+        return;
+      }
+
+      setIsLoadingSlots(true);
+      setSlotsError(null);
+      setSelectedSlot(null);
+
+      try {
+        const dateStr = eventDate.toISOString().split('T')[0];
+        const response = await fetch(
+          `/api/bookings/slots?productSlug=${selectedProduct.slug}&date=${dateStr}`
+        );
+        const data = await response.json();
+
+        if (!response.ok) {
+          setSlotsError(data.error || 'Failed to load time slots');
+          setAvailableSlots([]);
+          return;
+        }
+
+        setAvailableSlots(data.slots || []);
+      } catch (error) {
+        console.error('Error fetching slots:', error);
+        setSlotsError('Failed to load time slots. Please try again.');
+        setAvailableSlots([]);
+      } finally {
+        setIsLoadingSlots(false);
+      }
+    }
+
+    fetchSlots();
+  }, [selectedProduct, eventDate]);
+
+  // ==========================================================================
   // SMART OPTION SELECTION
   // ==========================================================================
   
@@ -419,15 +471,30 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   }, [eventDate, prevEventDate, pricingResult]);
 
   // ==========================================================================
+  // COMPUTED: Is this a slot-based product (Party House)?
+  // ==========================================================================
+  
+  const isSlotBased = selectedProduct?.schedulingMode === 'slot_based';
+
+  // ==========================================================================
   // COMPUTE CURRENT STEP FOR PROGRESS INDICATOR
   // ==========================================================================
   
   const currentStep = useMemo(() => {
     if (!selectedProduct) return 1;
+    
+    // For slot-based products, check selectedSlot instead of selectedOption
+    if (isSlotBased) {
+      if (!eventDate || !selectedSlot) return 2;
+      if (!formData.address || !formData.name || !formData.email || !formData.phone) return 3;
+      return 4;
+    }
+    
+    // For day rental products, use original logic
     if (!eventDate || !selectedOption) return 2;
     if (!formData.deliveryTime || !formData.pickupTime || !formData.address || !formData.name || !formData.email || !formData.phone) return 3;
     return 4;
-  }, [selectedProduct, eventDate, selectedOption, formData]);
+  }, [selectedProduct, eventDate, selectedOption, selectedSlot, formData, isSlotBased]);
 
   // Computed values
   const hasMultipleOptions = pricingResult?.options && pricingResult.options.length > 1;
@@ -520,18 +587,25 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
 
     if (!selectedProduct) missingFields.push("rental");
     if (!eventDate) missingFields.push("event date");
-    if (!selectedOption) missingFields.push("rental option");
     if (!formData.name.trim()) missingFields.push("name");
     if (!formData.email.trim()) missingFields.push("email");
     if (!formData.phone.trim()) missingFields.push("phone");
     if (!formData.address.trim()) missingFields.push("address");
     
-    // For event-based rentals, only check deliveryTime (pickupTime is auto-set)
-    if (selectedOption?.isEventBased) {
-      if (!formData.deliveryTime) missingFields.push("event time");
+    // Slot-based products: need a selected slot
+    if (isSlotBased) {
+      if (!selectedSlot) missingFields.push("time slot");
     } else {
-      if (!formData.deliveryTime) missingFields.push("delivery time");
-      if (!formData.pickupTime) missingFields.push("pickup time");
+      // Day rental products: need rental option and time windows
+      if (!selectedOption) missingFields.push("rental option");
+      
+      // For event-based day rentals, only check deliveryTime (pickupTime is auto-set)
+      if (selectedOption?.isEventBased) {
+        if (!formData.deliveryTime) missingFields.push("event time");
+      } else {
+        if (!formData.deliveryTime) missingFields.push("delivery time");
+        if (!formData.pickupTime) missingFields.push("pickup time");
+      }
     }
     
     if (!termsAccepted) missingFields.push("terms acceptance");
@@ -540,7 +614,7 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
       isValid: missingFields.length === 0,
       missingFields,
     };
-  }, [selectedProduct, eventDate, selectedOption, formData, termsAccepted]);
+  }, [selectedProduct, eventDate, selectedOption, selectedSlot, formData, termsAccepted, isSlotBased]);
 
   useEffect(() => {
     if (validation.isValid && submitError) {
@@ -563,31 +637,63 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
     setIsSubmitting(true);
     setSubmitError(null);
 
-    if (!selectedProduct || !eventDate || !selectedOption) {
+    // For slot-based products, we need selectedSlot; for day rentals, we need selectedOption
+    if (!selectedProduct || !eventDate) {
       setSubmitError("An unexpected error occurred. Please refresh and try again.");
+      setIsSubmitting(false);
+      return;
+    }
+    
+    if (isSlotBased && !selectedSlot) {
+      setSubmitError("Please select a time slot.");
+      setIsSubmitting(false);
+      return;
+    }
+    
+    if (!isSlotBased && !selectedOption) {
+      setSubmitError("Please select a rental option.");
       setIsSubmitting(false);
       return;
     }
 
     try {
+      // Build the request body based on scheduling mode
+      const requestBody = isSlotBased
+        ? {
+            // Slot-based booking (Party House)
+            productSlug: selectedProduct.slug,
+            eventDate: eventDate.toISOString().split("T")[0],
+            slotId: selectedSlot!.slot_id,
+            customerName: formData.name.trim(),
+            customerEmail: formData.email.trim(),
+            customerPhone: formData.phone.trim(),
+            address: formData.address.trim(),
+            city: formData.city,
+            notes: formData.notes.trim(),
+            paymentType,
+            promoCode: appliedPromoCode?.code || null,
+          }
+        : {
+            // Day rental booking (bounce houses)
+            productSlug: selectedProduct.slug,
+            eventDate: eventDate.toISOString().split("T")[0],
+            bookingType: selectedOption!.type,
+            deliveryWindow: formData.deliveryTime,
+            pickupWindow: formData.pickupTime,
+            customerName: formData.name.trim(),
+            customerEmail: formData.email.trim(),
+            customerPhone: formData.phone.trim(),
+            address: formData.address.trim(),
+            city: formData.city,
+            notes: formData.notes.trim(),
+            paymentType,
+            promoCode: appliedPromoCode?.code || null,
+          };
+
       const response = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productSlug: selectedProduct.slug,
-          eventDate: eventDate.toISOString().split("T")[0],
-          bookingType: selectedOption.type,
-          deliveryWindow: formData.deliveryTime,
-          pickupWindow: formData.pickupTime,
-          customerName: formData.name.trim(),
-          customerEmail: formData.email.trim(),
-          customerPhone: formData.phone.trim(),
-          address: formData.address.trim(),
-          city: formData.city,
-          notes: formData.notes.trim(),
-          paymentType,
-          promoCode: appliedPromoCode?.code || null,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -984,6 +1090,28 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                   </div>
 
                   {/* ============================================================= */}
+                  {/* SLOT-BASED PRODUCTS: Show SlotPicker (Party House) */}
+                  {/* ============================================================= */}
+                  {isSlotBased && eventDate && (
+                    <div className="space-y-2">
+                      <Label>Select your time slot *</Label>
+                      <SlotPicker
+                        slots={availableSlots}
+                        selectedSlotId={selectedSlot?.slot_id || null}
+                        onSelect={setSelectedSlot}
+                        isLoading={isLoadingSlots}
+                        error={slotsError}
+                        price={selectedProduct?.pricing.daily}
+                      />
+                    </div>
+                  )}
+
+                  {/* ============================================================= */}
+                  {/* DAY RENTAL PRODUCTS: Duration + Time Selection */}
+                  {/* ============================================================= */}
+                  {!isSlotBased && (
+                    <>
+                  {/* ============================================================= */}
                   {/* DURATION SELECTION - Only show when multiple options exist */}
                   {/* ============================================================= */}
                   {hasMultipleOptions && pricingResult && (
@@ -1224,6 +1352,8 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                         </Select>
                       </div>
                     </div>
+                  )}
+                    </>
                   )}
                 </div>
               </div>
@@ -1770,7 +1900,7 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                   className="w-full text-foreground/70 hover:text-foreground"
                 >
                   <a
-                    href="mailto:bookings@popanddroprentals.com"
+                    href="mailto:bookings@popndroprentals.com"
                     className="flex items-center justify-center gap-2"
                   >
                     <Mail className="h-4 w-4 shrink-0" />

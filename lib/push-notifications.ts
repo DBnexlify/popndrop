@@ -7,7 +7,7 @@
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
 
-const VAPID_SUBJECT = 'mailto:bookings@popanddroprentals.com';
+const VAPID_SUBJECT = 'mailto:bookings@popndroprentals.com';
 
 // Track if VAPID has been initialized
 let vapidInitialized = false;

@@ -40,6 +40,12 @@ export function toProductDisplay(product: Product): ProductDisplay {
     // Booking configuration - default to all types if not specified
     availableBookingTypes: product.available_booking_types ?? ['daily', 'weekend', 'sunday'],
     sameDayPickupOnly: product.same_day_pickup_only ?? false,
+        // Scheduling configuration
+    schedulingMode: product.scheduling_mode ?? 'day_rental',
+    setupMinutes: product.setup_minutes ?? 45,
+    teardownMinutes: product.teardown_minutes ?? 45,
+    travelBufferMinutes: product.travel_buffer_minutes ?? 30,
+    cleaningMinutes: product.cleaning_minutes ?? 30,
   };
 }
 

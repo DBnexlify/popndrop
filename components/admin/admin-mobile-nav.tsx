@@ -27,6 +27,8 @@ import {
   Tag,
   DollarSign,
   Receipt,
+  Clock,
+  Truck,
 } from 'lucide-react';
 import { NotificationToggle, SoundToggle } from './pwa-provider';
 
@@ -41,8 +43,10 @@ const menuItems = [
   { href: '/admin/financials', label: 'Financials', icon: DollarSign },
   { href: '/admin/expenses', label: 'Expenses', icon: Receipt },
   { href: '/admin/blackout-dates', label: 'Blackout Dates', icon: CalendarOff },
+  { href: '/admin/time-slots', label: 'Time Slots', icon: Clock },
   { href: '/admin/cancellations', label: 'Cancellations', icon: Ban },
   { href: '/admin/inventory', label: 'Inventory', icon: Package },
+  { href: '/admin/operations', label: 'Operations', icon: Truck },
   { href: '/admin/promo-codes', label: 'Promo Codes', icon: Tag },
   { href: '/admin/loyalty', label: 'Loyalty Rewards', icon: Gift },
   { href: '/admin/settings', label: 'Settings', icon: Settings },

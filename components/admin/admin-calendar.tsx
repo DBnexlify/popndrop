@@ -455,6 +455,16 @@ function EventIndicator({ event }: { event: CalendarEvent }) {
   
   const maintenanceParts = isMaintenance ? parseMaintenanceTitle(event.title) : null;
 
+  // Format slot time for compact display (e.g., "10:00 AM" -> "10A")
+  const formatSlotTimeCompact = (time: string | undefined) => {
+    if (!time) return null;
+    const match = time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (match) {
+      return `${match[1]}${match[3].charAt(0).toUpperCase()}`;
+    }
+    return null;
+  };
+
   return (
     <div
       className={`
@@ -464,8 +474,20 @@ function EventIndicator({ event }: { event: CalendarEvent }) {
         ${config.bgColor} border ${config.borderColor}
       `}
     >
-      {/* Stacked booking number display */}
-      {bookingParts ? (
+      {/* Slot-based booking: Show time slot */}
+      {event.isSlotBased && event.slotStartTime ? (
+        <>
+          <span className={`text-[7px] font-bold leading-none ${config.color} sm:text-[8px]`}>
+            {formatSlotTimeCompact(event.slotStartTime)}-{formatSlotTimeCompact(event.slotEndTime)}
+          </span>
+          {bookingParts && (
+            <span className={`text-[8px] font-semibold leading-tight ${config.color} sm:text-[9px]`}>
+              {bookingParts.number}
+            </span>
+          )}
+        </>
+      ) : bookingParts ? (
+        /* Stacked booking number display */
         <>
           <span className={`text-[7px] font-bold leading-none ${config.color} sm:text-[8px]`}>
             {bookingParts.prefix}
@@ -561,8 +583,24 @@ function EventDetailModal({
             <Clock className="h-4 w-4 shrink-0 text-foreground/50" />
             <span>
               {formatDateRange(event.startDate, event.endDate)}
+              {/* Show slot time for slot-based bookings */}
+              {event.isSlotBased && event.slotStartTime && event.slotEndTime && (
+                <span className="ml-2 text-cyan-400">
+                  {event.slotStartTime} - {event.slotEndTime}
+                </span>
+              )}
             </span>
           </div>
+
+          {/* Slot Label for slot-based bookings */}
+          {event.isSlotBased && event.slotLabel && (
+            <div className="flex items-center gap-3 text-sm">
+              <CalendarIcon className="h-4 w-4 shrink-0 text-foreground/50" />
+              <Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-400">
+                {event.slotLabel}
+              </Badge>
+            </div>
+          )}
 
           {/* Booking-specific details */}
           {event.type === 'booking' && (

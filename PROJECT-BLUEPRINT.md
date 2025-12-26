@@ -2,7 +2,7 @@
 
 > **Purpose**: Quick reference for navigating this codebase. Check here FIRST before exploring files.
 > 
-> **Last Updated**: December 23, 2024 (Added Notification Nudge System)
+> **Last Updated**: December 26, 2024 (Added Operations Management + Critical Fixes)
 
 ---
 
@@ -54,6 +54,9 @@ popndrop/
 │   │       │   └── page.tsx                # Customer list
 │   │       ├── inventory/
 │   │       │   └── page.tsx                # Inventory management
+│   │       ├── operations/
+│   │       │   ├── page.tsx                # Ops resource management
+│   │       │   └── operations-client.tsx   # Client component for crews/vehicles
 │   │       ├── offline/
 │   │       │   └── page.tsx                # PWA offline fallback
 │   │       └── settings/
@@ -63,6 +66,12 @@ popndrop/
 │   │   ├── admin/
 │   │   │   ├── notifications/
 │   │   │   │   └── route.ts                # Notification CRUD & actions
+│   │   │   ├── ops-resources/
+│   │   │   │   ├── route.ts                # List/create ops resources
+│   │   │   │   └── [id]/
+│   │   │   │       ├── route.ts            # Get/update/delete ops resource
+│   │   │   │       └── schedule/
+│   │   │   │           └── route.ts        # Manage weekly schedules
 │   │   │   └── ...                         # Admin-specific endpoints
 │   │   ├── bookings/
 │   │   │   └── route.ts                    # Booking CRUD operations
@@ -71,7 +80,9 @@ popndrop/
 │   │   ├── cancellations/
 │   │   │   └── route.ts                    # Cancellation handling
 │   │   ├── cron/
-│   │   │   └── ...                         # Scheduled jobs
+│   │   │   ├── cleanup-pending/
+│   │   │   │   └── route.ts                # Clean up expired pending bookings
+│   │   │   └── ...                         # Other scheduled jobs
 │   │   ├── products/
 │   │   │   └── route.ts                    # Product/rental data
 │   │   ├── push/
