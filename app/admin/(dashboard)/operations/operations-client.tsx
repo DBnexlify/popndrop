@@ -55,6 +55,9 @@ const styles = {
   cardInner: 'pointer-events-none absolute inset-0 rounded-xl sm:rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]',
   nestedCard: 'relative overflow-hidden rounded-lg border border-white/5 bg-white/[0.03] sm:rounded-xl',
   nestedCardInner: 'pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]',
+  // Dialog styling matching design system
+  dialogContent: 'relative overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-3xl',
+  dialogInner: 'pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_70px_rgba(0,0,0,0.2)]',
 } as const;
 
 const DAYS_OF_WEEK = [
@@ -152,7 +155,7 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
     DAYS_OF_WEEK.forEach(day => {
       const existing = resource.availability?.find(a => a.day_of_week === day.value);
       schedule[day.value] = {
-        start: existing?.start_time?.slice(0, 5) || '08:00',
+        start: existing?.start_time?.slice(0, 5) || '07:00',
         end: existing?.end_time?.slice(0, 5) || '20:00',
         enabled: existing?.is_available ?? true,
       };
@@ -298,33 +301,33 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
     
     return (
       <div key={resource.id} className={styles.nestedCard}>
-        <div className="p-4">
+        <div className="p-4 sm:p-5">
           {/* Header */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               {/* Color indicator */}
               <div 
-                className="h-10 w-10 shrink-0 rounded-full flex items-center justify-center"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
                 style={{ backgroundColor: `${resource.color}20` }}
               >
                 {isCrew ? (
-                  <Users className="h-5 w-5" style={{ color: resource.color }} />
+                  <Users className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: resource.color }} />
                 ) : (
-                  <Truck className="h-5 w-5" style={{ color: resource.color }} />
+                  <Truck className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: resource.color }} />
                 )}
               </div>
               
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-medium">{resource.name}</span>
+                  <span className="text-sm font-semibold sm:text-base">{resource.name}</span>
                   {!resource.is_active && (
-                    <Badge variant="outline" className="text-[10px] text-foreground/50">
+                    <Badge variant="outline" className="text-[10px] text-foreground/50 sm:text-xs">
                       Inactive
                     </Badge>
                   )}
                 </div>
                 {resource.notes && (
-                  <p className="text-xs text-foreground/50 mt-0.5">{resource.notes}</p>
+                  <p className="text-xs leading-relaxed text-foreground/50 mt-0.5">{resource.notes}</p>
                 )}
               </div>
             </div>
@@ -334,7 +337,7 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 text-foreground/60 hover:text-foreground"
                 onClick={() => handleSchedule(resource)}
                 title="Edit schedule"
               >
@@ -343,7 +346,7 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 text-foreground/60 hover:text-foreground"
                 onClick={() => handleEdit(resource)}
                 title="Edit"
               >
@@ -352,7 +355,7 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
               <Button
                 variant="ghost"
                 size="icon"
-                className={cn("h-8 w-8", resource.is_active ? "text-green-400" : "text-foreground/40")}
+                className={cn("h-8 w-8", resource.is_active ? "text-green-400 hover:text-green-300" : "text-foreground/40 hover:text-foreground/60")}
                 onClick={() => handleToggleActive(resource)}
                 disabled={isSaving}
                 title={resource.is_active ? "Deactivate" : "Activate"}
@@ -362,7 +365,7 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-red-400 hover:text-red-300"
+                className="h-8 w-8 text-red-400/70 hover:text-red-400"
                 onClick={() => handleDelete(resource)}
                 title="Delete"
               >
@@ -371,7 +374,7 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
             </div>
           </div>
           
-          {/* Schedule preview */}
+          {/* Schedule preview toggle */}
           <button
             onClick={() => setExpandedResource(isExpanded ? null : resource.id)}
             className="mt-3 flex items-center gap-1 text-xs text-foreground/50 hover:text-foreground/70 transition-colors"
@@ -381,8 +384,9 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
             {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </button>
           
+          {/* Expanded schedule */}
           {isExpanded && (
-            <div className="mt-3 grid grid-cols-7 gap-1">
+            <div className="mt-3 grid grid-cols-7 gap-1 sm:gap-2">
               {DAYS_OF_WEEK.map(day => {
                 const avail = resource.availability?.find(a => a.day_of_week === day.value);
                 const isAvailable = avail?.is_available ?? true;
@@ -391,18 +395,23 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
                   <div 
                     key={day.value}
                     className={cn(
-                      "rounded-lg p-2 text-center text-xs",
-                      isAvailable ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400/60"
+                      "rounded-lg p-1.5 sm:p-2 text-center",
+                      isAvailable ? "bg-green-500/10" : "bg-white/[0.02]"
                     )}
                   >
-                    <div className="font-medium">{day.short}</div>
+                    <div className={cn(
+                      "text-[10px] font-semibold sm:text-xs",
+                      isAvailable ? "text-green-400" : "text-foreground/40"
+                    )}>
+                      {day.short}
+                    </div>
                     {isAvailable && avail && (
-                      <div className="text-[10px] text-foreground/50 mt-0.5">
-                        {avail.start_time?.slice(0, 5)}-{avail.end_time?.slice(0, 5)}
+                      <div className="text-[9px] text-foreground/50 mt-0.5 sm:text-[10px]">
+                        {avail.start_time?.slice(0, 5)}
                       </div>
                     )}
                     {!isAvailable && (
-                      <div className="text-[10px] mt-0.5">Off</div>
+                      <div className="text-[9px] text-foreground/30 mt-0.5 sm:text-[10px]">Off</div>
                     )}
                   </div>
                 );
@@ -418,62 +427,66 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
   return (
     <>
       {/* Stats Overview */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid gap-3 grid-cols-2 lg:grid-cols-4 sm:gap-4">
+        {/* Active Crews */}
         <div className={styles.card}>
-          <div className="flex items-center gap-3 p-4">
+          <div className="flex items-center gap-3 p-4 sm:p-5">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-500/10">
-              <Users className="h-5 w-5 text-cyan-400" />
+              <Users className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />
             </div>
             <div>
-              <p className="text-2xl font-semibold text-cyan-400">
+              <p className="text-xl font-semibold text-cyan-400 sm:text-2xl">
                 {crews.filter(c => c.is_active).length}
               </p>
-              <p className="text-xs text-foreground/50">Active Crews</p>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/50 sm:text-[11px]">Active Crews</p>
             </div>
           </div>
           <div className={styles.cardInner} />
         </div>
         
+        {/* Active Vehicles */}
         <div className={styles.card}>
-          <div className="flex items-center gap-3 p-4">
+          <div className="flex items-center gap-3 p-4 sm:p-5">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-500/10">
-              <Truck className="h-5 w-5 text-purple-400" />
+              <Truck className="h-4 w-4 text-purple-400 sm:h-5 sm:w-5" />
             </div>
             <div>
-              <p className="text-2xl font-semibold text-purple-400">
+              <p className="text-xl font-semibold text-purple-400 sm:text-2xl">
                 {vehicles.filter(v => v.is_active).length}
               </p>
-              <p className="text-xs text-foreground/50">Active Vehicles</p>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/50 sm:text-[11px]">Active Vehicles</p>
             </div>
           </div>
           <div className={styles.cardInner} />
         </div>
         
+        {/* Inactive */}
         <div className={styles.card}>
-          <div className="flex items-center gap-3 p-4">
+          <div className="flex items-center gap-3 p-4 sm:p-5">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
-              <PowerOff className="h-5 w-5 text-amber-400" />
+              <PowerOff className="h-4 w-4 text-amber-400 sm:h-5 sm:w-5" />
             </div>
             <div>
-              <p className="text-2xl font-semibold text-amber-400">
+              <p className="text-xl font-semibold text-amber-400 sm:text-2xl">
                 {crews.filter(c => !c.is_active).length + vehicles.filter(v => !v.is_active).length}
               </p>
-              <p className="text-xs text-foreground/50">Inactive</p>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/50 sm:text-[11px]">Inactive</p>
             </div>
           </div>
           <div className={styles.cardInner} />
         </div>
         
+        {/* Total */}
         <div className={styles.card}>
-          <div className="flex items-center gap-3 p-4">
+          <div className="flex items-center gap-3 p-4 sm:p-5">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-500/10">
-              <Check className="h-5 w-5 text-green-400" />
+              <Check className="h-4 w-4 text-green-400 sm:h-5 sm:w-5" />
             </div>
             <div>
-              <p className="text-2xl font-semibold text-green-400">
+              <p className="text-xl font-semibold text-green-400 sm:text-2xl">
                 {crews.length + vehicles.length}
               </p>
-              <p className="text-xs text-foreground/50">Total Resources</p>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/50 sm:text-[11px]">Total Resources</p>
             </div>
           </div>
           <div className={styles.cardInner} />
@@ -481,23 +494,23 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
       </div>
 
       {/* Delivery Crews Section */}
-      <div className={styles.sectionCard + ' mb-6'}>
-        <div className="p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
+      <div className={cn(styles.sectionCard, 'mb-6')}>
+        <div className="p-5 sm:p-6 lg:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-500/10">
-                <Users className="h-5 w-5 text-cyan-400" />
+                <Users className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold">Delivery Crews</h2>
-                <p className="text-xs text-foreground/50">
+                <h2 className="text-lg font-semibold tracking-tight sm:text-xl">Delivery Crews</h2>
+                <p className="text-xs leading-relaxed text-foreground/50 sm:text-sm">
                   Teams that handle setup and teardown
                 </p>
               </div>
             </div>
             <Button
               onClick={() => handleAdd('delivery_crew')}
-              className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20"
+              className="w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20 transition-all hover:shadow-xl hover:shadow-fuchsia-500/30 sm:w-auto"
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Crew
@@ -505,13 +518,13 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
           </div>
           
           {crews.length === 0 ? (
-            <div className="text-center py-8">
+            <div className="text-center py-8 sm:py-12">
               <Users className="h-12 w-12 mx-auto text-foreground/20 mb-3" />
-              <p className="text-sm text-foreground/50">No delivery crews yet</p>
-              <p className="text-xs text-foreground/40 mt-1">Add your first crew to get started</p>
+              <p className="text-sm leading-relaxed text-foreground/70">No delivery crews yet</p>
+              <p className="text-xs text-foreground/50 mt-1">Add your first crew to get started</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 sm:space-y-4">
               {crews.map(renderResourceCard)}
             </div>
           )}
@@ -521,22 +534,22 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
 
       {/* Vehicles Section */}
       <div className={styles.sectionCard}>
-        <div className="p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
+        <div className="p-5 sm:p-6 lg:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-500/10">
-                <Truck className="h-5 w-5 text-purple-400" />
+                <Truck className="h-4 w-4 text-purple-400 sm:h-5 sm:w-5" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold">Vehicles</h2>
-                <p className="text-xs text-foreground/50">
+                <h2 className="text-lg font-semibold tracking-tight sm:text-xl">Vehicles</h2>
+                <p className="text-xs leading-relaxed text-foreground/50 sm:text-sm">
                   Trucks and trailers for transport
                 </p>
               </div>
             </div>
             <Button
               onClick={() => handleAdd('vehicle')}
-              className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20"
+              className="w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20 transition-all hover:shadow-xl hover:shadow-fuchsia-500/30 sm:w-auto"
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Vehicle
@@ -544,13 +557,13 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
           </div>
           
           {vehicles.length === 0 ? (
-            <div className="text-center py-8">
+            <div className="text-center py-8 sm:py-12">
               <Truck className="h-12 w-12 mx-auto text-foreground/20 mb-3" />
-              <p className="text-sm text-foreground/50">No vehicles yet</p>
-              <p className="text-xs text-foreground/40 mt-1">Add vehicles to track your fleet</p>
+              <p className="text-sm leading-relaxed text-foreground/70">No vehicles yet</p>
+              <p className="text-xs text-foreground/50 mt-1">Add vehicles to track your fleet</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 sm:space-y-4">
               {vehicles.map(renderResourceCard)}
             </div>
           )}
@@ -566,116 +579,119 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
         setFormData(defaultFormData);
         setError(null);
       }}>
-        <DialogContent className="border-white/10 bg-neutral-900">
-          <DialogHeader>
-            <DialogTitle>
-              {showEditModal ? 'Edit' : 'Add'} {formData.resource_type === 'delivery_crew' ? 'Crew' : 'Vehicle'}
-            </DialogTitle>
-            <DialogDescription>
-              {showEditModal 
-                ? 'Update the details for this resource'
-                : formData.resource_type === 'delivery_crew'
-                  ? 'Add a new delivery crew to handle setups and pickups'
-                  : 'Add a vehicle to track your fleet'
-              }
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            {error && (
-              <div className="flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                {error}
+        <DialogContent className={cn(styles.dialogContent, 'p-0 gap-0')}>
+          <div className="p-5 sm:p-6">
+            <DialogHeader className="space-y-2">
+              <DialogTitle className="text-lg font-semibold tracking-tight sm:text-xl">
+                {showEditModal ? 'Edit' : 'Add'} {formData.resource_type === 'delivery_crew' ? 'Crew' : 'Vehicle'}
+              </DialogTitle>
+              <DialogDescription className="text-sm leading-relaxed text-foreground/70">
+                {showEditModal 
+                  ? 'Update the details for this resource'
+                  : formData.resource_type === 'delivery_crew'
+                    ? 'Add a new delivery crew to handle setups and pickups'
+                    : 'Add a vehicle to track your fleet'
+                }
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 pt-6">
+              {error && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  {error}
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-sm font-semibold">Name</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder={formData.resource_type === 'delivery_crew' ? 'e.g., Team Alpha' : 'e.g., White Trailer'}
+                  className="border-white/10 bg-white/5 focus:border-white/20 focus:ring-1 focus:ring-white/10 placeholder:text-foreground/40"
+                />
               </div>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder={formData.resource_type === 'delivery_crew' ? 'e.g., Team Alpha' : 'e.g., White Trailer'}
-                className="border-white/10 bg-white/5"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="color">Calendar Color</Label>
-              <Select
-                value={formData.color}
-                onValueChange={(value) => setFormData({ ...formData, color: value })}
-              >
-                <SelectTrigger className="border-white/10 bg-white/5">
-                  <SelectValue>
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="h-4 w-4 rounded-full"
-                        style={{ backgroundColor: formData.color }}
-                      />
-                      {COLOR_OPTIONS.find(c => c.value === formData.color)?.label || 'Select color'}
-                    </div>
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="border-white/10 bg-neutral-900">
-                  {COLOR_OPTIONS.map(color => (
-                    <SelectItem key={color.value} value={color.value}>
+              
+              <div className="space-y-2">
+                <Label htmlFor="color" className="text-sm font-semibold">Calendar Color</Label>
+                <Select
+                  value={formData.color}
+                  onValueChange={(value) => setFormData({ ...formData, color: value })}
+                >
+                  <SelectTrigger className="border-white/10 bg-white/5 focus:border-white/20 focus:ring-1 focus:ring-white/10">
+                    <SelectValue>
                       <div className="flex items-center gap-2">
                         <div 
                           className="h-4 w-4 rounded-full"
-                          style={{ backgroundColor: color.value }}
+                          style={{ backgroundColor: formData.color }}
                         />
-                        {color.label}
+                        <span className="text-sm">{COLOR_OPTIONS.find(c => c.value === formData.color)?.label || 'Select color'}</span>
                       </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="border-white/10 bg-neutral-900/95 backdrop-blur-xl">
+                    {COLOR_OPTIONS.map(color => (
+                      <SelectItem key={color.value} value={color.value}>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="h-4 w-4 rounded-full"
+                            style={{ backgroundColor: color.value }}
+                          />
+                          <span>{color.label}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="notes" className="text-sm font-semibold">Notes (optional)</Label>
+                <Input
+                  id="notes"
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Any additional info..."
+                  className="border-white/10 bg-white/5 focus:border-white/20 focus:ring-1 focus:ring-white/10 placeholder:text-foreground/40"
+                />
+              </div>
+              
+              <div className="flex items-center justify-between py-2">
+                <Label htmlFor="is_active" className="text-sm font-semibold">Active</Label>
+                <Switch
+                  id="is_active"
+                  checked={formData.is_active}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                />
+              </div>
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes (optional)</Label>
-              <Input
-                id="notes"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Any additional info..."
-                className="border-white/10 bg-white/5"
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <Label htmlFor="is_active">Active</Label>
-              <Switch
-                id="is_active"
-                checked={formData.is_active}
-                onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-              />
-            </div>
+            <DialogFooter className="flex-col gap-2 pt-6 sm:flex-row sm:gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowAddModal(false);
+                  setShowEditModal(false);
+                  setSelectedResource(null);
+                  setFormData(defaultFormData);
+                  setError(null);
+                }}
+                className="w-full border-white/10 hover:bg-white/5 sm:w-auto"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveResource}
+                disabled={isSaving}
+                className="w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20 hover:shadow-xl hover:shadow-fuchsia-500/30 sm:w-auto"
+              >
+                {isSaving ? 'Saving...' : showEditModal ? 'Save Changes' : 'Add'}
+              </Button>
+            </DialogFooter>
           </div>
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowAddModal(false);
-                setShowEditModal(false);
-                setSelectedResource(null);
-                setFormData(defaultFormData);
-                setError(null);
-              }}
-              className="border-white/10"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveResource}
-              disabled={isSaving}
-              className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white"
-            >
-              {isSaving ? 'Saving...' : showEditModal ? 'Save Changes' : 'Add'}
-            </Button>
-          </DialogFooter>
+          <div className={styles.dialogInner} />
         </DialogContent>
       </Dialog>
 
@@ -685,42 +701,47 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
         setSelectedResource(null);
         setError(null);
       }}>
-        <DialogContent className="border-white/10 bg-neutral-900">
-          <DialogHeader>
-            <DialogTitle className="text-red-400">Delete {selectedResource?.name}?</DialogTitle>
-            <DialogDescription>
-              This will permanently remove this resource and all its schedule data. 
-              Bookings that used this resource will NOT be affected.
-            </DialogDescription>
-          </DialogHeader>
-          
-          {error && (
-            <div className="flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              {error}
-            </div>
-          )}
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowDeleteModal(false);
-                setSelectedResource(null);
-                setError(null);
-              }}
-              className="border-white/10"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirmDelete}
-              disabled={isSaving}
-              className="bg-red-600 text-white hover:bg-red-700"
-            >
-              {isSaving ? 'Deleting...' : 'Delete'}
-            </Button>
-          </DialogFooter>
+        <DialogContent className={cn(styles.dialogContent, 'p-0 gap-0')}>
+          <div className="p-5 sm:p-6">
+            <DialogHeader className="space-y-2">
+              <DialogTitle className="text-lg font-semibold tracking-tight text-red-400 sm:text-xl">
+                Delete {selectedResource?.name}?
+              </DialogTitle>
+              <DialogDescription className="text-sm leading-relaxed text-foreground/70">
+                This will permanently remove this resource and all its schedule data. 
+                Bookings that used this resource will NOT be affected.
+              </DialogDescription>
+            </DialogHeader>
+            
+            {error && (
+              <div className="flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400 mt-4">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                {error}
+              </div>
+            )}
+            
+            <DialogFooter className="flex-col gap-2 pt-6 sm:flex-row sm:gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setSelectedResource(null);
+                  setError(null);
+                }}
+                className="w-full border-white/10 hover:bg-white/5 sm:w-auto"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmDelete}
+                disabled={isSaving}
+                className="w-full bg-red-600 text-white hover:bg-red-700 sm:w-auto"
+              >
+                {isSaving ? 'Deleting...' : 'Delete'}
+              </Button>
+            </DialogFooter>
+          </div>
+          <div className={styles.dialogInner} />
         </DialogContent>
       </Dialog>
 
@@ -731,102 +752,105 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
         setScheduleData({});
         setError(null);
       }}>
-        <DialogContent className="border-white/10 bg-neutral-900 max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-cyan-400" />
-                Schedule for {selectedResource?.name}
-              </div>
-            </DialogTitle>
-            <DialogDescription>
-              Set working hours for each day of the week
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-3 py-4 max-h-[400px] overflow-y-auto">
-            {error && (
-              <div className="flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                {error}
-              </div>
-            )}
-            
-            {DAYS_OF_WEEK.map(day => (
-              <div 
-                key={day.value}
-                className={cn(
-                  "rounded-lg border p-3",
-                  scheduleData[day.value]?.enabled 
-                    ? "border-white/10 bg-white/[0.02]" 
-                    : "border-white/5 bg-transparent"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{day.label}</span>
-                  <Switch
-                    checked={scheduleData[day.value]?.enabled ?? true}
-                    onCheckedChange={(checked) => 
-                      setScheduleData({
-                        ...scheduleData,
-                        [day.value]: { ...scheduleData[day.value], enabled: checked }
-                      })
-                    }
-                  />
+        <DialogContent className={cn(styles.dialogContent, 'p-0 gap-0 max-w-lg')}>
+          <div className="p-5 sm:p-6">
+            <DialogHeader className="space-y-2">
+              <DialogTitle className="text-lg font-semibold tracking-tight sm:text-xl">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-cyan-400" />
+                  Schedule for {selectedResource?.name}
                 </div>
-                
-                {scheduleData[day.value]?.enabled && (
-                  <div className="mt-3 flex items-center gap-2">
-                    <Input
-                      type="time"
-                      value={scheduleData[day.value]?.start || '08:00'}
-                      onChange={(e) => 
+              </DialogTitle>
+              <DialogDescription className="text-sm leading-relaxed text-foreground/70">
+                Set working hours for each day of the week
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-3 pt-6 max-h-[400px] overflow-y-auto">
+              {error && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  {error}
+                </div>
+              )}
+              
+              {DAYS_OF_WEEK.map(day => (
+                <div 
+                  key={day.value}
+                  className={cn(
+                    styles.nestedCard,
+                    "p-3 sm:p-4",
+                    !scheduleData[day.value]?.enabled && "opacity-60"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold sm:text-base">{day.label}</span>
+                    <Switch
+                      checked={scheduleData[day.value]?.enabled ?? true}
+                      onCheckedChange={(checked) => 
                         setScheduleData({
                           ...scheduleData,
-                          [day.value]: { ...scheduleData[day.value], start: e.target.value }
+                          [day.value]: { ...scheduleData[day.value], enabled: checked }
                         })
                       }
-                      className="w-[120px] border-white/10 bg-white/5 text-sm"
-                    />
-                    <span className="text-foreground/50">to</span>
-                    <Input
-                      type="time"
-                      value={scheduleData[day.value]?.end || '20:00'}
-                      onChange={(e) => 
-                        setScheduleData({
-                          ...scheduleData,
-                          [day.value]: { ...scheduleData[day.value], end: e.target.value }
-                        })
-                      }
-                      className="w-[120px] border-white/10 bg-white/5 text-sm"
                     />
                   </div>
-                )}
-              </div>
-            ))}
+                  
+                  {scheduleData[day.value]?.enabled && (
+                    <div className="mt-3 flex items-center gap-2 sm:gap-3">
+                      <Input
+                        type="time"
+                        value={scheduleData[day.value]?.start || '07:00'}
+                        onChange={(e) => 
+                          setScheduleData({
+                            ...scheduleData,
+                            [day.value]: { ...scheduleData[day.value], start: e.target.value }
+                          })
+                        }
+                        className="flex-1 border-white/10 bg-white/5 text-sm focus:border-white/20 focus:ring-1 focus:ring-white/10 sm:flex-none sm:w-[120px]"
+                      />
+                      <span className="text-xs text-foreground/50 sm:text-sm">to</span>
+                      <Input
+                        type="time"
+                        value={scheduleData[day.value]?.end || '20:00'}
+                        onChange={(e) => 
+                          setScheduleData({
+                            ...scheduleData,
+                            [day.value]: { ...scheduleData[day.value], end: e.target.value }
+                          })
+                        }
+                        className="flex-1 border-white/10 bg-white/5 text-sm focus:border-white/20 focus:ring-1 focus:ring-white/10 sm:flex-none sm:w-[120px]"
+                      />
+                    </div>
+                  )}
+                  <div className={styles.nestedCardInner} />
+                </div>
+              ))}
+            </div>
+            
+            <DialogFooter className="flex-col gap-2 pt-6 sm:flex-row sm:gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowScheduleModal(false);
+                  setSelectedResource(null);
+                  setScheduleData({});
+                  setError(null);
+                }}
+                className="w-full border-white/10 hover:bg-white/5 sm:w-auto"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveSchedule}
+                disabled={isSaving}
+                className="w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20 hover:shadow-xl hover:shadow-fuchsia-500/30 sm:w-auto"
+              >
+                {isSaving ? 'Saving...' : 'Save Schedule'}
+              </Button>
+            </DialogFooter>
           </div>
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowScheduleModal(false);
-                setSelectedResource(null);
-                setScheduleData({});
-                setError(null);
-              }}
-              className="border-white/10"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveSchedule}
-              disabled={isSaving}
-              className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white"
-            >
-              {isSaving ? 'Saving...' : 'Save Schedule'}
-            </Button>
-          </DialogFooter>
+          <div className={styles.dialogInner} />
         </DialogContent>
       </Dialog>
     </>

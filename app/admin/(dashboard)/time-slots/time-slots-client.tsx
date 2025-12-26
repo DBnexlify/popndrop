@@ -3,7 +3,7 @@
 // =============================================================================
 // TIME SLOTS CLIENT COMPONENT
 // app/admin/(dashboard)/time-slots/time-slots-client.tsx
-// Interactive UI for managing booking time slots
+// Interactive UI for managing booking time slots (product_slots table)
 // =============================================================================
 
 import { useState, useMemo } from 'react';
@@ -34,14 +34,14 @@ import {
 import { cn } from '@/lib/utils';
 
 // -----------------------------------------------------------------------------
-// TYPES
+// TYPES (matches product_slots table)
 // -----------------------------------------------------------------------------
 
-interface BookingBlock {
-  block_id: string;
+interface ProductSlot {
+  id: string;
   product_id: string;
-  start_time: string;
-  end_time: string;
+  start_time_local: string;  // TIME format like "10:00:00"
+  end_time_local: string;    // TIME format like "14:00:00"
   label: string | null;
   is_active: boolean;
   display_order: number;
@@ -57,7 +57,7 @@ interface SlotBasedProduct {
 
 interface TimeSlotsClientProps {
   products: SlotBasedProduct[];
-  initialBlocks: BookingBlock[];
+  initialSlots: ProductSlot[];
 }
 
 // -----------------------------------------------------------------------------
@@ -104,19 +104,19 @@ function formatTimeInput(time: string): string {
 // MAIN COMPONENT
 // -----------------------------------------------------------------------------
 
-export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProps) {
+export function TimeSlotsClient({ products, initialSlots }: TimeSlotsClientProps) {
   // State
   const [selectedProductSlug, setSelectedProductSlug] = useState<string>(
     products[0]?.slug || ''
   );
-  const [blocks, setBlocks] = useState<BookingBlock[]>(initialBlocks);
+  const [slots, setSlots] = useState<ProductSlot[]>(initialSlots);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
   // Form state
   const [showForm, setShowForm] = useState(false);
-  const [editingBlock, setEditingBlock] = useState<BookingBlock | null>(null);
+  const [editingSlot, setEditingSlot] = useState<ProductSlot | null>(null);
   const [formData, setFormData] = useState({
     startTime: '09:00',
     endTime: '13:00',
@@ -129,12 +129,12 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
     [products, selectedProductSlug]
   );
 
-  // Filter blocks for selected product
-  const filteredBlocks = useMemo(
-    () => blocks
-      .filter(b => b.product_id === selectedProduct?.id)
+  // Filter slots for selected product
+  const filteredSlots = useMemo(
+    () => slots
+      .filter(s => s.product_id === selectedProduct?.id)
       .sort((a, b) => a.display_order - b.display_order),
-    [blocks, selectedProduct?.id]
+    [slots, selectedProduct?.id]
   );
 
   // Clear messages after timeout
@@ -161,13 +161,13 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
     setError(null);
 
     try {
-      if (editingBlock) {
-        // Update existing block
-        const response = await fetch('/api/admin/booking-blocks', {
+      if (editingSlot) {
+        // Update existing slot
+        const response = await fetch('/api/admin/product-slots', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            blockId: editingBlock.block_id,
+            slotId: editingSlot.id,
             startTime: formData.startTime,
             endTime: formData.endTime,
             label: formData.label || null,
@@ -181,17 +181,17 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
         }
 
         // Update local state
-        setBlocks(prev => prev.map(b => 
-          b.block_id === editingBlock.block_id ? data.block : b
+        setSlots(prev => prev.map(s => 
+          s.id === editingSlot.id ? data.slot : s
         ));
         showMessage('success', 'Time slot updated successfully');
       } else {
-        // Create new block
-        const response = await fetch('/api/admin/booking-blocks', {
+        // Create new slot
+        const response = await fetch('/api/admin/product-slots', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            productSlug: selectedProduct.slug,
+            productId: selectedProduct.id,
             startTime: formData.startTime,
             endTime: formData.endTime,
             label: formData.label || null,
@@ -205,13 +205,13 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
         }
 
         // Add to local state
-        setBlocks(prev => [...prev, data.block]);
+        setSlots(prev => [...prev, data.slot]);
         showMessage('success', 'Time slot created successfully');
       }
 
       // Reset form
       setShowForm(false);
-      setEditingBlock(null);
+      setEditingSlot(null);
       setFormData({ startTime: '09:00', endTime: '13:00', label: '' });
     } catch (err) {
       showMessage('error', err instanceof Error ? err.message : 'An error occurred');
@@ -221,16 +221,16 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
   };
 
   // Handle toggle active/inactive
-  const handleToggleActive = async (block: BookingBlock) => {
+  const handleToggleActive = async (slot: ProductSlot) => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/admin/booking-blocks', {
+      const response = await fetch('/api/admin/product-slots', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          blockId: block.block_id,
-          isActive: !block.is_active,
+          slotId: slot.id,
+          isActive: !slot.is_active,
         }),
       });
 
@@ -240,10 +240,10 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
         throw new Error(data.error || 'Failed to update time slot');
       }
 
-      setBlocks(prev => prev.map(b => 
-        b.block_id === block.block_id ? data.block : b
+      setSlots(prev => prev.map(s => 
+        s.id === slot.id ? data.slot : s
       ));
-      showMessage('success', `Time slot ${data.block.is_active ? 'activated' : 'deactivated'}`);
+      showMessage('success', `Time slot ${data.slot.is_active ? 'activated' : 'deactivated'}`);
     } catch (err) {
       showMessage('error', err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -252,7 +252,7 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
   };
 
   // Handle delete
-  const handleDelete = async (block: BookingBlock) => {
+  const handleDelete = async (slot: ProductSlot) => {
     if (!confirm('Are you sure you want to delete this time slot? This cannot be undone.')) {
       return;
     }
@@ -260,7 +260,7 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
     setIsLoading(true);
 
     try {
-      const response = await fetch(`/api/admin/booking-blocks?blockId=${block.block_id}`, {
+      const response = await fetch(`/api/admin/product-slots?slotId=${slot.id}`, {
         method: 'DELETE',
       });
 
@@ -275,7 +275,7 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
         return;
       }
 
-      setBlocks(prev => prev.filter(b => b.block_id !== block.block_id));
+      setSlots(prev => prev.filter(s => s.id !== slot.id));
       showMessage('success', 'Time slot deleted successfully');
     } catch (err) {
       showMessage('error', err instanceof Error ? err.message : 'An error occurred');
@@ -285,46 +285,46 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
   };
 
   // Handle reorder
-  const handleReorder = async (block: BookingBlock, direction: 'up' | 'down') => {
-    const currentIndex = filteredBlocks.findIndex(b => b.block_id === block.block_id);
+  const handleReorder = async (slot: ProductSlot, direction: 'up' | 'down') => {
+    const currentIndex = filteredSlots.findIndex(s => s.id === slot.id);
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
 
-    if (targetIndex < 0 || targetIndex >= filteredBlocks.length) return;
+    if (targetIndex < 0 || targetIndex >= filteredSlots.length) return;
 
-    const targetBlock = filteredBlocks[targetIndex];
+    const targetSlot = filteredSlots[targetIndex];
     
     setIsLoading(true);
 
     try {
       // Swap display_order values
       await Promise.all([
-        fetch('/api/admin/booking-blocks', {
+        fetch('/api/admin/product-slots', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            blockId: block.block_id,
-            displayOrder: targetBlock.display_order,
+            slotId: slot.id,
+            displayOrder: targetSlot.display_order,
           }),
         }),
-        fetch('/api/admin/booking-blocks', {
+        fetch('/api/admin/product-slots', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            blockId: targetBlock.block_id,
-            displayOrder: block.display_order,
+            slotId: targetSlot.id,
+            displayOrder: slot.display_order,
           }),
         }),
       ]);
 
       // Update local state
-      setBlocks(prev => prev.map(b => {
-        if (b.block_id === block.block_id) {
-          return { ...b, display_order: targetBlock.display_order };
+      setSlots(prev => prev.map(s => {
+        if (s.id === slot.id) {
+          return { ...s, display_order: targetSlot.display_order };
         }
-        if (b.block_id === targetBlock.block_id) {
-          return { ...b, display_order: block.display_order };
+        if (s.id === targetSlot.id) {
+          return { ...s, display_order: slot.display_order };
         }
-        return b;
+        return s;
       }));
     } catch (err) {
       showMessage('error', 'Failed to reorder time slots');
@@ -334,12 +334,12 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
   };
 
   // Start editing
-  const startEdit = (block: BookingBlock) => {
-    setEditingBlock(block);
+  const startEdit = (slot: ProductSlot) => {
+    setEditingSlot(slot);
     setFormData({
-      startTime: formatTimeInput(block.start_time),
-      endTime: formatTimeInput(block.end_time),
-      label: block.label || '',
+      startTime: formatTimeInput(slot.start_time_local),
+      endTime: formatTimeInput(slot.end_time_local),
+      label: slot.label || '',
     });
     setShowForm(true);
   };
@@ -347,7 +347,7 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
   // Cancel form
   const cancelForm = () => {
     setShowForm(false);
-    setEditingBlock(null);
+    setEditingSlot(null);
     setFormData({ startTime: '09:00', endTime: '13:00', label: '' });
   };
 
@@ -357,8 +357,8 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
       <div className={styles.card}>
         <div className="p-8 text-center">
           <Clock className="mx-auto h-12 w-12 text-foreground/30" />
-          <h3 className="mt-4 text-lg font-semibold">No Slot-Based Products</h3>
-          <p className="mt-2 text-sm text-foreground/60">
+          <h3 className="mt-4 text-lg font-semibold tracking-tight">No Slot-Based Products</h3>
+          <p className="mt-2 text-sm leading-relaxed text-foreground/70">
             You don't have any products configured for slot-based scheduling.
             <br />
             Update a product's scheduling mode to "slot_based" to manage time slots.
@@ -411,7 +411,7 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
             <Button
               onClick={() => {
                 setShowForm(true);
-                setEditingBlock(null);
+                setEditingSlot(null);
                 setFormData({ startTime: '09:00', endTime: '13:00', label: '' });
               }}
               className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white"
@@ -430,8 +430,8 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
         <div className={styles.card}>
           <form onSubmit={handleSubmit} className="p-4 sm:p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                {editingBlock ? 'Edit Time Slot' : 'New Time Slot'}
+              <h3 className="text-lg font-semibold tracking-tight">
+                {editingSlot ? 'Edit Time Slot' : 'New Time Slot'}
               </h3>
               <Button
                 type="button"
@@ -492,7 +492,7 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
                 className="bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white"
               >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editingBlock ? 'Update' : 'Create'} Slot
+                {editingSlot ? 'Update' : 'Create'} Slot
               </Button>
             </div>
           </form>
@@ -503,18 +503,18 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
       {/* Time Slots List */}
       <div className={styles.card}>
         <div className="border-b border-white/5 p-4 sm:p-5">
-          <h3 className="text-lg font-semibold">
+          <h3 className="text-lg font-semibold tracking-tight">
             {selectedProduct?.name} Time Slots
           </h3>
-          <p className="mt-1 text-sm text-foreground/60">
-            {filteredBlocks.length} slot{filteredBlocks.length !== 1 ? 's' : ''} configured
+          <p className="mt-1 text-sm leading-relaxed text-foreground/70">
+            {filteredSlots.length} slot{filteredSlots.length !== 1 ? 's' : ''} configured
           </p>
         </div>
 
-        {filteredBlocks.length === 0 ? (
+        {filteredSlots.length === 0 ? (
           <div className="p-8 text-center">
             <Clock className="mx-auto h-10 w-10 text-foreground/30" />
-            <p className="mt-3 text-sm text-foreground/60">
+            <p className="mt-3 text-sm leading-relaxed text-foreground/70">
               No time slots configured for this product.
               <br />
               Click "Add Time Slot" to create one.
@@ -522,28 +522,28 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
           </div>
         ) : (
           <div className="divide-y divide-white/5">
-            {filteredBlocks.map((block, index) => (
+            {filteredSlots.map((slot, index) => (
               <div
-                key={block.block_id}
+                key={slot.id}
                 className={cn(
                   'flex items-center gap-4 p-4 sm:p-5',
-                  !block.is_active && 'opacity-50'
+                  !slot.is_active && 'opacity-50'
                 )}
               >
                 {/* Time display */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-lg font-semibold">
-                      {formatTimeDisplay(block.start_time)} - {formatTimeDisplay(block.end_time)}
+                      {formatTimeDisplay(slot.start_time_local)} - {formatTimeDisplay(slot.end_time_local)}
                     </span>
-                    {!block.is_active && (
+                    {!slot.is_active && (
                       <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-400">
                         Inactive
                       </Badge>
                     )}
                   </div>
-                  {block.label && (
-                    <p className="mt-1 text-sm text-foreground/60">{block.label}</p>
+                  {slot.label && (
+                    <p className="mt-1 text-sm text-foreground/70">{slot.label}</p>
                   )}
                 </div>
 
@@ -555,7 +555,7 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
                     size="icon"
                     className="h-8 w-8"
                     disabled={index === 0 || isLoading}
-                    onClick={() => handleReorder(block, 'up')}
+                    onClick={() => handleReorder(slot, 'up')}
                   >
                     <ChevronUp className="h-4 w-4" />
                   </Button>
@@ -563,8 +563,8 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
-                    disabled={index === filteredBlocks.length - 1 || isLoading}
-                    onClick={() => handleReorder(block, 'down')}
+                    disabled={index === filteredSlots.length - 1 || isLoading}
+                    onClick={() => handleReorder(slot, 'down')}
                   >
                     <ChevronDown className="h-4 w-4" />
                   </Button>
@@ -575,13 +575,13 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
                     size="icon"
                     className={cn(
                       'h-8 w-8',
-                      block.is_active 
+                      slot.is_active 
                         ? 'text-green-400 hover:text-green-300' 
                         : 'text-foreground/40 hover:text-foreground/60'
                     )}
                     disabled={isLoading}
-                    onClick={() => handleToggleActive(block)}
-                    title={block.is_active ? 'Deactivate' : 'Activate'}
+                    onClick={() => handleToggleActive(slot)}
+                    title={slot.is_active ? 'Deactivate' : 'Activate'}
                   >
                     <Power className="h-4 w-4" />
                   </Button>
@@ -592,7 +592,7 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
                     size="icon"
                     className="h-8 w-8"
                     disabled={isLoading}
-                    onClick={() => startEdit(block)}
+                    onClick={() => startEdit(slot)}
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
@@ -603,7 +603,7 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
                     size="icon"
                     className="h-8 w-8 text-red-400 hover:text-red-300"
                     disabled={isLoading}
-                    onClick={() => handleDelete(block)}
+                    onClick={() => handleDelete(slot)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -619,7 +619,7 @@ export function TimeSlotsClient({ products, initialBlocks }: TimeSlotsClientProp
       {/* Help text */}
       <div className={cn(styles.nestedCard, 'p-4')}>
         <h4 className="text-sm font-semibold">Tips</h4>
-        <ul className="mt-2 space-y-1 text-xs text-foreground/60">
+        <ul className="mt-2 space-y-1 text-xs leading-relaxed text-foreground/50">
           <li>• Time slots are shown in the order listed above to customers</li>
           <li>• Use the arrow buttons to reorder slots</li>
           <li>• Deactivate slots instead of deleting them if they have existing bookings</li>

@@ -17,12 +17,12 @@ export const metadata: Metadata = {
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
 
-// Define types for the data
-interface BookingBlock {
-  block_id: string;
+// Define types for the data - matches product_slots table
+interface ProductSlot {
+  id: string;
   product_id: string;
-  start_time: string;
-  end_time: string;
+  start_time_local: string;  // TIME format like "10:00:00"
+  end_time_local: string;    // TIME format like "14:00:00"
   label: string | null;
   is_active: boolean;
   display_order: number;
@@ -50,37 +50,37 @@ export default async function TimeSlotsPage() {
     .from('products')
     .select('id, name, slug, scheduling_mode')
     .eq('scheduling_mode', 'slot_based')
-    .eq('active', true)
+    .eq('is_active', true)
     .order('name');
 
   if (productsError) {
     console.error('Error fetching products:', productsError);
   }
 
-  // Fetch all booking blocks for slot-based products
+  // Fetch all product_slots (slot definitions) for slot-based products
   const productIds = products?.map(p => p.id) || [];
   
-  let blocks: BookingBlock[] = [];
+  let slots: ProductSlot[] = [];
   if (productIds.length > 0) {
-    const { data: blocksData, error: blocksError } = await supabase
-      .from('booking_blocks')
+    const { data: slotsData, error: slotsError } = await supabase
+      .from('product_slots')
       .select('*')
       .in('product_id', productIds)
       .order('display_order', { ascending: true });
 
-    if (blocksError) {
-      console.error('Error fetching booking blocks:', blocksError);
+    if (slotsError) {
+      console.error('Error fetching product slots:', slotsError);
     } else {
-      blocks = blocksData || [];
+      slots = slotsData || [];
     }
   }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Time Slots</h1>
-        <p className="mt-1 text-sm text-foreground/60">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Time Slots</h1>
+        <p className="mt-1 text-sm leading-relaxed text-foreground/70">
           Manage booking time slots for slot-based products like Party House
         </p>
       </div>
@@ -88,7 +88,7 @@ export default async function TimeSlotsPage() {
       {/* Client Component */}
       <TimeSlotsClient 
         products={products || []} 
-        initialBlocks={blocks}
+        initialSlots={slots}
       />
     </div>
   );

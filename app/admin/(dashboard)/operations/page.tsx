@@ -62,7 +62,7 @@ export default async function OperationsPage() {
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           Operations
         </h1>
-        <p className="mt-1 text-sm text-foreground/70">
+        <p className="mt-1 text-sm leading-relaxed text-foreground/70">
           Manage delivery crews, vehicles, and availability schedules
         </p>
       </div>
