@@ -277,6 +277,29 @@ export function formatTimeOnly(isoString: string): string {
   });
 }
 
+/**
+ * Format a 24-hour time string (HH:MM or HH:MM:SS) to 12-hour format
+ * @example format24To12Hour('22:00:00') => "10:00 PM"
+ * @example format24To12Hour('07:00') => "7:00 AM"
+ * @example format24To12Hour('13:30:00') => "1:30 PM"
+ */
+export function format24To12Hour(time24: string): string {
+  if (!time24) return '';
+  
+  // Extract hours and minutes from "HH:MM" or "HH:MM:SS" format
+  const [hoursStr, minutesStr] = time24.split(':');
+  const hours = parseInt(hoursStr, 10);
+  const minutes = parseInt(minutesStr, 10);
+  
+  if (isNaN(hours) || isNaN(minutes)) return time24;
+  
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12; // Convert 0 to 12, and 13-23 to 1-11
+  const displayMinutes = minutes.toString().padStart(2, '0');
+  
+  return `${displayHours}:${displayMinutes} ${period}`;
+}
+
 // =============================================================================
 // DATE COMPARISON UTILITIES (in Eastern timezone)
 // =============================================================================

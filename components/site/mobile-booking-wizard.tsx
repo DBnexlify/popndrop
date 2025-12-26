@@ -493,6 +493,11 @@ function Step2DateTime({
   setSelectedSlot,
   isLoadingSlots,
   slotsError,
+  // Auto-refresh props
+  lastSlotsUpdate,
+  isRefreshingSlots,
+  slotsChangedWarning,
+  onRefreshSlots,
   onContinue,
 }: {
   selectedProduct: ProductDisplay;
@@ -510,6 +515,11 @@ function Step2DateTime({
   setSelectedSlot: (slot: AvailableSlot | null) => void;
   isLoadingSlots: boolean;
   slotsError: string | null;
+  // Auto-refresh types
+  lastSlotsUpdate: Date | null;
+  isRefreshingSlots: boolean;
+  slotsChangedWarning: string | null;
+  onRefreshSlots: () => void;
   onContinue: () => void;
 }) {
   // Detect if this is a slot-based product
@@ -711,8 +721,19 @@ function Step2DateTime({
           {/* SLOT-BASED PRODUCTS: Show SlotPicker (Party House) */}
           {/* ============================================================= */}
           {isSlotBased && eventDate && (
-            <div className="mt-5 space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="mt-5 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
               <Label>Select your time slot</Label>
+              
+              {/* Warning when slot was taken by someone else */}
+              {slotsChangedWarning && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 animate-in fade-in duration-300">
+                  <div className="flex gap-2 text-xs">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" />
+                    <p className="text-amber-300">{slotsChangedWarning}</p>
+                  </div>
+                </div>
+              )}
+              
               <SlotPickerCompact
                 slots={availableSlots}
                 selectedSlotId={selectedSlot?.slot_id || null}
@@ -720,6 +741,9 @@ function Step2DateTime({
                 isLoading={isLoadingSlots}
                 error={slotsError}
                 price={selectedProduct.pricing.daily}
+                lastUpdated={lastSlotsUpdate}
+                isRefreshing={isRefreshingSlots}
+                onRefresh={onRefreshSlots}
               />
             </div>
           )}
@@ -1516,6 +1540,11 @@ export function MobileBookingWizard({
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
+  
+  // Auto-refresh slots state
+  const [lastSlotsUpdate, setLastSlotsUpdate] = useState<Date | null>(null);
+  const [isRefreshingSlots, setIsRefreshingSlots] = useState(false);
+  const [slotsChangedWarning, setSlotsChangedWarning] = useState<string | null>(null);
 
   // Ref for main container (kept for potential future use)
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1592,47 +1621,112 @@ export function MobileBookingWizard({
   }, [selectedProduct]);
 
   // ==========================================================================
-  // SLOT-BASED PRODUCT: Fetch available slots when date changes
+  // SLOT-BASED PRODUCT: Fetch available slots
+  // Reusable function for initial load and auto-refresh
   // ==========================================================================
   
-  useEffect(() => {
-    async function fetchSlots() {
-      if (!selectedProduct || !eventDate || selectedProduct.schedulingMode !== 'slot_based') {
-        setAvailableSlots([]);
-        setSelectedSlot(null);
-        setSlotsError(null);
-        return;
-      }
+  const fetchSlotsForDate = useCallback(async (options: { isRefresh?: boolean } = {}) => {
+    const { isRefresh = false } = options;
+    
+    if (!selectedProduct || !eventDate || selectedProduct.schedulingMode !== 'slot_based') {
+      setAvailableSlots([]);
+      setSelectedSlot(null);
+      setSlotsError(null);
+      setLastSlotsUpdate(null);
+      return;
+    }
 
+    // Use different loading states for initial vs refresh
+    if (isRefresh) {
+      setIsRefreshingSlots(true);
+    } else {
       setIsLoadingSlots(true);
       setSlotsError(null);
       setSelectedSlot(null);
-
-      try {
-        const dateStr = eventDate.toISOString().split('T')[0];
-        const response = await fetch(
-          `/api/bookings/slots?productSlug=${selectedProduct.slug}&date=${dateStr}`
-        );
-        const data = await response.json();
-
-        if (!response.ok) {
-          setSlotsError(data.error || 'Failed to load time slots');
-          setAvailableSlots([]);
-          return;
-        }
-
-        setAvailableSlots(data.slots || []);
-      } catch (error) {
-        console.error('Error fetching slots:', error);
-        setSlotsError('Failed to load time slots. Please try again.');
-        setAvailableSlots([]);
-      } finally {
-        setIsLoadingSlots(false);
-      }
     }
 
-    fetchSlots();
-  }, [selectedProduct, eventDate]);
+    try {
+      const dateStr = eventDate.toISOString().split('T')[0];
+      const response = await fetch(
+        `/api/bookings/slots?productSlug=${selectedProduct.slug}&date=${dateStr}`
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (!isRefresh) {
+          setSlotsError(data.error || 'Failed to load time slots');
+          setAvailableSlots([]);
+        }
+        return;
+      }
+
+      const newSlots: AvailableSlot[] = data.slots || [];
+      
+      // On refresh, check if selected slot is still available
+      if (isRefresh && selectedSlot) {
+        const stillAvailable = newSlots.find(
+          s => s.slot_id === selectedSlot.slot_id && s.is_available
+        );
+        
+        if (!stillAvailable) {
+          // Selected slot was taken by someone else!
+          hapticError();
+          setSlotsChangedWarning(
+            'Your selected time slot was just booked by someone else. Please choose another.'
+          );
+          setSelectedSlot(null);
+        }
+      }
+      
+      setAvailableSlots(newSlots);
+      setLastSlotsUpdate(new Date());
+      
+    } catch (error) {
+      console.error('Error fetching slots:', error);
+      if (!isRefresh) {
+        setSlotsError('Failed to load time slots. Please try again.');
+        setAvailableSlots([]);
+      }
+    } finally {
+      setIsLoadingSlots(false);
+      setIsRefreshingSlots(false);
+    }
+  }, [selectedProduct, eventDate, selectedSlot]);
+
+  // Initial fetch when product/date changes
+  useEffect(() => {
+    fetchSlotsForDate({ isRefresh: false });
+  }, [selectedProduct, eventDate]); // Don't include fetchSlotsForDate to avoid infinite loop
+
+  // ==========================================================================
+  // AUTO-REFRESH: Poll for slot availability every 30 seconds
+  // ==========================================================================
+  
+  useEffect(() => {
+    // Only auto-refresh for slot-based products with a selected date
+    if (!selectedProduct || !eventDate || selectedProduct.schedulingMode !== 'slot_based') {
+      return;
+    }
+    
+    // Poll every 30 seconds
+    const REFRESH_INTERVAL_MS = 30 * 1000;
+    
+    const intervalId = setInterval(() => {
+      // Don't refresh if already loading or refreshing
+      if (!isLoadingSlots && !isRefreshingSlots) {
+        fetchSlotsForDate({ isRefresh: true });
+      }
+    }, REFRESH_INTERVAL_MS);
+    
+    return () => clearInterval(intervalId);
+  }, [selectedProduct, eventDate, isLoadingSlots, isRefreshingSlots, fetchSlotsForDate]);
+
+  // Clear warning when user selects a new slot
+  useEffect(() => {
+    if (selectedSlot && slotsChangedWarning) {
+      setSlotsChangedWarning(null);
+    }
+  }, [selectedSlot, slotsChangedWarning]);
 
   // Show toast helper
   const showToast = (message: string) => {
@@ -1735,6 +1829,23 @@ export function MobileBookingWizard({
       const data = await response.json();
 
       if (!response.ok) {
+        // Handle 409 Conflict (slot taken) specially
+        if (response.status === 409 && isSlotBased) {
+          // Refresh slots to show current availability
+          await fetchSlotsForDate({ isRefresh: true });
+          
+          // Clear selected slot and show helpful message
+          setSelectedSlot(null);
+          setSlotsChangedWarning(
+            data.error || 'This time slot was just booked. Please select another available slot.'
+          );
+          
+          // Go back to step 2 to pick a new slot
+          goToStep(2);
+          setIsSubmitting(false);
+          return;
+        }
+        
         hapticError();
         setSubmitError(data.error || "Something went wrong. Please try again.");
         setIsSubmitting(false);
@@ -1848,6 +1959,10 @@ export function MobileBookingWizard({
               setSelectedSlot={setSelectedSlot}
               isLoadingSlots={isLoadingSlots}
               slotsError={slotsError}
+              lastSlotsUpdate={lastSlotsUpdate}
+              isRefreshingSlots={isRefreshingSlots}
+              slotsChangedWarning={slotsChangedWarning}
+              onRefreshSlots={() => fetchSlotsForDate({ isRefresh: true })}
               onContinue={goNext}
             />
           )}

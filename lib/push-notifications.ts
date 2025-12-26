@@ -98,6 +98,56 @@ export interface SendResult {
 // SEND TO ALL ADMINS
 // =============================================================================
 
+/**
+ * Map push notification types to preference keys
+ */
+const TYPE_TO_PREFERENCE_KEY: Record<string, string> = {
+  'new_booking': 'new_booking',
+  'payment_received': 'payment_deposit', // Maps to deposit or full based on context
+  'booking_cancelled': 'booking_cancelled',
+  'delivery_reminder': 'delivery_prompt',
+  'test': 'test', // Always allowed
+};
+
+/**
+ * Check if current time is within quiet hours
+ * @param quietStart - Start time in "HH:MM:SS" format (e.g., "22:00:00")
+ * @param quietEnd - End time in "HH:MM:SS" format (e.g., "07:00:00")
+ */
+function isQuietHours(quietStart: string | null, quietEnd: string | null): boolean {
+  if (!quietStart || !quietEnd) return false;
+  
+  // Get current time in Eastern timezone
+  const now = new Date();
+  const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const currentHour = easternTime.getHours();
+  const currentMinute = easternTime.getMinutes();
+  const currentTimeMinutes = currentHour * 60 + currentMinute;
+  
+  // Parse quiet hours
+  const [startHour, startMinute] = quietStart.split(':').map(Number);
+  const [endHour, endMinute] = quietEnd.split(':').map(Number);
+  const startTimeMinutes = startHour * 60 + startMinute;
+  const endTimeMinutes = endHour * 60 + endMinute;
+  
+  // Handle overnight quiet hours (e.g., 22:00 to 07:00)
+  if (startTimeMinutes > endTimeMinutes) {
+    // Quiet hours span midnight
+    return currentTimeMinutes >= startTimeMinutes || currentTimeMinutes < endTimeMinutes;
+  } else {
+    // Quiet hours within same day
+    return currentTimeMinutes >= startTimeMinutes && currentTimeMinutes < endTimeMinutes;
+  }
+}
+
+/**
+ * Check if a notification type is marked as urgent (should bypass quiet hours/digest)
+ */
+function isUrgentNotificationType(type: NotificationType): boolean {
+  const urgentTypes = ['booking_cancelled', 'payment_failed'];
+  return urgentTypes.includes(type);
+}
+
 export async function sendPushToAllAdmins(
   payload: NotificationPayload
 ): Promise<SendResult> {
@@ -111,16 +161,20 @@ export async function sendPushToAllAdmins(
   const errors: string[] = [];
   let sent = 0;
   let failed = 0;
+  let skipped = 0;
+
+  const notificationType = payload.data?.type || 'test';
+  const isUrgent = isUrgentNotificationType(notificationType);
 
   try {
     // Get all push subscriptions
-    const { data: subscriptions, error } = await supabase
+    const { data: subscriptions, error: subError } = await supabase
       .from('push_subscriptions')
       .select('*');
 
-    if (error) {
-      console.error('[Push] Failed to fetch subscriptions:', error);
-      return { success: false, sent: 0, failed: 0, errors: [error.message] };
+    if (subError) {
+      console.error('[Push] Failed to fetch subscriptions:', subError);
+      return { success: false, sent: 0, failed: 0, errors: [subError.message] };
     }
 
     if (!subscriptions || subscriptions.length === 0) {
@@ -128,11 +182,60 @@ export async function sendPushToAllAdmins(
       return { success: true, sent: 0, failed: 0 };
     }
 
-    console.log(`[Push] Sending to ${subscriptions.length} subscription(s)`);
+    // Get all notification preferences (keyed by admin_id for quick lookup)
+    const adminIds = subscriptions.map(s => s.admin_id);
+    const { data: allPrefs } = await supabase
+      .from('notification_preferences')
+      .select('*')
+      .in('admin_id', adminIds);
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const prefsMap = new Map<string, any>();
+    if (allPrefs) {
+      for (const pref of allPrefs) {
+        prefsMap.set(pref.admin_id, pref);
+      }
+    }
 
-    // Send to each subscription
+    console.log(`[Push] Processing ${subscriptions.length} subscription(s) for type: ${notificationType}`);
+
+    // Send to each subscription (checking preferences)
     for (const sub of subscriptions) {
       try {
+        const prefs = prefsMap.get(sub.admin_id) || null;
+        
+        // Check if we should send based on preferences
+        if (notificationType !== 'test' && prefs) {
+          // Check notification mode
+          const mode = prefs.mode || 'realtime';
+          
+          // In digest mode, only urgent notifications go through in real-time
+          if (mode === 'digest' && !isUrgent) {
+            console.log(`[Push] Skipping (digest mode, non-urgent): ${sub.endpoint.slice(0, 50)}`);
+            skipped++;
+            continue;
+          }
+          
+          // In custom mode, check if this specific type is enabled
+          if (mode === 'custom') {
+            const prefKey = TYPE_TO_PREFERENCE_KEY[notificationType];
+            if (prefKey && prefs[prefKey] === false) {
+              console.log(`[Push] Skipping (${notificationType} disabled): ${sub.endpoint.slice(0, 50)}`);
+              skipped++;
+              continue;
+            }
+          }
+          
+          // Check quiet hours (urgent notifications bypass this)
+          if (!isUrgent && prefs.quiet_hours_enabled) {
+            if (isQuietHours(prefs.quiet_hours_start, prefs.quiet_hours_end)) {
+              console.log(`[Push] Skipping (quiet hours): ${sub.endpoint.slice(0, 50)}`);
+              skipped++;
+              continue;
+            }
+          }
+        }
+
         const pushSubscription = {
           endpoint: sub.endpoint,
           keys: {
@@ -170,16 +273,19 @@ export async function sendPushToAllAdmins(
       await supabase.from('notification_log').insert({
         title: payload.title,
         body: payload.body,
-        type: payload.data?.type || 'general',
+        type: notificationType,
         sent_count: sent,
         failed_count: failed,
+        // Note: skipped count tracked in console logs only
       });
     } catch (logError) {
       console.error('[Push] Failed to log notification:', logError);
     }
 
+    console.log(`[Push] Complete: ${sent} sent, ${skipped} skipped, ${failed} failed`);
+
     return {
-      success: sent > 0 || subscriptions.length === 0,
+      success: sent > 0 || subscriptions.length === 0 || skipped > 0,
       sent,
       failed,
       errors: errors.length > 0 ? errors : undefined,

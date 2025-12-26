@@ -286,6 +286,11 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
+  
+  // Auto-refresh slots state
+  const [lastSlotsUpdate, setLastSlotsUpdate] = useState<Date | null>(null);
+  const [isRefreshingSlots, setIsRefreshingSlots] = useState(false);
+  const [slotsChangedWarning, setSlotsChangedWarning] = useState<string | null>(null);
 
   // Track the previous date to detect date changes
   const [prevEventDate, setPrevEventDate] = useState<Date | undefined>();
@@ -398,47 +403,111 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
   }, [selectedProduct, eventDate]);
 
   // ==========================================================================
-  // SLOT-BASED PRODUCT: Fetch available slots when date changes
+  // SLOT-BASED PRODUCT: Fetch available slots
+  // Reusable function for initial load and auto-refresh
   // ==========================================================================
   
-  useEffect(() => {
-    async function fetchSlots() {
-      if (!selectedProduct || !eventDate || selectedProduct.schedulingMode !== 'slot_based') {
-        setAvailableSlots([]);
-        setSelectedSlot(null);
-        setSlotsError(null);
-        return;
-      }
+  const fetchSlotsForDate = useCallback(async (options: { isRefresh?: boolean } = {}) => {
+    const { isRefresh = false } = options;
+    
+    if (!selectedProduct || !eventDate || selectedProduct.schedulingMode !== 'slot_based') {
+      setAvailableSlots([]);
+      setSelectedSlot(null);
+      setSlotsError(null);
+      setLastSlotsUpdate(null);
+      return;
+    }
 
+    // Use different loading states for initial vs refresh
+    if (isRefresh) {
+      setIsRefreshingSlots(true);
+    } else {
       setIsLoadingSlots(true);
       setSlotsError(null);
       setSelectedSlot(null);
-
-      try {
-        const dateStr = eventDate.toISOString().split('T')[0];
-        const response = await fetch(
-          `/api/bookings/slots?productSlug=${selectedProduct.slug}&date=${dateStr}`
-        );
-        const data = await response.json();
-
-        if (!response.ok) {
-          setSlotsError(data.error || 'Failed to load time slots');
-          setAvailableSlots([]);
-          return;
-        }
-
-        setAvailableSlots(data.slots || []);
-      } catch (error) {
-        console.error('Error fetching slots:', error);
-        setSlotsError('Failed to load time slots. Please try again.');
-        setAvailableSlots([]);
-      } finally {
-        setIsLoadingSlots(false);
-      }
     }
 
-    fetchSlots();
-  }, [selectedProduct, eventDate]);
+    try {
+      const dateStr = eventDate.toISOString().split('T')[0];
+      const response = await fetch(
+        `/api/bookings/slots?productSlug=${selectedProduct.slug}&date=${dateStr}`
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (!isRefresh) {
+          setSlotsError(data.error || 'Failed to load time slots');
+          setAvailableSlots([]);
+        }
+        return;
+      }
+
+      const newSlots: AvailableSlot[] = data.slots || [];
+      
+      // On refresh, check if selected slot is still available
+      if (isRefresh && selectedSlot) {
+        const stillAvailable = newSlots.find(
+          s => s.slot_id === selectedSlot.slot_id && s.is_available
+        );
+        
+        if (!stillAvailable) {
+          // Selected slot was taken by someone else!
+          setSlotsChangedWarning(
+            'Your selected time slot was just booked by someone else. Please choose another.'
+          );
+          setSelectedSlot(null);
+        }
+      }
+      
+      setAvailableSlots(newSlots);
+      setLastSlotsUpdate(new Date());
+      
+    } catch (error) {
+      console.error('Error fetching slots:', error);
+      if (!isRefresh) {
+        setSlotsError('Failed to load time slots. Please try again.');
+        setAvailableSlots([]);
+      }
+    } finally {
+      setIsLoadingSlots(false);
+      setIsRefreshingSlots(false);
+    }
+  }, [selectedProduct, eventDate, selectedSlot]);
+
+  // Initial fetch when product/date changes
+  useEffect(() => {
+    fetchSlotsForDate({ isRefresh: false });
+  }, [selectedProduct, eventDate]); // Don't include fetchSlotsForDate to avoid infinite loop
+
+  // ==========================================================================
+  // AUTO-REFRESH: Poll for slot availability every 30 seconds
+  // ==========================================================================
+  
+  useEffect(() => {
+    // Only auto-refresh for slot-based products with a selected date
+    if (!selectedProduct || !eventDate || selectedProduct.schedulingMode !== 'slot_based') {
+      return;
+    }
+    
+    // Poll every 30 seconds
+    const REFRESH_INTERVAL_MS = 30 * 1000;
+    
+    const intervalId = setInterval(() => {
+      // Don't refresh if already loading or refreshing
+      if (!isLoadingSlots && !isRefreshingSlots) {
+        fetchSlotsForDate({ isRefresh: true });
+      }
+    }, REFRESH_INTERVAL_MS);
+    
+    return () => clearInterval(intervalId);
+  }, [selectedProduct, eventDate, isLoadingSlots, isRefreshingSlots, fetchSlotsForDate]);
+
+  // Clear warning when user selects a new slot
+  useEffect(() => {
+    if (selectedSlot && slotsChangedWarning) {
+      setSlotsChangedWarning(null);
+    }
+  }, [selectedSlot, slotsChangedWarning]);
 
   // ==========================================================================
   // SMART OPTION SELECTION
@@ -699,6 +768,20 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
       const data = await response.json();
 
       if (!response.ok) {
+        // Handle 409 Conflict (slot taken) specially
+        if (response.status === 409 && isSlotBased) {
+          // Refresh slots to show current availability
+          await fetchSlotsForDate({ isRefresh: true });
+          
+          // Clear selected slot and show helpful message
+          setSelectedSlot(null);
+          setSlotsChangedWarning(
+            data.error || 'This time slot was just booked. Please select another available slot.'
+          );
+          setIsSubmitting(false);
+          return;
+        }
+        
         setSubmitError(
           data.error || "Something went wrong. Please try again."
         );
@@ -1093,8 +1176,16 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                   {/* SLOT-BASED PRODUCTS: Show SlotPicker (Party House) */}
                   {/* ============================================================= */}
                   {isSlotBased && eventDate && (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <Label>Select your time slot *</Label>
+                      
+                      {/* Warning when slot was taken by someone else */}
+                      {slotsChangedWarning && (
+                        <Callout variant="warning" icon={AlertCircle}>
+                          <p className="text-amber-300">{slotsChangedWarning}</p>
+                        </Callout>
+                      )}
+                      
                       <SlotPicker
                         slots={availableSlots}
                         selectedSlotId={selectedSlot?.slot_id || null}
@@ -1102,6 +1193,9 @@ export function BookingFormClient({ products }: BookingFormClientProps) {
                         isLoading={isLoadingSlots}
                         error={slotsError}
                         price={selectedProduct?.pricing.daily}
+                        lastUpdated={lastSlotsUpdate}
+                        isRefreshing={isRefreshingSlots}
+                        onRefresh={() => fetchSlotsForDate({ isRefresh: true })}
                       />
                     </div>
                   )}

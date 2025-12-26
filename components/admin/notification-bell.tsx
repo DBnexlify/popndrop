@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatRelativeTimeShort } from '@/lib/timezone';
+import { playNewBookingSound } from '@/lib/admin-sounds';
 import type { 
   NotificationItem, 
   NotificationCounts, 
@@ -445,6 +446,7 @@ export function NotificationBell() {
   const [isRinging, setIsRinging] = useState(false);
   const bellRef = useRef<HTMLButtonElement>(null);
   const ringIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const prevCountRef = useRef<number>(0); // Track previous count to detect new notifications
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -490,6 +492,16 @@ export function NotificationBell() {
     const interval = setInterval(fetchCounts, POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [fetchCounts]);
+
+  // Play sound when new notifications arrive (count increases)
+  useEffect(() => {
+    // Only play sound if count increased (not on initial load when prevCount is 0)
+    if (counts.total > prevCountRef.current && prevCountRef.current > 0) {
+      playNewBookingSound();
+    }
+    // Update ref for next comparison
+    prevCountRef.current = counts.total;
+  }, [counts.total]);
 
   // Ring animation when there are notifications
   useEffect(() => {

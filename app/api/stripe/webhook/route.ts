@@ -842,14 +842,52 @@ async function handleCheckoutExpired(session: Stripe.Checkout.Session, eventId: 
 
   const supabase = createServerClient();
 
+  // Get booking details
   const { data: booking } = await supabase
     .from('bookings')
     .select('status, booking_number')
     .eq('id', bookingId)
     .single();
 
-  if (booking?.status === 'pending') {
-    console.log(`ℹ️ [WEBHOOK] Booking ${booking.booking_number} checkout expired - customer can retry`);
+  if (!booking) {
+    console.log(`ℹ️ [WEBHOOK] No booking found for expired session: ${bookingId}`);
+    return;
+  }
+
+  // Only clean up if still pending (not already confirmed or cancelled)
+  if (booking.status === 'pending') {
+    console.log(`🧹 [WEBHOOK] Cleaning up expired checkout: ${booking.booking_number}`);
+
+    // Delete booking blocks first (foreign key constraint)
+    const { error: blocksError, count: blocksDeleted } = await supabase
+      .from('booking_blocks')
+      .delete()
+      .eq('booking_id', bookingId)
+      .select();
+
+    if (blocksError) {
+      console.error('❌ [WEBHOOK] Error deleting blocks:', blocksError);
+    } else {
+      console.log(`✅ [WEBHOOK] Released ${blocksDeleted || 0} booking blocks`);
+    }
+
+    // Delete the pending booking
+    const { error: bookingError } = await supabase
+      .from('bookings')
+      .delete()
+      .eq('id', bookingId)
+      .eq('status', 'pending'); // Safety: only delete if still pending
+
+    if (bookingError) {
+      console.error('❌ [WEBHOOK] Error deleting pending booking:', bookingError);
+    } else {
+      console.log(`✅ [WEBHOOK] Deleted pending booking: ${booking.booking_number}`);
+    }
+
+    // Log for monitoring
+    console.log(`🎯 [WEBHOOK] Slot released immediately for ${booking.booking_number} (checkout expired after 30 min)`);
+  } else {
+    console.log(`ℹ️ [WEBHOOK] Booking ${booking.booking_number} is ${booking.status} - no cleanup needed`);
   }
 }
 

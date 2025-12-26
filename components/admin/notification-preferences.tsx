@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { format24To12Hour } from '@/lib/timezone';
 import {
   type NotificationPreferences,
   type NotificationMode,
@@ -453,7 +454,7 @@ export function NotificationPreferencesEditor({
             <p className="text-sm font-medium text-cyan-300">Digest Mode Active</p>
             <p className="mt-1 text-xs text-cyan-300/70">
               You'll receive a daily summary at{' '}
-              <strong>{preferences.daily_summary_time?.slice(0, 5) || '07:00'} ET</strong>.
+              <strong>{format24To12Hour(preferences.daily_summary_time || '07:00:00')} ET</strong>.
               Only urgent alerts (payment failures, cancellations) will interrupt in real-time.
             </p>
           </div>
@@ -504,14 +505,14 @@ export function NotificationPreferencesEditor({
             <div className="flex items-center gap-2">
               <Moon className="h-4 w-4 text-foreground/40" />
               <span className="text-sm text-foreground/70">
-                {preferences.quiet_hours_start?.slice(0, 5) || '22:00'}
+                {format24To12Hour(preferences.quiet_hours_start || '22:00:00')}
               </span>
             </div>
             <span className="text-foreground/30">→</span>
             <div className="flex items-center gap-2">
               <Sun className="h-4 w-4 text-foreground/40" />
               <span className="text-sm text-foreground/70">
-                {preferences.quiet_hours_end?.slice(0, 5) || '07:00'}
+                {format24To12Hour(preferences.quiet_hours_end || '07:00:00')}
               </span>
             </div>
             <span className="ml-auto text-xs text-foreground/40">ET</span>

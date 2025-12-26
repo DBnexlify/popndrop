@@ -7,8 +7,48 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Clock, Check, AlertCircle, Loader2 } from "lucide-react";
+import { Clock, Check, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import type { AvailableSlot } from "@/lib/database-types";
+
+// =============================================================================
+// HELPER: Format time from HH:MM:SS to human-readable
+// =============================================================================
+
+function formatTimeLocal(timeStr: string): string {
+  // timeStr is in "HH:MM:SS" format (e.g., "15:00:00")
+  if (!timeStr) return '';
+  
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const hour12 = hours % 12 || 12;
+  
+  // Only show minutes if not :00
+  if (minutes === 0) {
+    return `${hour12} ${period}`;
+  }
+  return `${hour12}:${minutes.toString().padStart(2, '0')} ${period}`;
+}
+
+/**
+ * Generate a display label for a slot
+ * Always formats from actual times for consistency
+ */
+function getSlotDisplayLabel(slot: AvailableSlot): string {
+  // Always generate from start/end times for consistent display
+  const startFormatted = formatTimeLocal(slot.start_time_local);
+  const endFormatted = formatTimeLocal(slot.end_time_local);
+  
+  if (startFormatted && endFormatted) {
+    return `${startFormatted} - ${endFormatted}`;
+  }
+  
+  // Fallback to label if times aren't available
+  if (slot.label && slot.label.trim()) {
+    return slot.label;
+  }
+  
+  return 'Time Slot';
+}
 
 // =============================================================================
 // DESIGN SYSTEM STYLES
@@ -38,6 +78,12 @@ interface SlotPickerProps {
   className?: string;
   /** Price to display per slot (for slot-based products) */
   price?: number;
+  /** Timestamp when slots were last fetched (for freshness indicator) */
+  lastUpdated?: Date | null;
+  /** Whether a background refresh is in progress */
+  isRefreshing?: boolean;
+  /** Callback to manually trigger refresh */
+  onRefresh?: () => void;
 }
 
 // =============================================================================
@@ -93,7 +139,7 @@ function SlotCard({
               "font-semibold transition-colors",
               isSelected ? "text-fuchsia-300" : isAvailable ? "text-foreground" : "text-foreground/50"
             )}>
-              {slot.label}
+              {getSlotDisplayLabel(slot)}
             </p>
             
             {!isAvailable && reason && (
@@ -144,7 +190,22 @@ export function SlotPicker({
   error = null,
   className,
   price,
+  lastUpdated = null,
+  isRefreshing = false,
+  onRefresh,
 }: SlotPickerProps) {
+  // Format "last updated" time for display
+  const getLastUpdatedText = () => {
+    if (!lastUpdated) return null;
+    const now = new Date();
+    const diffMs = now.getTime() - lastUpdated.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    
+    if (diffSec < 10) return 'Just now';
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    return `${diffMin}m ago`;
+  };
   // Loading state
   if (isLoading) {
     return (
@@ -196,12 +257,29 @@ export function SlotPicker({
 
   return (
     <div className={cn("space-y-3", className)}>
-      {/* Availability indicator */}
+      {/* Availability indicator with freshness */}
       {!allUnavailable && (
         <div className="flex items-center justify-between text-xs">
-          <span className="text-foreground/50">
-            {availableCount} of {slots.length} slot{slots.length !== 1 ? 's' : ''} available
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-foreground/50">
+              {availableCount} of {slots.length} slot{slots.length !== 1 ? 's' : ''} available
+            </span>
+            {/* Freshness indicator */}
+            {lastUpdated && (
+              <button
+                type="button"
+                onClick={onRefresh}
+                disabled={isRefreshing}
+                className="flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-foreground/40 transition-colors hover:bg-white/10 hover:text-foreground/60 disabled:opacity-50"
+              >
+                <RefreshCw className={cn(
+                  "h-2.5 w-2.5",
+                  isRefreshing && "animate-spin"
+                )} />
+                {isRefreshing ? 'Updating...' : getLastUpdatedText()}
+              </button>
+            )}
+          </div>
           {selectedSlotId && (
             <span className="flex items-center gap-1 text-fuchsia-400">
               <Check className="h-3 w-3" />
@@ -256,7 +334,23 @@ export function SlotPickerCompact({
   error = null,
   className,
   price,
+  lastUpdated = null,
+  isRefreshing = false,
+  onRefresh,
 }: SlotPickerProps) {
+  // Format "last updated" time for display
+  const getLastUpdatedText = () => {
+    if (!lastUpdated) return null;
+    const now = new Date();
+    const diffMs = now.getTime() - lastUpdated.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    
+    if (diffSec < 10) return 'Just now';
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    return `${diffMin}m ago`;
+  };
+
   // Loading state
   if (isLoading) {
     return (
@@ -287,9 +381,33 @@ export function SlotPickerCompact({
     );
   }
 
+  // Count available slots
+  const availableCount = slots.filter(s => s.is_available).length;
+
   // Grid layout for mobile
   return (
     <div className={cn("space-y-2", className)}>
+      {/* Freshness indicator for mobile */}
+      {lastUpdated && (
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="text-foreground/40">
+            {availableCount} slot{availableCount !== 1 ? 's' : ''} available
+          </span>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-1 text-foreground/40 active:text-foreground/60 disabled:opacity-50"
+          >
+            <RefreshCw className={cn(
+              "h-2.5 w-2.5",
+              isRefreshing && "animate-spin"
+            )} />
+            {isRefreshing ? 'Updating...' : getLastUpdatedText()}
+          </button>
+        </div>
+      )}
+      
       <div className="grid grid-cols-1 gap-2">
         {slots.map((slot) => {
           const isSelected = selectedSlotId === slot.slot_id;
@@ -329,7 +447,7 @@ export function SlotPickerCompact({
                     "text-sm font-semibold",
                     isSelected ? "text-fuchsia-300" : isAvailable ? "text-foreground" : "text-foreground/50"
                   )}>
-                    {slot.label}
+                    {getSlotDisplayLabel(slot)}
                   </span>
                 </div>
 
