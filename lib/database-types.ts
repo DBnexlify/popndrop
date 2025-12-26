@@ -17,6 +17,7 @@ import {
 
 export type BookingStatus =
   | 'pending'
+  | 'pending_cancellation'
   | 'confirmed'
   | 'delivered'
   | 'picked_up'
@@ -969,6 +970,7 @@ export function formatBookingNumber(booking: Booking | { booking_number: string 
 export function getStatusColor(status: BookingStatus): string {
   const colors: Record<BookingStatus, string> = {
     pending: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+    pending_cancellation: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
     confirmed: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
     delivered: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
     picked_up: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
@@ -981,6 +983,7 @@ export function getStatusColor(status: BookingStatus): string {
 export function getStatusLabel(status: BookingStatus): string {
   const labels: Record<BookingStatus, string> = {
     pending: 'Pending',
+    pending_cancellation: 'Cancellation Pending',
     confirmed: 'Confirmed',
     delivered: 'Delivered',
     picked_up: 'Picked Up',
@@ -1050,6 +1053,7 @@ export function formatDateTime(date: string): string {
 export function canTransitionTo(current: BookingStatus, target: BookingStatus): boolean {
   const transitions: Record<BookingStatus, BookingStatus[]> = {
     pending: ['confirmed', 'cancelled'],
+    pending_cancellation: ['cancelled', 'confirmed'], // Can be cancelled or restored to confirmed
     confirmed: ['delivered', 'cancelled'],
     delivered: ['picked_up', 'cancelled'],
     picked_up: ['completed'],
@@ -1062,6 +1066,7 @@ export function canTransitionTo(current: BookingStatus, target: BookingStatus): 
 export function getNextStatus(current: BookingStatus): BookingStatus | null {
   const next: Record<BookingStatus, BookingStatus | null> = {
     pending: 'confirmed',
+    pending_cancellation: null, // No automatic next status - requires admin decision
     confirmed: 'delivered',
     delivered: 'picked_up',
     picked_up: 'completed',

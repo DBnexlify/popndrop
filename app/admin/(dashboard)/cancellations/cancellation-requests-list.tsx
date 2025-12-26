@@ -305,7 +305,8 @@ function RequestCard({
         return;
       }
 
-      // Refresh the list
+      // Success! Stop spinner first, then refresh the list
+      setIsProcessing(false);
       onAction();
     } catch (err) {
       setError("Something went wrong. Please try again.");

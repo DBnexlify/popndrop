@@ -100,7 +100,7 @@ function ToggleSwitch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative rounded-full p-0.5 transition-all duration-200",
+        "relative shrink-0 rounded-full p-0.5 transition-all duration-200",
         isSmall ? "h-5 w-9" : "h-6 w-11",
         checked
           ? "bg-gradient-to-r from-green-400 to-green-600 shadow-[0_0_12px_rgba(34,197,94,0.4)]"

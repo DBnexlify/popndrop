@@ -43,6 +43,7 @@ const statusActions: Record<BookingStatus, {
   color: string;
 }> = {
   pending: { icon: CheckCircle2, label: 'Confirm Booking', color: 'bg-blue-500 hover:bg-blue-600' },
+  pending_cancellation: { icon: XCircle, label: 'Cancellation Pending', color: 'bg-orange-500 hover:bg-orange-600' },
   confirmed: { icon: Truck, label: 'Mark Delivered', color: 'bg-cyan-500 hover:bg-cyan-600' },
   delivered: { icon: Package, label: 'Mark Picked Up', color: 'bg-purple-500 hover:bg-purple-600' },
   picked_up: { icon: CheckCircle2, label: 'Complete Booking', color: 'bg-green-500 hover:bg-green-600' },

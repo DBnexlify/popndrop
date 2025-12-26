@@ -344,19 +344,19 @@ export default async function BookingDetailPage({ params }: PageProps) {
   const hasStripePayment = !!(depositPayment?.stripe_payment_intent_id || balancePayment?.stripe_payment_intent_id);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="min-w-0 overflow-hidden p-4 sm:p-6 lg:p-8">
       {/* ================================================================
           HEADER
       ================================================================ */}
       <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3 sm:gap-4">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <Link
             href="/admin/bookings"
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] transition-colors hover:bg-white/[0.06]"
           >
             <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
           </Link>
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
                 {booking.booking_number}

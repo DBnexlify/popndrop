@@ -29,6 +29,7 @@ export async function updateBookingStatus(
   // Set the appropriate timestamp based on status
   const timestampFields: Record<BookingStatus, string | null> = {
     pending: null,
+    pending_cancellation: null,
     confirmed: 'confirmed_at',
     delivered: 'delivered_at',
     picked_up: 'picked_up_at',

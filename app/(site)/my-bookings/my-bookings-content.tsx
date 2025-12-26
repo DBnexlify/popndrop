@@ -795,15 +795,18 @@ function BookingCard({
   const eventDate = new Date(booking.event_date + "T12:00:00");
   const statusInfo = getBookingStatusInfo(booking);
   const isPaid = booking.balance_paid;
+  // Only show payment section for truly pending bookings (not pending_cancellation)
   const isPending = booking.status === 'pending' && !booking.deposit_paid;
+  const isPendingCancellation = booking.status === 'pending_cancellation';
   const isCancelled = booking.status === 'cancelled';
   
   // Use timezone-aware calendar day calculation (Eastern timezone)
   const dayInfo = getDaysUntilLabel(booking.event_date);
   const daysUntil = dayInfo.days;
   
-  // Can cancel if upcoming and status is confirmed or pending
+  // Can cancel if upcoming and status is confirmed or pending (not pending_cancellation)
   const canCancel = isUpcoming && 
+    !isPendingCancellation &&
     (booking.status === "confirmed" || booking.status === "pending");
 
   // Build calendar event data
@@ -858,8 +861,8 @@ function BookingCard({
           </p>
         )}
 
-        {/* Pending Payment Alert */}
-        {isPending && (
+        {/* Pending Payment Alert - Hide if cancellation is pending */}
+        {isPending && !isPendingCancellation && (
           <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-950/30 p-4">
             <div className="mb-3 flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-amber-400" />
