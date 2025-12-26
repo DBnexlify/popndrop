@@ -55,9 +55,6 @@ const styles = {
   cardInner: 'pointer-events-none absolute inset-0 rounded-xl sm:rounded-2xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_50px_rgba(0,0,0,0.18)]',
   nestedCard: 'relative overflow-hidden rounded-lg border border-white/5 bg-white/[0.03] sm:rounded-xl',
   nestedCardInner: 'pointer-events-none absolute inset-0 rounded-lg sm:rounded-xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_0_35px_rgba(0,0,0,0.12)]',
-  // Dialog styling matching design system
-  dialogContent: 'relative overflow-hidden rounded-2xl border border-white/10 bg-background/50 shadow-[0_20px_70px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-3xl',
-  dialogInner: 'pointer-events-none absolute inset-0 rounded-2xl sm:rounded-3xl [box-shadow:inset_0_0_0_1px_rgba(255,255,255,0.07),inset_0_0_70px_rgba(0,0,0,0.2)]',
 } as const;
 
 const DAYS_OF_WEEK = [
@@ -579,7 +576,7 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
         setFormData(defaultFormData);
         setError(null);
       }}>
-        <DialogContent className={cn(styles.dialogContent, 'p-0 gap-0')}>
+        <DialogContent className="border-white/10 bg-neutral-900">
           <div className="p-5 sm:p-6">
             <DialogHeader className="space-y-2">
               <DialogTitle className="text-lg font-semibold tracking-tight sm:text-xl">
@@ -691,7 +688,6 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
               </Button>
             </DialogFooter>
           </div>
-          <div className={styles.dialogInner} />
         </DialogContent>
       </Dialog>
 
@@ -701,7 +697,7 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
         setSelectedResource(null);
         setError(null);
       }}>
-        <DialogContent className={cn(styles.dialogContent, 'p-0 gap-0')}>
+        <DialogContent className="border-white/10 bg-neutral-900">
           <div className="p-5 sm:p-6">
             <DialogHeader className="space-y-2">
               <DialogTitle className="text-lg font-semibold tracking-tight text-red-400 sm:text-xl">
@@ -741,7 +737,6 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
               </Button>
             </DialogFooter>
           </div>
-          <div className={styles.dialogInner} />
         </DialogContent>
       </Dialog>
 
@@ -752,7 +747,7 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
         setScheduleData({});
         setError(null);
       }}>
-        <DialogContent className={cn(styles.dialogContent, 'p-0 gap-0 max-w-lg')}>
+        <DialogContent className="border-white/10 bg-neutral-900 max-w-lg">
           <div className="p-5 sm:p-6">
             <DialogHeader className="space-y-2">
               <DialogTitle className="text-lg font-semibold tracking-tight sm:text-xl">
@@ -850,7 +845,6 @@ export function OperationsClient({ initialCrews, initialVehicles }: OperationsCl
               </Button>
             </DialogFooter>
           </div>
-          <div className={styles.dialogInner} />
         </DialogContent>
       </Dialog>
     </>
