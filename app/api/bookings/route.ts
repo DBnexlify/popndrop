@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
     const {
       productSlug,
       eventDate,
-      bookingType,
+      bookingType: rawBookingType,
       deliveryWindow,
       pickupWindow,
       customerName,
@@ -185,6 +185,10 @@ export async function POST(request: NextRequest) {
       promoCode,
       slotId,
     } = body;
+
+    // Default bookingType to 'daily' for slot-based products (Party House)
+    // Slot-based products don't use weekend/sunday packages
+    const bookingType: BookingType = rawBookingType || 'daily';
 
     // Validate required fields
     if (!productSlug || !eventDate || !customerEmail || !customerPhone || !address) {
