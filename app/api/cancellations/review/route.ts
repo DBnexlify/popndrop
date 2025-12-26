@@ -248,8 +248,10 @@ export async function POST(request: NextRequest) {
           fullAdminNotes = `[Override: ${overrideLabels[overrideReason] || overrideReason}] ${fullAdminNotes}`.trim();
         }
 
+        console.log('[Cancellation Approve] Starting approval for request:', requestId);
+
         // Update cancellation request
-        await supabase
+        const { error: cancellationUpdateError } = await supabase
           .from('cancellation_requests')
           .update({
             status: 'approved',
@@ -260,22 +262,36 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', requestId);
 
-        // Resolve the attention item
-        await supabase
+        if (cancellationUpdateError) {
+          console.error('[Cancellation Approve] Error updating cancellation request:', cancellationUpdateError);
+          return NextResponse.json(
+            { error: 'Failed to update cancellation request: ' + cancellationUpdateError.message },
+            { status: 500 }
+          );
+        }
+
+        console.log('[Cancellation Approve] Cancellation request updated');
+
+        // Resolve the attention item (don't fail if not found)
+        const { error: attentionError } = await supabase
           .from('attention_items')
           .update({
             status: 'resolved',
             resolved_at: new Date().toISOString(),
             resolution_action: 'cancellation_approved',
-            resolution_notes: fullAdminNotes || `Cancellation approved. Refund: $${approvedAmount?.toFixed(2) || '0.00'}`,
+            resolution_notes: fullAdminNotes || `Cancellation approved. Refund: ${approvedAmount?.toFixed(2) || '0.00'}`,
           })
           .eq('booking_id', booking.id)
           .eq('attention_type', 'cancellation_request')
           .eq('status', 'pending');
 
+        if (attentionError) {
+          console.log('[Cancellation Approve] Note: Attention item update issue (non-critical):', attentionError.message);
+        }
+
         // Update booking status to cancelled
         const cancelledBy = overrideReason === 'weather' ? 'weather' : 'customer';
-        await supabase
+        const { error: bookingUpdateError } = await supabase
           .from('bookings')
           .update({
             status: 'cancelled',
@@ -287,86 +303,115 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', booking.id);
 
+        if (bookingUpdateError) {
+          console.error('[Cancellation Approve] Error updating booking:', bookingUpdateError);
+          return NextResponse.json(
+            { error: 'Failed to update booking: ' + bookingUpdateError.message },
+            { status: 500 }
+          );
+        }
+
+        console.log('[Cancellation Approve] Booking updated to cancelled');
+
         // If Stripe refund requested and payment intent exists, process automatically
         if (shouldProcessStripeRefund && booking.stripe_payment_intent_id && approvedAmount > 0) {
-          const refundResult = await processStripeRefund(
-            booking.stripe_payment_intent_id,
-            approvedAmount,
-            `Booking ${booking.booking_number} cancellation`
-          );
+          console.log('[Cancellation Approve] Attempting Stripe refund:', {
+            paymentIntentId: booking.stripe_payment_intent_id,
+            amount: approvedAmount,
+          });
 
-          if (refundResult.success) {
-            await supabase
-              .from('cancellation_requests')
-              .update({
+          try {
+            const refundResult = await processStripeRefund(
+              booking.stripe_payment_intent_id,
+              approvedAmount,
+              `Booking ${booking.booking_number} cancellation`
+            );
+
+            console.log('[Cancellation Approve] Stripe refund result:', refundResult);
+
+            if (refundResult.success) {
+              await supabase
+                .from('cancellation_requests')
+                .update({
+                  status: 'refunded',
+                  stripe_refund_id: refundResult.refundId,
+                  refund_processed_at: new Date().toISOString(),
+                })
+                .eq('id', requestId);
+
+              await supabase
+                .from('bookings')
+                .update({
+                  refund_status: 'processed',
+                  refund_processed_at: new Date().toISOString(),
+                  stripe_refund_id: refundResult.refundId,
+                })
+                .eq('id', booking.id);
+
+              // Send refund confirmation email (don't await - fire and forget)
+              if (customer?.email) {
+                sendCancellationRefundEmail({
+                  customerEmail: customer.email,
+                  customerFirstName: customer.first_name || 'there',
+                  bookingNumber: booking.booking_number,
+                  productName,
+                  eventDate: eventDateFormatted,
+                  refundAmount: approvedAmount,
+                }).catch(err => console.error('[Cancellation Approve] Email error:', err));
+              }
+
+              return NextResponse.json({
+                success: true,
+                message: `Cancellation approved and ${approvedAmount.toFixed(2)} refunded to card`,
                 status: 'refunded',
-                stripe_refund_id: refundResult.refundId,
-                refund_processed_at: new Date().toISOString(),
-              })
-              .eq('id', requestId);
+                refundId: refundResult.refundId,
+              });
+            } else {
+              // Stripe refund failed - mark as approved with pending manual refund
+              console.log('[Cancellation Approve] Stripe refund failed:', refundResult.error);
+              return NextResponse.json({
+                success: true,
+                message: `Cancellation approved. Stripe refund failed: ${refundResult.error}. Please process refund manually.`,
+                status: 'approved',
+                refundError: refundResult.error,
+              });
+            }
+          } catch (stripeError: any) {
+            console.error('[Cancellation Approve] Stripe refund exception:', stripeError);
+            // Continue with approval even if Stripe fails
+            return NextResponse.json({
+              success: true,
+              message: `Cancellation approved. Stripe refund error: ${stripeError.message || 'Unknown error'}. Please process refund manually.`,
+              status: 'approved',
+              refundError: stripeError.message,
+            });
+          }
+        }
 
-            await supabase
-              .from('bookings')
-              .update({
-                refund_status: 'processed',
-                refund_processed_at: new Date().toISOString(),
-                stripe_refund_id: refundResult.refundId,
-              })
-              .eq('id', booking.id);
-
-            // Send refund confirmation email
-            if (customer?.email) {
-              await sendCancellationRefundEmail({
+        // Manual refund or no refund - send appropriate email (fire and forget)
+        if (customer?.email) {
+          const emailPromise = approvedAmount > 0
+            ? sendCancellationApprovedEmail({
                 customerEmail: customer.email,
                 customerFirstName: customer.first_name || 'there',
                 bookingNumber: booking.booking_number,
                 productName,
                 eventDate: eventDateFormatted,
                 refundAmount: approvedAmount,
+                refundMethod: isManualRefund ? selectedRefundMethod : undefined,
+              })
+            : sendCancellationApprovedEmail({
+                customerEmail: customer.email,
+                customerFirstName: customer.first_name || 'there',
+                bookingNumber: booking.booking_number,
+                productName,
+                eventDate: eventDateFormatted,
               });
-            }
-
-            return NextResponse.json({
-              success: true,
-              message: `Cancellation approved and $${approvedAmount.toFixed(2)} refunded to card`,
-              status: 'refunded',
-              refundId: refundResult.refundId,
-            });
-          } else {
-            // Stripe refund failed - mark as approved with pending manual refund
-            return NextResponse.json({
-              success: true,
-              message: `Cancellation approved. Stripe refund failed: ${refundResult.error}. Please process refund manually via ${selectedRefundMethod}.`,
-              status: 'approved',
-              refundError: refundResult.error,
-            });
-          }
+          
+          emailPromise.catch(err => console.error('[Cancellation Approve] Email error:', err));
         }
 
-        // Manual refund or no refund - send appropriate email
-        if (customer?.email) {
-          if (approvedAmount > 0) {
-            // Send approval email mentioning refund is coming via manual method
-            await sendCancellationApprovedEmail({
-              customerEmail: customer.email,
-              customerFirstName: customer.first_name || 'there',
-              bookingNumber: booking.booking_number,
-              productName,
-              eventDate: eventDateFormatted,
-              refundAmount: approvedAmount,
-              refundMethod: isManualRefund ? selectedRefundMethod : undefined,
-            });
-          } else {
-            // No refund - just approved
-            await sendCancellationApprovedEmail({
-              customerEmail: customer.email,
-              customerFirstName: customer.first_name || 'there',
-              bookingNumber: booking.booking_number,
-              productName,
-              eventDate: eventDateFormatted,
-            });
-          }
-        }
+        console.log('[Cancellation Approve] Completed successfully');
 
         return NextResponse.json({
           success: true,
