@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SkipLink } from "@/components/ui/skip-link";
+import { LocalBusinessSchema, WebsiteSchema } from "@/components/seo/local-business-schema";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -21,7 +22,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://popndroprentals.com'),
+  metadataBase: new URL('https://www.popndroprentals.com'),
   title: "Pop and Drop Party Rentals | Bounce House Rentals in Ocala, FL",
   description: "Bounce house and inflatable party rentals in Ocala, Florida, Marion County, and surrounding areas. Water slides, themed bounce houses, and party inflatables delivered and set up. Book online in minutes!",
   keywords: "bounce house rental Ocala, inflatable rental Ocala FL, water slide rental Marion County, party rentals Ocala Florida, bounce house Ocala, inflatable party rentals, kids party rentals Ocala",
@@ -45,6 +46,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning style={{ backgroundColor: '#1a1a1a' }}>
+      <head>
+        <LocalBusinessSchema />
+        <WebsiteSchema />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col antialiased`}>
         <ThemeProvider>
           {/* Skip link for keyboard/screen reader users */}
