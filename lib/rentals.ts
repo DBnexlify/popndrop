@@ -55,10 +55,10 @@ export const SCHEDULE = {
   pickupDays: [1, 2, 3, 4, 5, 6], // Mon-Sat
   
   // Delivery time windows (show actual times, not labels like "Morning")
+  // NOTE: Removed 2-5 PM to keep crew available for Party House evening events
   deliveryWindows: [
     { label: "8–11 AM", value: "morning" },
     { label: "11 AM–2 PM", value: "midday" },
-    { label: "2–5 PM", value: "afternoon" },
   ],
   
   // Saturday evening delivery (for Sunday-only rentals)
