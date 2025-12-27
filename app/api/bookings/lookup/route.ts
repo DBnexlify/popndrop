@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 
+// Disable caching - always fetch fresh data
+export const dynamic = 'force-dynamic';
+
 // =============================================================================
 // BOOKING LOOKUP BY EMAIL
 // GET /api/bookings/lookup?email=customer@example.com
