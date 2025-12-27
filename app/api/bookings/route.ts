@@ -769,7 +769,7 @@ export async function POST(request: NextRequest) {
           },
         ],
         success_url: `${baseUrl}/bookings/success?booking_id=${booking.id}&payment_type=${paymentType}`,
-        cancel_url: `${baseUrl}/bookings?cancelled=true&r=${productRow.slug}`,
+        cancel_url: `${baseUrl}/bookings/cancelled?booking_id=${booking.id}&r=${productRow.slug}`,
         expires_at: Math.floor(Date.now() / 1000) + (30 * 60),
       });
 
