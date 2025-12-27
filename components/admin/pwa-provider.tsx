@@ -527,16 +527,22 @@ export function NotificationToggle() {
         className={`${toggleStyles.container} ${loading ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
         aria-label={isSubscribed ? "Turn off notifications" : "Turn on notifications"}
       >
-        {/* Horizontal Toggle Track */}
-        <div className={`${toggleStyles.track} ${
-          isSubscribed 
-            ? "bg-gradient-to-r from-green-500 to-green-600" 
-            : "bg-white/10"
-        }`}>
+        {/* Horizontal Toggle Track - explicit dimensions to prevent mobile squishing */}
+        <div 
+          className={`shrink-0 rounded-full transition-colors duration-200 ${
+            isSubscribed 
+              ? "bg-gradient-to-r from-green-500 to-green-600" 
+              : "bg-white/10"
+          }`}
+          style={{ width: '48px', height: '28px', minWidth: '48px' }}
+        >
           {/* Sliding Knob */}
-          <div className={`${toggleStyles.knob} ${
-            isSubscribed ? "translate-x-[18px]" : "translate-x-0.5"
-          }`} />
+          <div 
+            className={`rounded-full bg-white shadow-lg transition-transform duration-200 ${
+              isSubscribed ? "translate-x-[20px]" : "translate-x-0.5"
+            }`}
+            style={{ width: '24px', height: '24px', marginTop: '2px' }}
+          />
         </div>
         
         {/* Label */}
@@ -708,16 +714,22 @@ export function SoundToggle() {
         className={toggleStyles.container}
         aria-label={enabled ? "Turn off sounds" : "Turn on sounds"}
       >
-        {/* Horizontal Toggle Track */}
-        <div className={`${toggleStyles.track} ${
-          enabled 
-            ? "bg-gradient-to-r from-cyan-500 to-cyan-600" 
-            : "bg-white/10"
-        }`}>
+        {/* Horizontal Toggle Track - explicit dimensions to prevent mobile squishing */}
+        <div 
+          className={`shrink-0 rounded-full transition-colors duration-200 ${
+            enabled 
+              ? "bg-gradient-to-r from-cyan-500 to-cyan-600" 
+              : "bg-white/10"
+          }`}
+          style={{ width: '48px', height: '28px', minWidth: '48px' }}
+        >
           {/* Sliding Knob */}
-          <div className={`${toggleStyles.knob} ${
-            enabled ? "translate-x-[18px]" : "translate-x-0.5"
-          }`} />
+          <div 
+            className={`rounded-full bg-white shadow-lg transition-transform duration-200 ${
+              enabled ? "translate-x-[20px]" : "translate-x-0.5"
+            }`}
+            style={{ width: '24px', height: '24px', marginTop: '2px' }}
+          />
         </div>
         
         {/* Label */}

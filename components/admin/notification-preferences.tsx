@@ -92,9 +92,14 @@ function ToggleSwitch({
 }) {
   const isSmall = size === 'small';
   
-  // Matches the WORKING toggle in settings-client.tsx:
-  // Default: 48x28px track (w-12 h-7), 24x24px thumb (w-6 h-6)
-  // Small: 40x24px track (w-10 h-6), 20x20px thumb (w-5 h-5)
+  // Explicit pixel dimensions to prevent mobile CSS issues
+  // Default: 48x28px track, 24x24px thumb
+  // Small: 40x24px track, 20x20px thumb
+  const trackWidth = isSmall ? 40 : 48;
+  const trackHeight = isSmall ? 24 : 28;
+  const thumbSize = isSmall ? 20 : 24;
+  const thumbOffset = (trackHeight - thumbSize) / 2;
+  const thumbTravel = trackWidth - thumbSize - 4; // 4px for edge padding
   
   return (
     <button
@@ -104,22 +109,26 @@ function ToggleSwitch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200",
-        isSmall ? "h-6 w-10" : "h-7 w-12",
+        "shrink-0 cursor-pointer rounded-full transition-colors duration-200",
         checked
           ? "bg-gradient-to-r from-green-500 to-green-600"
           : "bg-white/10",
         disabled && "opacity-50 cursor-not-allowed"
       )}
+      style={{ 
+        width: `${trackWidth}px`, 
+        height: `${trackHeight}px`,
+        minWidth: `${trackWidth}px`,
+      }}
     >
       <div
-        className={cn(
-          "rounded-full bg-white shadow-lg transition-transform duration-200",
-          isSmall ? "h-5 w-5" : "h-6 w-6",
-          checked 
-            ? isSmall ? "translate-x-[14px]" : "translate-x-[18px]" 
-            : "translate-x-0.5"
-        )}
+        className="rounded-full bg-white shadow-lg transition-transform duration-200"
+        style={{
+          width: `${thumbSize}px`,
+          height: `${thumbSize}px`,
+          marginTop: `${thumbOffset}px`,
+          transform: checked ? `translateX(${thumbTravel}px)` : 'translateX(2px)',
+        }}
       />
     </button>
   );

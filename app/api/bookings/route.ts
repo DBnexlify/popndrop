@@ -13,6 +13,12 @@ import {
   LEAD_TIME_HOURS,
   canHaveSameDayPickup,
 } from '@/lib/booking-blocks';
+import {
+  checkAvailabilityWithSoftHolds,
+  createSoftHold,
+  releaseSoftHold,
+  getFriendlyUnavailableMessage,
+} from '@/lib/availability';
 import type { Product, SchedulingMode } from '@/lib/database-types';
 
 // ============================================================================
@@ -377,7 +383,11 @@ export async function POST(request: NextRequest) {
     } else {
       // ======================================================================
       // DAY RENTAL PRODUCT (Bounce Houses)
+      // Uses soft holds to prevent race conditions during checkout
       // ======================================================================
+      
+      // Generate session ID for soft hold tracking
+      const sessionId = crypto.randomUUID();
       
       // Calculate dates based on booking type
       const dates = calculateDates(eventDate, bookingType);
@@ -399,20 +409,27 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Check availability using the new block-based system
-      const availability = await checkDayRentalAvailability(
+      // Check availability using enhanced function with soft hold support
+      // This function:
+      // 1. Checks committed booking_blocks from confirmed bookings
+      // 2. Checks temporary soft_holds from in-progress checkouts
+      // 3. Uses product-specific breakdown durations (Party House = 120 min)
+      const availability = await checkAvailabilityWithSoftHolds(
         productRow.id,
         deliveryDate,
         pickupDate,
-        LEAD_TIME_HOURS
+        deliveryWindow || 'morning',
+        pickupWindow || 'evening',
+        { leadTimeHours: LEAD_TIME_HOURS, sessionId }
       );
 
       if (!availability.isAvailable) {
+        const friendlyMessage = getFriendlyUnavailableMessage(availability.unavailableReason);
         console.log('Day rental not available:', availability.unavailableReason);
         return NextResponse.json(
           { 
             success: false, 
-            error: availability.unavailableReason || 'This date is not available' 
+            error: friendlyMessage
           },
           { status: 409 }
         );
@@ -425,6 +442,22 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Create soft hold to reserve resources during checkout (15 min expiry)
+      const holdResult = await createSoftHold(sessionId, availability);
+      
+      if (!holdResult.success) {
+        console.error('Failed to create soft hold:', holdResult.error);
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: holdResult.error || 'Someone just booked this slot! Please try again.'
+          },
+          { status: 409 }
+        );
+      }
+      
+      console.log('Created soft hold:', holdResult.holdId);
+
       unitId = availability.unitId;
       serviceStartTime = availability.serviceStart;
       serviceEndTime = availability.serviceEnd;
@@ -435,7 +468,9 @@ export async function POST(request: NextRequest) {
       // Calculate event times for day rental
       // Event starts at delivery (9 AM) and ends at pickup
       const eventStart = new Date(`${deliveryDate}T09:00:00`);
-      const eventEnd = availability.sameDayPickupPossible
+      // Determine if same-day pickup based on dates
+      const isSameDayPickup = deliveryDate === pickupDate;
+      const eventEnd = isSameDayPickup
         ? new Date(`${deliveryDate}T18:00:00`)
         : new Date(`${pickupDate}T10:00:00`);
       
@@ -447,7 +482,8 @@ export async function POST(request: NextRequest) {
         pickupDate,
         eventStart: eventStartTime,
         eventEnd: eventEndTime,
-        sameDayPickup: availability.sameDayPickupPossible,
+        sameDayPickup: isSameDayPickup,
+        sessionId: sessionId.slice(0, 8) + '...',
       });
     }
 

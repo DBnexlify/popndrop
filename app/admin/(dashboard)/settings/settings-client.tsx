@@ -344,12 +344,21 @@ export function SettingsClient({ admin }: SettingsClientProps) {
                 </div>
               </div>
               
-              <div className={`h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                isSubscribed ? "bg-green-500" : "bg-white/10"
-              }`}>
-                <div className={`h-6 w-6 rounded-full bg-white shadow-lg transition-transform ${
-                  isSubscribed ? "translate-x-[18px]" : "translate-x-0.5"
-                }`} />
+              <div 
+                className={`shrink-0 rounded-full transition-colors ${
+                  isSubscribed ? "bg-green-500" : "bg-white/10"
+                }`}
+                style={{ width: '48px', height: '28px', minWidth: '48px' }}
+              >
+                <div 
+                  className="rounded-full bg-white shadow-lg transition-transform"
+                  style={{ 
+                    width: '24px', 
+                    height: '24px', 
+                    marginTop: '2px',
+                    transform: isSubscribed ? 'translateX(20px)' : 'translateX(2px)',
+                  }}
+                />
               </div>
             </button>
 
@@ -522,12 +531,21 @@ export function SettingsClient({ admin }: SettingsClientProps) {
             </div>
           </div>
           
-          <div className={`h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors ${
-            soundEnabled ? "bg-cyan-500" : "bg-white/10"
-          }`}>
-            <div className={`h-6 w-6 rounded-full bg-white shadow-lg transition-transform ${
-              soundEnabled ? "translate-x-[18px]" : "translate-x-0.5"
-            }`} />
+          <div 
+            className={`shrink-0 rounded-full transition-colors ${
+              soundEnabled ? "bg-cyan-500" : "bg-white/10"
+            }`}
+            style={{ width: '48px', height: '28px', minWidth: '48px' }}
+          >
+            <div 
+              className="rounded-full bg-white shadow-lg transition-transform"
+              style={{ 
+                width: '24px', 
+                height: '24px', 
+                marginTop: '2px',
+                transform: soundEnabled ? 'translateX(20px)' : 'translateX(2px)',
+              }}
+            />
           </div>
         </button>
         
