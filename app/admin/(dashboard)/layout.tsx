@@ -10,6 +10,7 @@ import { AdminMobileNav } from '@/components/admin/admin-mobile-nav';
 import { PWAProvider, PWAInstallPrompt, OfflineIndicator } from '@/components/admin/pwa-provider';
 import { NewBookingListener } from '@/components/admin/new-booking-listener';
 import { NotificationBell } from '@/components/admin/notification-bell';
+import { AutoRefreshProvider } from '@/components/admin/auto-refresh-provider';
 import { ScrollToTop } from '@/components/scroll-to-top';
 import type { Metadata, Viewport } from 'next';
 import Image from 'next/image';
@@ -76,6 +77,7 @@ export default async function AdminDashboardLayout({
   return (
     <PWAProvider>
       <ScrollToTop />
+      <AutoRefreshProvider />
       <div className="min-h-screen bg-neutral-950">
         {/* Offline indicator */}
         <OfflineIndicator />

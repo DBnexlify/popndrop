@@ -392,10 +392,10 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 // =============================================================================
 
 const toggleStyles = {
-  // Track dimensions - matched to shadcn Switch (44x24px)
-  track: "relative h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200",
-  // Knob dimensions - 20x20px with proper positioning
-  knob: "pointer-events-none flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-lg transition-transform duration-200",
+  // Track: matches the WORKING toggle in settings-client.tsx (48x28px)
+  track: "h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200",
+  // Knob: 24x24px circle
+  knob: "h-6 w-6 rounded-full bg-white shadow-lg transition-transform duration-200",
   // Container
   container: "group flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-white/5",
   // Label
@@ -527,24 +527,16 @@ export function NotificationToggle() {
         className={`${toggleStyles.container} ${loading ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
         aria-label={isSubscribed ? "Turn off notifications" : "Turn on notifications"}
       >
-        {/* Horizontal Toggle Track - SAME as SoundToggle */}
+        {/* Horizontal Toggle Track */}
         <div className={`${toggleStyles.track} ${
           isSubscribed 
             ? "bg-gradient-to-r from-green-500 to-green-600" 
             : "bg-white/10"
         }`}>
-          {/* Sliding Knob - SAME as SoundToggle */}
+          {/* Sliding Knob */}
           <div className={`${toggleStyles.knob} ${
-            isSubscribed ? "translate-x-[22px]" : "translate-x-0.5"
-          }`}>
-            {loading ? (
-              <Loader2 className="h-3 w-3 animate-spin text-neutral-600" />
-            ) : isSubscribed ? (
-              <Bell className="h-3 w-3 text-green-600" />
-            ) : (
-              <BellOff className="h-3 w-3 text-neutral-400" />
-            )}
-          </div>
+            isSubscribed ? "translate-x-[18px]" : "translate-x-0.5"
+          }`} />
         </div>
         
         {/* Label */}
@@ -716,22 +708,16 @@ export function SoundToggle() {
         className={toggleStyles.container}
         aria-label={enabled ? "Turn off sounds" : "Turn on sounds"}
       >
-        {/* Horizontal Toggle Track - SAME as NotificationToggle */}
+        {/* Horizontal Toggle Track */}
         <div className={`${toggleStyles.track} ${
           enabled 
             ? "bg-gradient-to-r from-cyan-500 to-cyan-600" 
             : "bg-white/10"
         }`}>
-          {/* Sliding Knob - SAME as NotificationToggle */}
+          {/* Sliding Knob */}
           <div className={`${toggleStyles.knob} ${
-            enabled ? "translate-x-[22px]" : "translate-x-0.5"
-          }`}>
-            {enabled ? (
-              <Volume2 className="h-3 w-3 text-cyan-600" />
-            ) : (
-              <VolumeX className="h-3 w-3 text-neutral-400" />
-            )}
-          </div>
+            enabled ? "translate-x-[18px]" : "translate-x-0.5"
+          }`} />
         </div>
         
         {/* Label */}
