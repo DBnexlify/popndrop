@@ -265,27 +265,32 @@ export function AdminMobileNav() {
           aria-modal="true"
           aria-label="More options menu"
         >
+          {/* Full screen menu panel */}
           <div 
-            className="absolute bottom-0 left-0 right-0 animate-in slide-in-from-bottom duration-200"
+            className="absolute inset-0 animate-in fade-in duration-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="rounded-t-3xl border-t border-white/10 bg-neutral-900/98 backdrop-blur-xl">
+            <div 
+              className="h-full bg-neutral-900/98 backdrop-blur-xl overflow-y-auto"
+              style={{
+                // Safe area padding for status bar
+                paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))',
+              }}
+            >
               {/* Content with padding */}
               <div className="p-6">
-                {/* Handle bar */}
-                <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-white/20" />
                 
-                {/* Close button */}
-                <button
-                  onClick={() => setMenuOpen(false)}
-                  className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
-                  aria-label="Close menu"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-                
-                {/* Menu title */}
-                <h3 className="mb-4 text-lg font-semibold">Menu</h3>
+                {/* Header with close button */}
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-semibold">Menu</h3>
+                  <button
+                    onClick={() => setMenuOpen(false)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+                    aria-label="Close menu"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
                 
                 {/* Notification toggle */}
                 <div className="mb-2">
@@ -351,13 +356,10 @@ export function AdminMobileNav() {
                     </button>
                   </form>
                 </div>
+                
+                {/* Bottom spacer for mobile nav bar */}
+                <div className="h-24" aria-hidden="true" />
               </div>
-              
-              {/* Safe area spacer at bottom of menu */}
-              <div 
-                style={{ height: 'env(safe-area-inset-bottom, 0px)' }}
-                aria-hidden="true"
-              />
             </div>
           </div>
         </div>

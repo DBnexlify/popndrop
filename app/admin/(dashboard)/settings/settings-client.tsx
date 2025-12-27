@@ -344,11 +344,11 @@ export function SettingsClient({ admin }: SettingsClientProps) {
                 </div>
               </div>
               
-              <div className={`h-8 w-14 rounded-full p-1 transition-colors ${
-                isSubscribed ? "bg-green-500" : "bg-neutral-600"
+              <div className={`h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                isSubscribed ? "bg-green-500" : "bg-white/10"
               }`}>
-                <div className={`h-6 w-6 rounded-full bg-white shadow transition-transform ${
-                  isSubscribed ? "translate-x-6" : "translate-x-0"
+                <div className={`h-6 w-6 rounded-full bg-white shadow-lg transition-transform ${
+                  isSubscribed ? "translate-x-[18px]" : "translate-x-0.5"
                 }`} />
               </div>
             </button>
@@ -522,11 +522,11 @@ export function SettingsClient({ admin }: SettingsClientProps) {
             </div>
           </div>
           
-          <div className={`h-8 w-14 rounded-full p-1 transition-colors ${
-            soundEnabled ? "bg-cyan-500" : "bg-neutral-600"
+          <div className={`h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+            soundEnabled ? "bg-cyan-500" : "bg-white/10"
           }`}>
-            <div className={`h-6 w-6 rounded-full bg-white shadow transition-transform ${
-              soundEnabled ? "translate-x-6" : "translate-x-0"
+            <div className={`h-6 w-6 rounded-full bg-white shadow-lg transition-transform ${
+              soundEnabled ? "translate-x-[18px]" : "translate-x-0.5"
             }`} />
           </div>
         </button>

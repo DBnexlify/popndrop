@@ -1,8 +1,12 @@
 // =============================================================================
 // CANCELLATION REQUESTS LIST - CLIENT COMPONENT
 // app/admin/(dashboard)/cancellations/cancellation-requests-list.tsx
-// Interactive list with approve/deny functionality, refund method selection,
-// and override options
+// Interactive list for processing cancellation requests with refund decisions.
+// 
+// BUSINESS LOGIC (Dec 2024):
+// - Cancellation ALWAYS happens if customer requests it (can't force delivery)
+// - Admin's only decision is about the REFUND amount
+// - No "Deny" option - that doesn't make business sense
 // =============================================================================
 
 "use client";
@@ -649,43 +653,26 @@ function RequestCard({
                   </div>
                 )}
 
-                {/* Action buttons */}
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button
-                    onClick={() => handleAction("deny")}
-                    disabled={isProcessing}
-                    variant="outline"
-                    className="flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
-                  >
-                    {isProcessing ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <X className="mr-1.5 h-4 w-4" />
-                        Deny Request
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    onClick={() => handleAction("approve")}
-                    disabled={isProcessing}
-                    className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700"
-                  >
-                    {isProcessing ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : parseFloat(customRefund) > 0 ? (
-                      <>
-                        <Check className="mr-1.5 h-4 w-4" />
-                        Approve & Refund ${parseFloat(customRefund).toFixed(2)}
-                      </>
-                    ) : (
-                      <>
-                        <Check className="mr-1.5 h-4 w-4" />
-                        Approve (No Refund)
-                      </>
-                    )}
-                  </Button>
-                </div>
+                {/* Action button - Cancellation always happens, admin just decides refund */}
+                <Button
+                  onClick={() => handleAction("approve")}
+                  disabled={isProcessing}
+                  className="w-full bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-500/20 hover:shadow-xl hover:shadow-fuchsia-500/30"
+                >
+                  {isProcessing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : parseFloat(customRefund) > 0 ? (
+                    <>
+                      <Check className="mr-1.5 h-4 w-4" />
+                      Process Cancellation & Refund ${parseFloat(customRefund).toFixed(2)}
+                    </>
+                  ) : (
+                    <>
+                      <Check className="mr-1.5 h-4 w-4" />
+                      Process Cancellation (No Refund)
+                    </>
+                  )}
+                </Button>
               </div>
             )}
 
@@ -795,10 +782,10 @@ export function CancellationRequestsList({
           </div>
           <div>
             <p className="font-medium text-amber-300">
-              {counts.pending} cancellation request{counts.pending !== 1 ? "s" : ""} need{counts.pending === 1 ? "s" : ""} your attention
+              {counts.pending} cancellation{counts.pending !== 1 ? "s" : ""} awaiting refund decision
             </p>
             <p className="text-sm text-amber-400/70">
-              Review and process to keep customers informed
+              Decide refund amount and process to notify customer
             </p>
           </div>
         </div>

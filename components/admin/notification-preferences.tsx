@@ -92,6 +92,10 @@ function ToggleSwitch({
 }) {
   const isSmall = size === 'small';
   
+  // Dimensions matched to shadcn Switch for consistency:
+  // Default: container 44x24px (w-11 h-6), thumb 20x20px (w-5 h-5)
+  // Small: container 36x20px (w-9 h-5), thumb 16x16px (w-4 h-4)
+  
   return (
     <button
       type="button"
@@ -100,21 +104,21 @@ function ToggleSwitch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative shrink-0 rounded-full p-0.5 transition-all duration-200",
+        "relative shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200",
         isSmall ? "h-5 w-9" : "h-6 w-11",
         checked
-          ? "bg-gradient-to-r from-green-400 to-green-600 shadow-[0_0_12px_rgba(34,197,94,0.4)]"
-          : "bg-neutral-700",
+          ? "bg-gradient-to-r from-green-500 to-green-600"
+          : "bg-white/10",
         disabled && "opacity-50 cursor-not-allowed"
       )}
     >
       <div
         className={cn(
-          "rounded-full bg-white shadow-md transition-all duration-200",
+          "pointer-events-none block rounded-full bg-white shadow-lg transition-transform duration-200",
           isSmall ? "h-4 w-4" : "h-5 w-5",
           checked 
-            ? isSmall ? "translate-x-4" : "translate-x-5" 
-            : "translate-x-0"
+            ? isSmall ? "translate-x-[18px]" : "translate-x-[22px]" 
+            : "translate-x-0.5"
         )}
       />
     </button>

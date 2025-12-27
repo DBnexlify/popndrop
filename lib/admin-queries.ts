@@ -84,10 +84,17 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const supabase = createServerClient();
   
   // Get counts in parallel
+  // Note: "Pending Bookings" count only includes PAID bookings awaiting confirmation
+  // Unpaid soft holds are excluded
   const [deliveries, pickups, pending, weekBookings, monthBookings] = await Promise.all([
     supabase.from('todays_deliveries').select('booking_number', { count: 'exact', head: true }),
     supabase.from('todays_pickups').select('booking_number', { count: 'exact', head: true }),
-    supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    // Only count pending bookings that have deposit_paid = true
+    // Unpaid "soft holds" should not be counted
+    supabase.from('bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .eq('deposit_paid', true),
     getWeekRevenue(),
     getMonthRevenue(),
   ]);
@@ -160,6 +167,7 @@ export async function getBookings(options?: {
   limit?: number;
   offset?: number;
   search?: string;
+  includePendingUnpaid?: boolean; // Default false - only show paid bookings
 }): Promise<{ bookings: BookingWithRelations[]; count: number }> {
   const supabase = createServerClient();
   
@@ -174,6 +182,17 @@ export async function getBookings(options?: {
       )
     `, { count: 'exact' })
     .order('created_at', { ascending: false });
+  
+  // =========================================================================
+  // FILTER OUT UNPAID SOFT HOLDS (unless explicitly requested)
+  // Unpaid bookings (deposit_paid = false, status = pending) are just
+  // temporary date holds - they should not appear in admin dashboard
+  // =========================================================================
+  if (!options?.includePendingUnpaid) {
+    // Only show bookings that have been paid (deposit_paid = true)
+    // OR are in a non-pending status (which implies payment happened)
+    query = query.or('deposit_paid.eq.true,status.neq.pending');
+  }
   
   // Filter by status
   if (options?.status) {

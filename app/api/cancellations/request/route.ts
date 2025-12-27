@@ -266,6 +266,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Check if this is an unpaid "soft hold" booking
+    const isUnpaidBooking = !booking.deposit_paid && booking.status === 'pending';
+
     return NextResponse.json({
       booking: {
         id: booking.id,
@@ -275,12 +278,15 @@ export async function GET(request: NextRequest) {
         productName: (booking.product_snapshot as { name?: string })?.name || 'Bounce House Rental',
         status: booking.status,
         deliveryWindow: booking.delivery_window,
+        isUnpaid: isUnpaidBooking,
       },
       refund: {
         ...refundCalc,
         amountPaid,
         hasPayment,
         canCancel: true,
+        // Unpaid bookings can be cancelled instantly without refund considerations
+        isInstantCancel: isUnpaidBooking,
       },
       policy: {
         name: policy.name,
@@ -406,6 +412,53 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // =========================================================================
+    // UNPAID BOOKING = SOFT HOLD → Immediate delete, no admin involvement
+    // =========================================================================
+    const isUnpaidBooking = !booking.deposit_paid && booking.status === 'pending';
+    
+    if (isUnpaidBooking) {
+      console.log('[Cancellation POST] Unpaid booking - deleting immediately:', booking.booking_number);
+      
+      // Delete any booking blocks first (foreign key constraint)
+      await supabase
+        .from('booking_blocks')
+        .delete()
+        .eq('booking_id', bookingId);
+      
+      // Delete the booking entirely
+      const { error: deleteError } = await supabase
+        .from('bookings')
+        .delete()
+        .eq('id', bookingId);
+      
+      if (deleteError) {
+        console.error('[Cancellation POST] Delete error:', deleteError);
+        return NextResponse.json(
+          { error: 'Failed to cancel booking' },
+          { status: 500 }
+        );
+      }
+      
+      console.log('[Cancellation POST] Unpaid booking deleted successfully:', booking.booking_number);
+      
+      // Return success - no admin involvement, no email needed
+      return NextResponse.json({
+        success: true,
+        message: 'Booking cancelled successfully',
+        wasUnpaid: true,
+        request: {
+          id: null,
+          status: 'deleted',
+          suggestedRefund: 0,
+          policyLabel: 'No payment was made',
+        },
+      });
+    }
+    // =========================================================================
+    // PAID BOOKING → Create cancellation request for admin review
+    // =========================================================================
 
     // Check for existing pending request
     const { data: existingRequest } = await supabase

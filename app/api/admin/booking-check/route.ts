@@ -45,10 +45,12 @@ export async function GET() {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Get the most recent booking
+    // Get the most recent PAID booking (deposit_paid = true)
+    // Unpaid "soft holds" should not trigger admin notifications
     const { data: latestBooking, error: bookingError } = await adminSupabase
       .from("bookings")
       .select("booking_number, created_at")
+      .eq("deposit_paid", true)
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
@@ -59,11 +61,13 @@ export async function GET() {
       return NextResponse.json({ error: "Database error" }, { status: 500 });
     }
 
-    // Get pending count for badge updates
+    // Get pending count for badge updates (only PAID pending bookings)
+    // Unpaid soft holds should not be counted in admin dashboard
     const { count: pendingCount } = await adminSupabase
       .from("bookings")
       .select("id", { count: "exact", head: true })
-      .eq("status", "pending");
+      .eq("status", "pending")
+      .eq("deposit_paid", true);
 
     return NextResponse.json({
       latestBookingNumber: latestBooking?.booking_number || null,

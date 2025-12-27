@@ -48,6 +48,7 @@ interface CancellationPreview {
     productName: string;
     status: string;
     deliveryWindow: string;
+    isUnpaid?: boolean; // NEW: Indicates unpaid "soft hold"
   };
   refund: {
     daysUntilEvent: number;
@@ -59,6 +60,7 @@ interface CancellationPreview {
     amountPaid: number;
     hasPayment: boolean;
     canCancel: boolean;
+    isInstantCancel?: boolean; // NEW: Unpaid bookings cancel instantly
   };
   policy: {
     name: string;
@@ -134,7 +136,7 @@ export function CancellationModal({
   // Steps: loading → reschedule (nudge) → cancel-preview → confirm → success
   const [step, setStep] = useState<
     "loading" | "reschedule" | "rescheduling" | "reschedule-success" | 
-    "cancel-preview" | "confirm" | "success" | "error"
+    "cancel-preview" | "confirm" | "success" | "success-instant" | "error"
   >("loading");
   
   const [preview, setPreview] = useState<CancellationPreview | null>(null);
@@ -197,8 +199,13 @@ export function CancellationModal({
 
       setPreview(data);
       
+      // UNPAID BOOKINGS: Go straight to simple cancel flow
+      // No reschedule nudge needed - they haven't committed yet
+      if (data.booking?.isUnpaid || data.refund?.isInstantCancel) {
+        setStep("cancel-preview");
+      }
       // If reschedule is available, show reschedule nudge FIRST
-      if (data.reschedule?.available && data.reschedule.suggestedDates.length > 0) {
+      else if (data.reschedule?.available && data.reschedule.suggestedDates.length > 0) {
         setStep("reschedule");
       } else {
         // No reschedule options, go straight to cancel preview
@@ -276,7 +283,13 @@ export function CancellationModal({
         return;
       }
 
-      setStep("success");
+      // Check if this was an unpaid booking (instant delete)
+      if (data.wasUnpaid) {
+        setStep("success-instant");
+      } else {
+        setStep("success");
+      }
+      
       setTimeout(() => {
         onSuccess();
         onClose();
@@ -298,6 +311,8 @@ export function CancellationModal({
         return "Booking Updated!";
       case "success":
         return "Request Submitted";
+      case "success-instant":
+        return "Booking Cancelled";
       default:
         return "Cancel Booking";
     }
@@ -490,125 +505,153 @@ export function CancellationModal({
                 <div className={styles.nestedCardInner} />
               </div>
 
-              {/* Refund Preview */}
-              <div className={cn(
-                styles.nestedCard,
-                preview.refund.isEligible 
-                  ? "border-green-500/20 bg-green-950/10" 
-                  : "border-amber-500/20 bg-amber-950/10"
-              )}>
-                <div className="p-4">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className={cn(
-                      "h-5 w-5",
-                      preview.refund.isEligible ? "text-green-400" : "text-amber-400"
-                    )} />
-                    <span className="font-semibold">
-                      {preview.refund.isEligible ? "Refund Eligible" : "No Refund Available"}
-                    </span>
+              {/* UNPAID BOOKING: Simpler cancel flow */}
+              {(preview.booking.isUnpaid || preview.refund.isInstantCancel) ? (
+                <>
+                  {/* Simple info for unpaid bookings */}
+                  <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-4 text-center">
+                    <p className="text-sm text-cyan-300">
+                      Since you haven&apos;t completed payment yet, your booking 
+                      will be cancelled immediately with no charges.
+                    </p>
                   </div>
-                  
-                  <div className="mt-3 space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-foreground/60">Amount paid</span>
-                      <span>${preview.refund.amountPaid.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-foreground/60">Policy ({preview.refund.policyLabel})</span>
-                      <span>{preview.refund.refundPercent}% refund</span>
-                    </div>
-                    {preview.refund.processingFee > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-foreground/60">Processing fee</span>
-                        <span>-${preview.refund.processingFee.toFixed(2)}</span>
-                      </div>
-                    )}
-                    <div className="border-t border-white/10 pt-2">
-                      <div className="flex justify-between font-semibold">
-                        <span>Your refund</span>
-                        <span className={preview.refund.isEligible ? "text-green-400" : "text-amber-400"}>
-                          ${preview.refund.refundAmount.toFixed(2)}
+
+                  {/* Reason Input (optional) */}
+                  <div className="space-y-2">
+                    <Label htmlFor="reason">Reason for cancellation (optional)</Label>
+                    <Textarea
+                      id="reason"
+                      placeholder="Let us know why you're cancelling..."
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      className={cn(styles.input, "min-h-[80px]")}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* PAID BOOKING: Full refund preview */}
+                  {/* Refund Preview */}
+                  <div className={cn(
+                    styles.nestedCard,
+                    preview.refund.isEligible 
+                      ? "border-green-500/20 bg-green-950/10" 
+                      : "border-amber-500/20 bg-amber-950/10"
+                  )}>
+                    <div className="p-4">
+                      <div className="flex items-center gap-2">
+                        <DollarSign className={cn(
+                          "h-5 w-5",
+                          preview.refund.isEligible ? "text-green-400" : "text-amber-400"
+                        )} />
+                        <span className="font-semibold">
+                          {preview.refund.isEligible ? "Refund Eligible" : "No Refund Available"}
                         </span>
                       </div>
+                      
+                      <div className="mt-3 space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-foreground/60">Amount paid</span>
+                          <span>${preview.refund.amountPaid.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-foreground/60">Policy ({preview.refund.policyLabel})</span>
+                          <span>{preview.refund.refundPercent}% refund</span>
+                        </div>
+                        {preview.refund.processingFee > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-foreground/60">Processing fee</span>
+                            <span>-${preview.refund.processingFee.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="border-t border-white/10 pt-2">
+                          <div className="flex justify-between font-semibold">
+                            <span>Your refund</span>
+                            <span className={preview.refund.isEligible ? "text-green-400" : "text-amber-400"}>
+                              ${preview.refund.refundAmount.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
+                    <div className={styles.nestedCardInner} />
                   </div>
-                </div>
-                <div className={styles.nestedCardInner} />
-              </div>
 
-              {/* Reschedule Reminder */}
-              {preview.reschedule?.available && (
-                <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-3">
-                  <div className="flex items-start gap-2 text-sm">
-                    <CalendarDays className="h-4 w-4 shrink-0 mt-0.5 text-cyan-400" />
-                    <div>
-                      <p className="text-cyan-300 font-medium">
-                        Remember: You can reschedule instead!
-                      </p>
-                      <p className="text-foreground/60 text-xs mt-1">
-                        Keep your booking and pick a new date — no fees.{" "}
-                        <button 
-                          onClick={() => setStep("reschedule")}
-                          className="text-cyan-400 hover:underline"
-                        >
-                          View dates →
-                        </button>
+                  {/* Reschedule Reminder */}
+                  {preview.reschedule?.available && (
+                    <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-3">
+                      <div className="flex items-start gap-2 text-sm">
+                        <CalendarDays className="h-4 w-4 shrink-0 mt-0.5 text-cyan-400" />
+                        <div>
+                          <p className="text-cyan-300 font-medium">
+                            Remember: You can reschedule instead!
+                          </p>
+                          <p className="text-foreground/60 text-xs mt-1">
+                            Keep your booking and pick a new date — no fees.{" "}
+                            <button 
+                              onClick={() => setStep("reschedule")}
+                              className="text-cyan-400 hover:underline"
+                            >
+                              View dates →
+                            </button>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Policy Info */}
+                  <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                    <div className="flex items-start gap-2 text-xs text-foreground/50">
+                      <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-foreground/70">Cancellation Policy</p>
+                        <ul className="mt-1 space-y-0.5">
+                          {preview.policy.rules.map((rule, i) => (
+                            <li key={i}>
+                              {rule.label}: {rule.refund_percent}% refund
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Reason Input */}
+                  <div className="space-y-2">
+                    <Label htmlFor="reason">Reason for cancellation (optional)</Label>
+                    <Textarea
+                      id="reason"
+                      placeholder="Let us know why you're cancelling..."
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      className={cn(styles.input, "min-h-[80px]")}
+                    />
+                  </div>
+
+                  {/* Warning */}
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-950/20 p-3">
+                    <div className="flex items-start gap-2 text-sm">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" />
+                      <p className="text-foreground/70">
+                        {preview.refund.refundAmount > 0 ? (
+                          <>
+                            Your cancellation will be processed and your refund of{" "}
+                            <strong className="text-amber-300">
+                            ${preview.refund.refundAmount.toFixed(2)}</strong> will be sent 
+                            within 5-10 business days.
+                          </>
+                        ) : (
+                          <>
+                            Based on our policy, this booking is not eligible for a refund. 
+                            Your cancellation will still be processed.
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>
-                </div>
+                </>
               )}
-
-              {/* Policy Info */}
-              <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                <div className="flex items-start gap-2 text-xs text-foreground/50">
-                  <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-foreground/70">Cancellation Policy</p>
-                    <ul className="mt-1 space-y-0.5">
-                      {preview.policy.rules.map((rule, i) => (
-                        <li key={i}>
-                          {rule.label}: {rule.refund_percent}% refund
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              {/* Reason Input */}
-              <div className="space-y-2">
-                <Label htmlFor="reason">Reason for cancellation (optional)</Label>
-                <Textarea
-                  id="reason"
-                  placeholder="Let us know why you're cancelling..."
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  className={cn(styles.input, "min-h-[80px]")}
-                />
-              </div>
-
-              {/* Warning */}
-              <div className="rounded-lg border border-amber-500/20 bg-amber-950/20 p-3">
-                <div className="flex items-start gap-2 text-sm">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" />
-                  <p className="text-foreground/70">
-                    {preview.refund.refundAmount > 0 ? (
-                      <>
-                        Your cancellation request will be reviewed by our team. 
-                        If approved, your refund of <strong className="text-amber-300">
-                        ${preview.refund.refundAmount.toFixed(2)}</strong> will be processed 
-                        within 5-10 business days.
-                      </>
-                    ) : (
-                      <>
-                        Based on our policy, this booking is not eligible for a refund. 
-                        Your cancellation request will still be reviewed.
-                      </>
-                    )}
-                  </p>
-                </div>
-              </div>
             </div>
           )}
 
@@ -650,7 +693,7 @@ export function CancellationModal({
           )}
 
           {/* ============================================================= */}
-          {/* SUCCESS STATE */}
+          {/* SUCCESS STATE - For paid bookings (request submitted) */}
           {/* ============================================================= */}
           {step === "success" && (
             <div className="py-8 text-center">
@@ -664,6 +707,27 @@ export function CancellationModal({
                 We&apos;ve received your cancellation request. You&apos;ll receive 
                 an email confirmation shortly, and we&apos;ll notify you once 
                 it&apos;s been reviewed.
+              </p>
+              <p className="mt-4 text-xs text-foreground/40">
+                Closing automatically...
+              </p>
+            </div>
+          )}
+
+          {/* ============================================================= */}
+          {/* SUCCESS INSTANT STATE - For unpaid bookings (immediately deleted) */}
+          {/* ============================================================= */}
+          {step === "success-instant" && (
+            <div className="py-8 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-500/20">
+                <Check className="h-7 w-7 text-green-400" />
+              </div>
+              <h3 className="mt-4 text-lg font-semibold text-green-400">
+                Booking Cancelled!
+              </h3>
+              <p className="mt-2 text-sm text-foreground/60">
+                Your booking has been cancelled. Since no payment was made, 
+                the date is now available for others.
               </p>
               <p className="mt-4 text-xs text-foreground/40">
                 Closing automatically...

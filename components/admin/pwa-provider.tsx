@@ -392,10 +392,10 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 // =============================================================================
 
 const toggleStyles = {
-  // Track dimensions - SAME for both toggles
-  track: "relative h-6 w-11 rounded-full p-0.5 transition-all duration-300",
-  // Knob dimensions - SAME for both toggles
-  knob: "flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-md transition-all duration-300",
+  // Track dimensions - matched to shadcn Switch (44x24px)
+  track: "relative h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200",
+  // Knob dimensions - 20x20px with proper positioning
+  knob: "pointer-events-none flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-lg transition-transform duration-200",
   // Container
   container: "group flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-white/5",
   // Label
@@ -530,12 +530,12 @@ export function NotificationToggle() {
         {/* Horizontal Toggle Track - SAME as SoundToggle */}
         <div className={`${toggleStyles.track} ${
           isSubscribed 
-            ? "bg-gradient-to-r from-green-400 to-green-600 shadow-[0_0_12px_rgba(34,197,94,0.4)]" 
-            : "bg-neutral-700"
+            ? "bg-gradient-to-r from-green-500 to-green-600" 
+            : "bg-white/10"
         }`}>
           {/* Sliding Knob - SAME as SoundToggle */}
           <div className={`${toggleStyles.knob} ${
-            isSubscribed ? "translate-x-5" : "translate-x-0"
+            isSubscribed ? "translate-x-[22px]" : "translate-x-0.5"
           }`}>
             {loading ? (
               <Loader2 className="h-3 w-3 animate-spin text-neutral-600" />
@@ -719,12 +719,12 @@ export function SoundToggle() {
         {/* Horizontal Toggle Track - SAME as NotificationToggle */}
         <div className={`${toggleStyles.track} ${
           enabled 
-            ? "bg-gradient-to-r from-cyan-400 to-cyan-600 shadow-[0_0_12px_rgba(6,182,212,0.4)]" 
-            : "bg-neutral-700"
+            ? "bg-gradient-to-r from-cyan-500 to-cyan-600" 
+            : "bg-white/10"
         }`}>
           {/* Sliding Knob - SAME as NotificationToggle */}
           <div className={`${toggleStyles.knob} ${
-            enabled ? "translate-x-5" : "translate-x-0"
+            enabled ? "translate-x-[22px]" : "translate-x-0.5"
           }`}>
             {enabled ? (
               <Volume2 className="h-3 w-3 text-cyan-600" />
