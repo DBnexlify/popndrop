@@ -80,7 +80,7 @@ export function CancelledContent() {
 
             {/* Secondary: Start Fresh */}
             <Link 
-              href={productSlug ? `/book?r=${productSlug}` : "/book"} 
+              href={productSlug ? `/bookings?r=${productSlug}` : "/bookings"} 
               className="block"
             >
               <Button 
