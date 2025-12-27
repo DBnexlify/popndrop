@@ -14,7 +14,8 @@ import { resend, FROM_EMAIL, NOTIFY_EMAIL } from '@/lib/resend';
 const CRON_SECRET = process.env.CRON_SECRET;
 
 // Pending bookings older than this many minutes will be cleaned up
-const EXPIRY_MINUTES = 45;
+// 30 minutes gives customers time to grab wallet, but prevents ghost blocks
+const EXPIRY_MINUTES = 30;
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();

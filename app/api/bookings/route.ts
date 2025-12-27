@@ -11,7 +11,6 @@ import {
   validateLeadTime,
   isSlotBasedProduct,
   LEAD_TIME_HOURS,
-  canHaveSameDayPickup,
 } from '@/lib/booking-blocks';
 import {
   checkAvailabilityWithSoftHolds,
@@ -394,19 +393,13 @@ export async function POST(request: NextRequest) {
       deliveryDate = dates.deliveryDate;
       pickupDate = dates.pickupDate;
 
-      // For daily bookings, check if same-day pickup is possible
-      // (depends on whether Party House is booked that evening)
+      // Day rentals ALWAYS get next-morning pickup by 10 AM
+      // No same-day pickup for bounce houses
       if (bookingType === 'daily') {
-        const sameDayPossible = await canHaveSameDayPickup(eventDate);
-        
-        if (!sameDayPossible) {
-          // Move pickup to next day
-          const nextDay = new Date(eventDate + 'T12:00:00');
-          nextDay.setDate(nextDay.getDate() + 1);
-          pickupDate = nextDay.toISOString().split('T')[0];
-          
-          console.log('Same-day pickup not possible (Party House conflict), moved to:', pickupDate);
-        }
+        const nextDay = new Date(eventDate + 'T12:00:00');
+        nextDay.setDate(nextDay.getDate() + 1);
+        pickupDate = nextDay.toISOString().split('T')[0];
+        console.log('Day rental: pickup moved to next morning:', pickupDate);
       }
 
       // Check availability using enhanced function with soft hold support

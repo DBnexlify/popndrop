@@ -156,9 +156,11 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
   const isTypeAvailable = (type: BookingType) => availableTypes.includes(type);
   
   // Pickup windows based on sameDayPickupOnly setting
+  // sameDayOnly = true: Event-based products (Party House) that must be picked up same night
+  // sameDayOnly = false: Standard bounce houses - ONLY next morning pickup (customer request)
   const dailyPickupWindows = sameDayOnly 
     ? SCHEDULE.sameDayPickupWindows 
-    : [...SCHEDULE.sameDayPickupWindows, ...SCHEDULE.nextMorningPickupWindows];
+    : SCHEDULE.nextMorningPickupWindows;  // Bounce houses: ONLY next morning, no same-day
   
   // Coming soon products (price = 0)
   if (product.pricing.daily === 0) {
@@ -246,11 +248,11 @@ export function getPricingOptions(product: ProductDisplay, date: Date): PricingR
           type: "daily",
           price: product.pricing.daily,
           label: "Saturday only",
-          description: "Single day rental, pickup Saturday evening",
+          description: "Single day rental, pickup Sunday morning",
           deliveryDay: "Saturday",
           deliveryWindows: SCHEDULE.deliveryWindows,
-          pickupDay: "Saturday",
-          pickupWindows: SCHEDULE.sameDayPickupWindows, // Saturday daily is always same-day
+          pickupDay: "Sunday",
+          pickupWindows: SCHEDULE.nextMorningPickupWindows, // Bounce houses: next morning pickup
         });
       }
     }
