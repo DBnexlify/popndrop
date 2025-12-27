@@ -227,85 +227,76 @@
 }
 
 /* ==========================================================================
- * LOGO BOUNCE ANIMATION
- * GPU accelerated, buttery smooth
+ * LOGO POP-UP ANIMATION
+ * Realistic squash & stretch physics - shoots up fast, settles with bounce
+ * GPU accelerated, smooth transitions
  * ========================================================================== */
 @keyframes logo-bounce {
+  /* Start below, stretched tall for upward motion */
   0% {
     opacity: 0;
-    transform: translate3d(0, -2500px, 0) scaleX(0.97) scaleY(1.03);
+    transform: translate3d(0, 400px, 0) scaleX(0.8) scaleY(1.2);
   }
-  20% {
-    opacity: 0.4;
-    transform: translate3d(0, -400px, 0) scaleX(0.96) scaleY(1.04);
-  }
-  35% {
-    opacity: 0.9;
-    transform: translate3d(0, -80px, 0) scaleX(0.96) scaleY(1.04);
-  }
-  42% {
+  /* Rising fast - really stretched tall */
+  10% {
     opacity: 1;
-    transform: translate3d(0, -12px, 0) scaleX(0.98) scaleY(1.02);
+    transform: translate3d(0, 100px, 0) scaleX(0.75) scaleY(1.25);
   }
-  45% {
-    transform: translate3d(0, 0, 0) scaleX(1.12) scaleY(0.88);
+  /* Still rising - maximum stretch */
+  16% {
+    transform: translate3d(0, -20px, 0) scaleX(0.78) scaleY(1.22);
   }
-  47% {
+  /* Approaching peak - still stretched */
+  22% {
+    transform: translate3d(0, -55px, 0) scaleX(0.82) scaleY(1.18);
+  }
+  /* Peak - hanging, starting to normalize */
+  28% {
+    transform: translate3d(0, -60px, 0) scaleX(0.88) scaleY(1.12);
+  }
+  /* Starting to fall - relaxing */
+  36% {
+    transform: translate3d(0, -45px, 0) scaleX(0.94) scaleY(1.06);
+  }
+  /* Accelerating down - stretch again */
+  44% {
+    transform: translate3d(0, -8px, 0) scaleX(0.88) scaleY(1.12);
+  }
+  /* Impact squash */
+  49% {
     transform: translate3d(0, 0, 0) scaleX(1.15) scaleY(0.85);
   }
-  49% {
-    transform: translate3d(0, 0, 0) scaleX(1.12) scaleY(0.88);
-  }
-  51% {
-    transform: translate3d(0, -8px, 0) scaleX(1.04) scaleY(0.96);
-  }
+  /* Releasing from squash */
   54% {
-    transform: translate3d(0, -25px, 0) scaleX(0.96) scaleY(1.04);
+    transform: translate3d(0, -5px, 0) scaleX(1.02) scaleY(0.98);
   }
-  58% {
-    transform: translate3d(0, -42px, 0) scaleX(0.94) scaleY(1.06);
+  /* First bounce up - stretch */
+  60% {
+    transform: translate3d(0, -28px, 0) scaleX(0.92) scaleY(1.08);
   }
-  61% {
-    transform: translate3d(0, -48px, 0) scaleX(0.93) scaleY(1.07);
-  }
-  63% {
-    transform: translate3d(0, -46px, 0) scaleX(0.94) scaleY(1.06);
-  }
+  /* Bounce peak */
   66% {
-    transform: translate3d(0, -35px, 0) scaleX(0.96) scaleY(1.04);
+    transform: translate3d(0, -32px, 0) scaleX(0.95) scaleY(1.05);
   }
-  68% {
-    transform: translate3d(0, -20px, 0) scaleX(0.97) scaleY(1.03);
+  /* Falling again */
+  74% {
+    transform: translate3d(0, -8px, 0) scaleX(0.94) scaleY(1.06);
   }
-  72% {
-    transform: translate3d(0, -5px, 0) scaleX(0.99) scaleY(1.01);
-  }
-  75% {
-    transform: translate3d(0, 0, 0) scaleX(1.08) scaleY(0.92);
-  }
-  77% {
+  /* Second smaller squash */
+  79% {
     transform: translate3d(0, 0, 0) scaleX(1.06) scaleY(0.94);
   }
-  80% {
+  /* Small bounce */
+  86% {
     transform: translate3d(0, -10px, 0) scaleX(0.98) scaleY(1.02);
   }
-  83% {
-    transform: translate3d(0, -15px, 0) scaleX(0.97) scaleY(1.03);
+  /* Tiny squash */
+  92% {
+    transform: translate3d(0, 0, 0) scaleX(1.02) scaleY(0.98);
   }
-  85% {
-    transform: translate3d(0, -12px, 0) scaleX(0.98) scaleY(1.02);
-  }
-  88% {
-    transform: translate3d(0, -5px, 0) scaleX(0.99) scaleY(1.01);
-  }
-  91% {
-    transform: translate3d(0, 0, 0) scaleX(1.03) scaleY(0.97);
-  }
-  94% {
-    transform: translate3d(0, -3px, 0) scaleX(0.995) scaleY(1.005);
-  }
+  /* Final settle */
   97% {
-    transform: translate3d(0, 0, 0) scaleX(1.01) scaleY(0.99);
+    transform: translate3d(0, -2px, 0) scaleX(1) scaleY(1);
   }
   100% {
     opacity: 1;

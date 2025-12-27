@@ -5,67 +5,85 @@ import confetti from "canvas-confetti";
 
 export function LogoConfetti() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const confettiInstance = useRef<confetti.CreateTypes | null>(null);
+  const hasFired = useRef(false);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || hasFired.current) return;
+    hasFired.current = true;
+
+    // Respect reduced motion preference
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    if (prefersReducedMotion) return;
 
     const instance = confetti.create(canvasRef.current, {
       resize: true,
-      useWorker: false,
-    });
-    confettiInstance.current = instance;
-
-    const colors = ["#e879f9", "#22d3ee", "#a855f7", "#f472b6", "#67e8f9", "#c084fc"];
-
-    // Initial burst - starts instantly
-    instance({
-      particleCount: 10,
-      angle: 90,
-      spread: 110,
-      origin: { x: 0.5, y: 0 },
-      colors: colors,
-      gravity: 0.9,
-      scalar: 0.75,
-      ticks: 250,
-      startVelocity: 18,
-      decay: 0.91,
-      shapes: ["circle", "square"],
+      useWorker: true,
     });
 
-    // Continue with faster rain
-    const duration = 2400;
-    const end = Date.now() + duration;
+    // Brand colors - fuchsia and cyan
+    const colors = ["#d946ef", "#22d3ee", "#f0abfc", "#67e8f9", "#a855f7", "#06b6d4"];
 
-    const frame = () => {
-      if (!confettiInstance.current) return;
-
-      confettiInstance.current({
-        particleCount: 1,
-        angle: 90,
-        spread: 90,
-        origin: { x: Math.random(), y: 0 },
+    // Wait for logo to settle (~1.5 seconds after animation starts)
+    const timer = setTimeout(() => {
+      // Left corner - shooting up and to the right toward center
+      instance({
+        particleCount: 35,
+        angle: 55,
+        spread: 45,
+        origin: { x: -0.05, y: 1.1 },
         colors: colors,
-        gravity: 0.85,
-        drift: (Math.random() - 0.5) * 0.25,
-        scalar: 0.75,
-        ticks: 220,
-        startVelocity: 16,
-        decay: 0.91,
-        shapes: ["circle", "square"],
+        startVelocity: 50,
+        gravity: 1.2,
+        ticks: 200,
+        scalar: 0.85,
       });
 
-      if (Date.now() < end) {
-        requestAnimationFrame(frame);
-      }
-    };
+      // Right corner - shooting up and to the left toward center
+      instance({
+        particleCount: 35,
+        angle: 125,
+        spread: 45,
+        origin: { x: 1.05, y: 1.1 },
+        colors: colors,
+        startVelocity: 50,
+        gravity: 1.2,
+        ticks: 200,
+        scalar: 0.85,
+      });
 
-    frame();
+      // Second wave
+      setTimeout(() => {
+        instance({
+          particleCount: 20,
+          angle: 60,
+          spread: 35,
+          origin: { x: 0, y: 1.05 },
+          colors: colors,
+          startVelocity: 40,
+          gravity: 1.1,
+          ticks: 180,
+          scalar: 0.75,
+        });
+
+        instance({
+          particleCount: 20,
+          angle: 120,
+          spread: 35,
+          origin: { x: 1, y: 1.05 },
+          colors: colors,
+          startVelocity: 40,
+          gravity: 1.1,
+          ticks: 180,
+          scalar: 0.75,
+        });
+      }, 250);
+    }, 1500);
 
     return () => {
-      if (confettiInstance.current) {
-        confettiInstance.current.reset();
-      }
+      clearTimeout(timer);
+      instance.reset();
     };
   }, []);
 

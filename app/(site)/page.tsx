@@ -5,6 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Phone, Mail, MapPin, Star, ChevronRight, Sparkles, Shield, Clock } from "lucide-react";
 import { LogoConfetti } from "@/components/site/logo-confetti";
 import { AnimatedLogo } from "@/components/site/animated-logo";
+import { RentalCard } from "@/components/site/rental-card";
+import { getProductsFromDB, getProductUnitCounts } from "@/lib/products";
+
+// Revalidate every 60 seconds to keep rentals fresh
+export const revalidate = 60;
 
 // ============================================================================
 // DESIGN SYSTEM - Shared styles for consistency across site
@@ -46,7 +51,7 @@ const jsonLd = {
   "@type": "LocalBusiness",
   name: "Pop and Drop Party Rentals",
   description: "Bounce house and inflatable party rentals in Ocala, Florida, Marion County, and surrounding areas. Water slides, themed bounce houses, and party inflatables delivered and set up for birthdays, events, and celebrations.",
-  url: "https://popndroprentals.com",
+  url: "https://www.popndroprentals.com",
   telephone: "352-445-3723",
   email: "bookings@popndroprentals.com",
   address: {
@@ -113,7 +118,16 @@ const testimonials = [
 // COMPONENT
 // ============================================================================
 
-export default function HomePage() {
+export default async function HomePage() {
+  // Fetch products and unit counts in parallel
+  const [products, unitCounts] = await Promise.all([
+    getProductsFromDB(),
+    getProductUnitCounts(),
+  ]);
+
+  // Filter to only show active products (price > 0)
+  const activeProducts = products.filter(p => p.pricing.daily > 0);
+
   return (
     <>
       {/* Structured Data for SEO */}
@@ -257,6 +271,44 @@ export default function HomePage() {
               <div className={styles.cardInner} />
             </Card>
           ))}
+        </section>
+
+        {/* ================================================================
+            RENTALS SECTION
+        ================================================================ */}
+        <section className={styles.sectionGap}>
+          {/* Header */}
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold sm:text-xl">Our Rentals</h2>
+              <p className="mt-1 text-sm text-foreground/70">
+                The fun stuff — delivered and set up for you
+              </p>
+            </div>
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="w-fit border-white/10 hover:bg-white/5"
+            >
+              <Link href="/rentals">
+                View all
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+
+          {/* Rental Grid */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {activeProducts.map((product, index) => (
+              <RentalCard
+                key={product.slug}
+                product={product}
+                priority={index < 2}
+                availableUnits={unitCounts.get(product.id)}
+              />
+            ))}
+          </div>
         </section>
 
         {/* ================================================================
