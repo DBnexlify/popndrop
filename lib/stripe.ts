@@ -6,25 +6,24 @@
 import Stripe from 'stripe';
 
 // =============================================================================
-// LAZY STRIPE INITIALIZATION
-// Only initializes when actually used (not at build time)
+// STRIPE INITIALIZATION
+// Creates a fresh instance each time to avoid stale key caching issues
+// (Important when switching between test/live keys)
 // =============================================================================
 
-let stripeInstance: Stripe | null = null;
-
 export function getStripe(): Stripe {
-  if (!stripeInstance) {
-    if (!process.env.STRIPE_SECRET_KEY) {
-      throw new Error('STRIPE_SECRET_KEY environment variable is not set');
-    }
-    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      typescript: true,
-    });
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error('STRIPE_SECRET_KEY environment variable is not set');
   }
-  return stripeInstance;
+  
+  // Always create fresh instance to ensure we use current env var
+  // This prevents issues with warm serverless functions caching old keys
+  return new Stripe(process.env.STRIPE_SECRET_KEY, {
+    typescript: true,
+  });
 }
 
-// For backwards compatibility - getter that lazily initializes
+// For backwards compatibility - getter that creates fresh instance
 export const stripe = new Proxy({} as Stripe, {
   get(_, prop) {
     return getStripe()[prop as keyof Stripe];
